@@ -36,6 +36,33 @@ const DashboardLayout = ({ children }) => {
     const { logout, user } = useAuth();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [pendingCount, setPendingCount] = useState(0);
+    const notifiedOrdersRef = useRef(new Set());
+
+    const handleNewOrderNotification = (orderId, orderNumber, title, body) => {
+        if (orderId && notifiedOrdersRef.current.has(orderId)) return;
+        if (orderId) notifiedOrdersRef.current.add(orderId);
+        
+        playNotificationSound();
+        Swal.fire({
+            title: title || 'طلب جديد!',
+            text: body || `تم استلام طلب جديد`,
+            icon: 'success',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: true,
+            confirmButtonText: 'عرض الطلب',
+            confirmButtonColor: 'var(--primary)',
+            showCloseButton: true,
+            timer: 8000,
+            timerProgressBar: true,
+            background: '#141414',
+            color: '#fff'
+        }).then((result) => {
+            if (result.isConfirmed && orderId) {
+                navigate(`/orders?highlight=${orderId}`);
+            }
+        });
+    };
 
     const handleLogout = () => {
         logout();
@@ -48,26 +75,7 @@ const DashboardLayout = ({ children }) => {
         if (!hasOrdersPermission) return;
 
         const unsubscribe = listenForForegroundMessages(({ orderId, orderNumber, title, body }) => {
-            playNotificationSound();
-            Swal.fire({
-                title: title || 'طلب جديد!',
-                text: body || `تم استلام طلب جديد`,
-                icon: 'success',
-                toast: true,
-                position: 'top-end',
-                showConfirmButton: true,
-                confirmButtonText: 'عرض الطلب',
-                confirmButtonColor: 'var(--primary)',
-                showCloseButton: true,
-                timer: 8000,
-                timerProgressBar: true,
-                background: '#141414',
-                color: '#fff'
-            }).then((result) => {
-                if (result.isConfirmed && orderId) {
-                    navigate(`/orders?highlight=${orderId}`);
-                }
-            });
+            handleNewOrderNotification(orderId, orderNumber, title, body);
         });
 
         return () => unsubscribe();
@@ -98,8 +106,12 @@ const DashboardLayout = ({ children }) => {
                 (payload) => {
                     fetchPendingCount();
                     if (payload.eventType === 'INSERT') {
-                        // Silently update the pending count, notification is handled by FCM
-                        // (See listenForForegroundMessages above)
+                        // Silently update the pending count
+                        // Trigger real-time notification as fallback to FCM
+                        const newOrder = payload.new;
+                        if (newOrder && newOrder.id) {
+                            handleNewOrderNotification(newOrder.id, null, 'طلب جديد!', 'تم استلام طلب جديد');
+                        }
                     }
                 }
             )
