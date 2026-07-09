@@ -1,0 +1,410 @@
+/* ─────────────────────────────────────────────
+   Premium Onboarding CSS — Offline & GPU Optimized
+───────────────────────────────────────────── */
+
+/* ── Container ── */
+.onboarding-root {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: #0a0a0a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: #fff;
+  font-family: 'Cairo', sans-serif;
+  touch-action: pan-y;
+}
+
+.onboarding-root button {
+  font-family: inherit;
+}
+
+/* ── Ambient Glows ── */
+.onboarding-glow {
+  position: absolute;
+  width: 60vw;
+  height: 60vw;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.15;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.onboarding-glow-top {
+  top: -20vw;
+  right: -20vw;
+  background: rgba(212, 175, 55, 0.4);
+}
+
+.onboarding-glow-bottom {
+  bottom: -20vw;
+  left: -20vw;
+  background: rgba(212, 175, 55, 0.2);
+}
+
+/* ── Skip Button ── */
+.onboarding-skip {
+  position: absolute;
+  top: max(40px, env(safe-area-inset-top, 40px));
+  left: 24px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  z-index: 10;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: background 0.2s, transform 0.2s;
+}
+
+.onboarding-skip:active {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* ── Slide Layout ── */
+.onboarding-slide {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+@supports (justify-content: safe center) {
+  .onboarding-slide {
+    justify-content: safe center;
+  }
+}
+
+/* We push dynamic content up a bit to leave room for the static footer */
+.onboarding-dynamic-content {
+  padding-bottom: 140px;
+}
+
+/* ── Welcome Screen ── */
+.onboarding-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 400px;
+}
+
+.onboarding-welcome-logo {
+  width: min(220px, 55vw, 30vh);
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 0 30px rgba(212, 175, 55, 0.35));
+  animation: floatLogo 3.5s ease-in-out infinite;
+}
+
+@keyframes floatLogo {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+  100% { transform: translateY(0); }
+}
+
+.onboarding-welcome-badge {
+  background: rgba(212, 175, 55, 0.1);
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  color: #d4af37;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin-bottom: 24px;
+  letter-spacing: 0.5px;
+}
+
+.onboarding-welcome-title {
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1.3;
+  margin-bottom: 16px;
+  color: #fff;
+}
+
+.onboarding-welcome-title span {
+  display: block;
+  background: linear-gradient(135deg, #fceabb 0%, #f8b500 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.onboarding-divider {
+  width: 40px;
+  height: 4px;
+  background: #d4af37;
+  border-radius: 2px;
+  margin: 16px 0;
+}
+
+.onboarding-welcome-subtitle {
+  font-size: 1.05rem;
+  color: #aaa;
+  line-height: 1.6;
+  margin-bottom: 40px;
+}
+
+.onboarding-welcome-cta {
+  background: linear-gradient(135deg, #d4af37 0%, #f8b500 100%);
+  color: #000;
+  border: none;
+  border-radius: 28px;
+  padding: 16px 32px;
+  font-size: 1.1rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 10px 25px rgba(212, 175, 55, 0.3);
+  cursor: pointer;
+}
+
+/* ── Dynamic Content (Slides 1-5) ── */
+.onboarding-image-wrapper {
+  width: min(340px, 80vw, 40vh);
+  height: min(340px, 80vw, 40vh);
+  border-radius: 32px;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  margin-bottom: 32px;
+  box-shadow:
+    0 0 0 1px rgba(212, 175, 55, 0.15),
+    0 24px 60px rgba(0, 0, 0, 0.6),
+    0 0 80px rgba(212, 175, 55, 0.08);
+  animation: floatProminent 3.5s ease-in-out infinite;
+}
+
+/* GPU Accelerated Pulstating Glow */
+.onboarding-image-wrapper::before {
+  content: '';
+  position: absolute;
+  inset: -20px;
+  border-radius: 40px;
+  background: radial-gradient(circle, rgba(212, 175, 55, 0.4) 0%, transparent 70%);
+  opacity: 0;
+  animation: pulseGlow 3.5s ease-in-out infinite;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.onboarding-image-wrapper::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 32px;
+  border: 1px solid rgba(212, 175, 55, 0.2);
+  pointer-events: none;
+}
+
+@keyframes floatProminent {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-16px); }
+  100% { transform: translateY(0); }
+}
+
+@keyframes pulseGlow {
+  0% { opacity: 0; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 0; transform: scale(0.9); }
+}
+
+.onboarding-slide-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  animation: continuousZoom 12s ease-in-out infinite;
+}
+
+@keyframes continuousZoom {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+.onboarding-text-block {
+  width: 100%;
+  max-width: 380px;
+}
+
+.onboarding-slide-title {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.onboarding-slide-description {
+  font-size: 1rem;
+  color: #aaa;
+  line-height: 1.6;
+}
+
+/* ── Final Screen ── */
+.onboarding-final {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 400px;
+}
+
+.onboarding-final-logo {
+  width: min(150px, 40vw, 25vh);
+  height: auto;
+  object-fit: contain;
+  margin-bottom: 16px;
+  filter: drop-shadow(0 0 30px rgba(212, 175, 55, 0.3));
+  animation: floatLogo 3.5s ease-in-out infinite;
+}
+
+.onboarding-final-title {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.3;
+  margin-bottom: 12px;
+}
+
+.onboarding-final-title span {
+  display: block;
+  color: #d4af37;
+}
+
+.onboarding-final-subtitle {
+  font-size: 1.05rem;
+  color: #aaa;
+  line-height: 1.6;
+  margin-bottom: 40px;
+}
+
+.onboarding-final-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.onboarding-btn-login {
+  background: linear-gradient(135deg, #d4af37 0%, #f8b500 100%);
+  color: #000;
+  border: none;
+  border-radius: 28px;
+  padding: 16px;
+  font-size: 1.1rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  box-shadow: 0 10px 25px rgba(212, 175, 55, 0.3);
+  cursor: pointer;
+}
+
+.onboarding-btn-guest {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-radius: 28px;
+  padding: 16px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  cursor: pointer;
+}
+
+.onboarding-terms {
+  margin-top: 24px;
+  font-size: 0.8rem;
+  color: #666;
+}
+
+/* ── Static Overlay Footer ── */
+.onboarding-static-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 24px;
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 24px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 10;
+  background: linear-gradient(to top, rgba(10,10,10,1) 30%, transparent 100%);
+}
+
+.onboarding-dots {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.onboarding-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.onboarding-dot.active {
+  width: 24px;
+  background: #d4af37;
+  box-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
+}
+
+.onboarding-nav {
+  display: flex;
+  gap: 16px;
+  width: 100%;
+  max-width: 400px;
+  justify-content: center;
+}
+
+.onboarding-nav-btn {
+  flex: 1;
+  background: linear-gradient(135deg, #d4af37 0%, #f8b500 100%);
+  color: #000;
+  border: none;
+  border-radius: 28px;
+  padding: 16px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(212, 175, 55, 0.25);
+}
+
+.onboarding-nav-btn.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  box-shadow: none;
+}
+
