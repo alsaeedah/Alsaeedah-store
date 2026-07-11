@@ -16,6 +16,7 @@ import ProductList from './components/ProductList';
 import ProductDetails from './pages/ProductDetails';
 import Orders from './pages/Orders';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import LoginPage from './pages/LoginPage';
 import CartSidebar from './components/CartSidebar';
 import AuthModal from './components/AuthModal';
 import LogoutConfirmModal from './components/LogoutConfirmModal';
@@ -287,6 +288,13 @@ function SystemBarsSync() {
   return null;
 }
 
+// ── Auth Gate: renders LoginPage until user is logged in ──
+function AuthGate({ children }) {
+  const { currentUser } = useAuth();
+  if (!currentUser) return <LoginPage />;
+  return children;
+}
+
 function App() {
   useEffect(() => {
     // Force Immersive Full Screen on Mobile — transparent overlay status bar
@@ -303,30 +311,32 @@ function App() {
         <ThemeProvider>
           <LoaderProvider>
             <AuthProvider>
-                <FavoritesProvider>
-                  <VideoProvider>
-                    <CartProvider>
-                      <DeepLinkHandler />
-                      <BackButtonHandler />
-                      <ScrollLockManager />
-                      <SEOHelper />
-                      <div className="app-container">
-                        <SystemBarsSync />
-                        <Navbar />
-                        <CartSidebar />
-                        <AuthModal />
-                        <LogoutConfirmModal />
-                        <ProfileModal />
-                        <FavoritesModal />
-                        <PullToRefreshGate>
-                          <AnimatedRoutes />
-                        </PullToRefreshGate>
-                        <Footer />
-                        <AppDownloadBanner />
-                      </div>
-                    </CartProvider>
-                  </VideoProvider>
-                </FavoritesProvider>
+                <AuthGate>
+                  <FavoritesProvider>
+                    <VideoProvider>
+                      <CartProvider>
+                        <DeepLinkHandler />
+                        <BackButtonHandler />
+                        <ScrollLockManager />
+                        <SEOHelper />
+                        <div className="app-container">
+                          <SystemBarsSync />
+                          <Navbar />
+                          <CartSidebar />
+                          <AuthModal />
+                          <LogoutConfirmModal />
+                          <ProfileModal />
+                          <FavoritesModal />
+                          <PullToRefreshGate>
+                            <AnimatedRoutes />
+                          </PullToRefreshGate>
+                          <Footer />
+                          <AppDownloadBanner />
+                        </div>
+                      </CartProvider>
+                    </VideoProvider>
+                  </FavoritesProvider>
+                </AuthGate>
             </AuthProvider>
           </LoaderProvider>
         </ThemeProvider>

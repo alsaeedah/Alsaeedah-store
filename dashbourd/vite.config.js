@@ -10,9 +10,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg', 'dashlogo.ico'],
       manifest: {
-        name: 'Time Tick Store Dashboard',
-        short_name: 'TimeTickDash',
-        description: 'Dashboard for Time Tick Store management',
+        name: 'لوحة تحكم السعيدة',
+        short_name: 'السعيدة',
+        description: 'لوحة تحكم متجر السعيدة',
         theme_color: '#000000',
         icons: [
           {
