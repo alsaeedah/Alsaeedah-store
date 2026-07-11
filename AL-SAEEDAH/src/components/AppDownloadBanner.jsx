@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Download, Smartphone } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
+import { useLocation } from 'react-router-dom';
 
 export default function AppDownloadBanner() {
     const [isVisible, setIsVisible] = useState(false);
+    const location = useLocation();
 
     useEffect(() => {
         // 1. Check if user is on Android
@@ -38,7 +40,7 @@ export default function AppDownloadBanner() {
 
     return (
         <AnimatePresence>
-            {isVisible && (
+            {isVisible && location.pathname !== '/download' && (
                 <motion.div
                     initial={{ y: '100%' }}
                     animate={{ y: 0 }}
