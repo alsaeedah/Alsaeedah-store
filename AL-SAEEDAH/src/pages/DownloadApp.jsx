@@ -9,257 +9,234 @@ import {
   Bell, 
   Heart, 
   Search, 
-  ChevronDown,
-  Star,
   ShoppingBag,
   RefreshCw,
   Layout,
-  Headset
+  Plus
 } from 'lucide-react';
 import './DownloadApp.css';
 
 const DownloadApp = () => {
   const navigate = useNavigate();
-  const [showStickyCta, setShowStickyCta] = useState(false);
   const [openFaq, setOpenFaq] = useState(null);
 
-  useEffect(() => {
-    const handleScroll = () => {
-      // Show sticky CTA after scrolling down 400px (mobile only)
-      if (window.scrollY > 400 && window.innerWidth < 768) {
-        setShowStickyCta(true);
-      } else {
-        setShowStickyCta(false);
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
   const handleDownload = () => {
-    // Navigate to actual store URL or trigger download
-    console.log("Download clicked");
-  };
-
-  const staggerContainer = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: { staggerChildren: 0.2 }
-    }
-  };
-
-  const fadeUp = {
-    hidden: { opacity: 0, y: 30 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.6, type: "spring" } }
+    const link = document.createElement('a');
+    link.href = '/alsaeedah-store.apk';
+    link.download = 'alsaeedah-store.apk';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const features = [
-    { icon: <Zap size={28} />, title: 'تصفح سريع', desc: 'تجربة تسوق فائقة السرعة بدون تأخير.' },
-    { icon: <Bell size={28} />, title: 'إشعارات بالعروض', desc: 'كن أول من يعلم بأحدث التخفيضات.' },
-    { icon: <ShoppingBag size={28} />, title: 'إدارة الطلبات', desc: 'تتبع حالة طلباتك خطوة بخطوة.' },
-    { icon: <Layout size={28} />, title: 'واجهة احترافية', desc: 'تصميم عصري يسهل عليك العثور على ما تريد.' },
-    { icon: <Heart size={28} />, title: 'حفظ المفضلة', desc: 'احتفظ بمنتجاتك المفضلة لشرائها لاحقاً.' },
-    { icon: <Search size={28} />, title: 'بحث متقدم', desc: 'فلاتر ذكية للوصول الدقيق للمنتجات.' }
+    { icon: <Zap size={40} strokeWidth={1.5} />, title: 'تصفح فائق السرعة', desc: 'تجربة تسوق سلسة خالية من التأخير. صُمم التطبيق ليكون الأسرع في عرض المنتجات وإتمام الطلبات بأقل مجهود.' },
+    { icon: <ShoppingBag size={40} strokeWidth={1.5} />, title: 'تتبع ذكي للطلبات', desc: 'ابقَ على اطلاع دائم بحالة طلبك. من لحظة تأكيد الشراء وحتى وصول المنتج إلى باب منزلك، خطوة بخطوة.' },
   ];
 
   const faqs = [
-    { q: 'هل التطبيق مجاني؟', a: 'نعم، تطبيق متجر السعيدة مجاني بالكامل للتحميل والاستخدام.' },
-    { q: 'هل التطبيق آمن لمعلوماتي؟', a: 'نحن نستخدم أعلى معايير التشفير والأمان لحماية بياناتك الشخصية.' },
-    { q: 'ما هي الأجهزة المدعومة؟', a: 'التطبيق متاح حالياً لجميع أجهزة أندرويد بإصدار 8.0 فأحدث.' }
+    { q: 'هل التطبيق متاح للجميع؟', a: 'التطبيق متاح فقط لاصحاب محلات الجمله لسهولة التعامل معهم' },
+    { q: 'كيف أضمن جودة المنتجات؟', a: 'جميع المنتجات المعروضة في متجر السعيدة تخضع لفحص دقيق لضمان الجودة العالية ومطابقتها للمواصفات.' },
+    { q: 'هل هناك دعم فني متوفر؟', a: 'بالتأكيد، فريق الدعم الفني متواجد على مدار الساعة للرد على استفساراتكم وحل أي مشكلة قد تواجهونها.' }
   ];
 
   return (
     <div className="download-page">
-      
+      {/* Animated Background Orbs */}
+      <div className="ambient-bg">
+        <div className="ambient-orb orb-1"></div>
+        <div className="ambient-orb orb-2"></div>
+        <div className="ambient-orb orb-3"></div>
+      </div>
+
       {/* Hero Section */}
       <section className="hero-section">
-        <div className="hero-bg-blur"></div>
-        <div className="hero-grid download-container">
+        <div className="download-container hero-wrapper">
           
           <motion.div 
             className="hero-content"
-            variants={staggerContainer}
-            initial="hidden"
-            animate="show"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
           >
-            <motion.div variants={fadeUp} className="hero-badge">
-              الآن على أندرويد
-            </motion.div>
-            <motion.h1 variants={fadeUp} className="hero-title">
-              حمّل تطبيق متجر السعيدة واستمتع بتجربة تسوق أسرع وأسهل.
-            </motion.h1>
-            <motion.p variants={fadeUp} className="hero-desc">
-              اشترِ أحدث الساعات والإكسسوارات الفاخرة، واستعرض المنتجات بسهولة، واحصل على تجربة تسوق سلسة وآمنة من خلال التطبيق.
-            </motion.p>
-            <motion.div variants={fadeUp} className="hero-ctas">
-              <button className="btn-download-large" onClick={handleDownload}>
-                <Download size={24} />
+            <div className="hero-pill">
+              <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: '#d4af37' }}></span>
+              الإصدار الجديد متاح الآن
+            </div>
+            <h1 className="editorial-title">
+              تسوق بذكاء.<br/>
+              <div style={{marginTop:"7px"}}><span style={{color: '#d4af37' }}>عش بأناقة.</span></div>
+            </h1>
+            <p className="editorial-subtitle">
+              اكتشف عالم متجر السعيدة من خلال تطبيقنا الجديد. تجربة مستخدم استثنائية، عروض حصرية، وسرعة لا مثيل لها في متناول يدك.
+            </p>
+            
+            <div className="hero-actions">
+              <button className="btn-premium" onClick={handleDownload}>
+                <Download size={22} />
                 تحميل التطبيق
               </button>
-              <button className="btn-secondary-large" onClick={() => navigate('/')}>
+              <button className="btn-text" onClick={() => navigate('/')}>
                 استعراض المتجر
               </button>
-            </motion.div>
-            <motion.div variants={fadeUp} className="hero-meta">
-              <span>الإصدار 1.0.0</span>
-              <span>•</span>
-              <span>حجم التطبيق 24MB</span>
-            </motion.div>
+            </div>
           </motion.div>
 
           <motion.div 
-            className="hero-composition"
-            initial={{ opacity: 0, scale: 0.9 }}
+            className="hero-visuals"
+            initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8 }}
+            transition={{ duration: 1, delay: 0.2 }}
           >
+            <div className="device-frame">
+              <img src="/app-preview.png" alt="App Preview" className="device-screen" onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1601972599720-36938d4ecd31?auto=format&fit=crop&w=600&q=80'; }} />
+            </div>
+
             <motion.div 
-              className="phone-mockup-wrapper"
-              animate={{ y: [-10, 10, -10] }}
+              className="editorial-float pos-1"
+              animate={{ y: [-15, 15, -15] }}
               transition={{ repeat: Infinity, duration: 6, ease: "easeInOut" }}
             >
-              <img src="/app-preview.png" alt="App Preview" className="phone-screen" onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1601972599720-36938d4ecd31?auto=format&fit=crop&w=400&q=80'; }} />
+              <ShieldCheck className="float-icon-elegant" size={24} />
+              <div className="float-title">سهولة الطلب</div>
+              <div className="float-sub">تتبع ذكي للطلبات</div>
             </motion.div>
 
             <motion.div 
-              className="float-card top-left"
-              animate={{ y: [0, -15, 0] }}
-              transition={{ repeat: Infinity, duration: 5, ease: "easeInOut", delay: 1 }}
+              className="editorial-float pos-2"
+              animate={{ y: [15, -15, 15] }}
+              transition={{ repeat: Infinity, duration: 8, ease: "easeInOut", delay: 1 }}
             >
-              <div className="float-icon"><ShieldCheck size={20} /></div>
-              <div>
-                <div className="float-text-bold">تسوق آمن</div>
-                <div className="float-text-dim">حماية 100%</div>
-              </div>
-            </motion.div>
-
-            <motion.div 
-              className="float-card middle-right"
-              animate={{ y: [0, 15, 0] }}
-              transition={{ repeat: Infinity, duration: 7, ease: "easeInOut", delay: 0.5 }}
-            >
-              <div className="float-icon"><RefreshCw size={20} /></div>
-              <div>
-                <div className="float-text-bold">تحديثات مستمرة</div>
-              </div>
+              <RefreshCw className="float-icon-elegant" size={24} />
+              <div className="float-title">تحديثات فورية</div>
+              <div className="float-sub">لا تفوت أي عرض</div>
             </motion.div>
           </motion.div>
 
         </div>
       </section>
 
-      {/* Features Section */}
-      <section className="download-section">
+      {/* Features Zigzag */}
+      <section className="download-section features-section">
         <div className="download-container">
-          <motion.h2 
-            initial={{ opacity: 0, y: 20 }}
+          <motion.div
+            className="features-header"
+            initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="section-title"
           >
-            لماذا تحمل التطبيق؟
-          </motion.h2>
-          <motion.p 
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="section-subtitle"
-          >
-            صممنا تطبيقنا بعناية فائقة ليقدم لك أفضل تجربة تسوق ممكنة، مع ميزات حصرية توفر وقتك وجهدك.
-          </motion.p>
-          
-          <motion.div 
-            className="features-grid"
-            variants={staggerContainer}
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true, margin: "-100px" }}
-          >
+            <span className="section-eyebrow">مميزات التطبيق</span>
+            <h2 className="editorial-title" style={{ textAlign: 'center', marginBottom: '16px' }}>
+              مصمم من أجلك
+            </h2>
+            <p className="features-section-sub">كل تفصيلة صُممت لتجعل تجربتك أسهل وأجمل</p>
+          </motion.div>
+
+          <div className="features-zigzag">
             {features.map((feat, idx) => (
-              <motion.div key={idx} variants={fadeUp} className="feature-card">
-                <div className="feature-icon-wrapper">{feat.icon}</div>
-                <h3 className="feature-title">{feat.title}</h3>
-                <p className="feature-desc">{feat.desc}</p>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </section>
-
-      {/* Experience Timeline */}
-      <section className="download-section">
-        <div className="download-container">
-          <h2 className="section-title">تجربة سلسة</h2>
-          
-          <div className="timeline-container mt-10">
-            <div className="timeline-line"></div>
-            
-            {['تحميل', 'تثبيت', 'تصفح', 'طلب', 'استلام'].map((step, idx) => (
-              <motion.div 
+              <motion.div
                 key={idx}
-                className="timeline-item"
-                initial={{ opacity: 0, x: idx % 2 === 0 ? -50 : 50 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true, margin: "-50px" }}
-                transition={{ duration: 0.6 }}
+                className="feature-row"
+                initial={{ opacity: 0, y: 60 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-80px" }}
+                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
               >
-                <div className="timeline-content">
-                  <h4 className="timeline-title">{step}</h4>
-                  <p className="timeline-desc">خطوة بسيطة وسريعة لتصل إلى ما تريد.</p>
+                {/* Text Side */}
+                <div className="feature-info">
+                  <div className="feature-tag">0{idx + 1}</div>
+                  <h3 className="feature-row-title">{feat.title}</h3>
+                  <div className="feature-divider" />
+                  <p className="feature-row-desc">{feat.desc}</p>
+                  <div className="feature-arrow">
+                    <span>اكتشف المزيد</span>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                  </div>
                 </div>
-                <div className="timeline-dot">{idx + 1}</div>
-                <div style={{ width: '45%' }}></div>
+
+                {/* Visual Side */}
+                <div className="feature-visual">
+                  <div className="visual-card">
+                    <div className="visual-card-bg" />
+                    <div className="visual-ring ring-outer" />
+                    <div className="visual-ring ring-mid" />
+                    <div className="visual-ring ring-inner" />
+                    <div className="visual-icon-wrapper">
+                      <div className="visual-icon">{feat.icon}</div>
+                    </div>
+                    <div className="visual-card-label">{feat.title}</div>
+                    <div className="visual-card-dots">
+                      {[0,1,2].map(d => <span key={d} className={`dot ${d === 0 ? 'dot-active' : ''}`} />)}
+                    </div>
+                  </div>
+                </div>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Statistics Section */}
-      <section className="download-section" style={{ background: 'var(--bg-card)' }}>
+      {/* Vertical Organic Timeline */}
+      <section className="download-section Vertical-section">
         <div className="download-container">
           <motion.div 
-            className="stats-grid"
-            variants={staggerContainer}
-            initial="hidden"
-            whileInView="show"
+            style={{ textAlign: 'center' }}
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
           >
-            {[
-              { label: 'عملية تحميل', val: '+50K' },
-              { label: 'تقييم إيجابي', val: '4.9/5' },
-              { label: 'منتج فاخر', val: '+1000' },
-              { label: 'دعم فني', val: '24/7' }
-            ].map((stat, idx) => (
-              <motion.div key={idx} variants={fadeUp} className="stat-card">
-                <div className="stat-number">{stat.val}</div>
-                <div className="stat-label">{stat.label}</div>
+          <h2 className="editorial-title">من التحميل إلى الاستلام</h2>
+          </motion.div>
+
+          <div className="timeline-editorial">
+            <div className="timeline-track">
+              <div className="timeline-progress"></div>
+            </div>
+
+            {['حمل التطبيق مجاناً', 'تصفح أحدث التشكيلات', 'اختر ما يناسبك', 'استلم طلبك بسرعة'].map((step, idx) => (
+              <motion.div 
+                key={idx} 
+                className="timeline-step"
+                initial={{ opacity: 0, x: 30 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true, margin: "-100px" }}
+                transition={{ duration: 0.6, delay: idx * 0.15 }}
+              >
+                <div className="step-content">
+                  <h4 className="step-title">{step}</h4>
+                  <p className="step-desc">خطوات بسيطة ومصممة لراحتك التامة في كل مرحلة.</p>
+                </div>
+                <div className="step-node"></div>
               </motion.div>
             ))}
-          </motion.div>
+          </div>
         </div>
       </section>
 
-      {/* FAQ Section */}
+      {/* Minimalist FAQ */}
       <section className="download-section">
-        <div className="download-container faq-container">
-          <h2 className="section-title">الأسئلة الشائعة</h2>
+        <div className="download-container">
+          <h2 className="editorial-title" style={{ textAlign: 'center' }}>لديك أسئلة؟</h2>
           
-          <div className="mt-8">
+          <div className="faq-minimal">
             {faqs.map((faq, idx) => (
               <motion.div 
                 key={idx} 
-                className={`faq-item ${openFaq === idx ? 'open' : ''}`}
+                className={`faq-row ${openFaq === idx ? 'active' : ''}`}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: idx * 0.1 }}
               >
-                <button className="faq-header" onClick={() => setOpenFaq(openFaq === idx ? null : idx)}>
+                <button 
+                  className="faq-question" 
+                  onClick={() => setOpenFaq(openFaq === idx ? null : idx)}
+                >
                   {faq.q}
-                  <ChevronDown className="faq-icon" size={20} />
+                  <span className="faq-toggle">
+                    <Plus size={24} />
+                  </span>
                 </button>
                 <AnimatePresence>
                   {openFaq === idx && (
@@ -267,9 +244,11 @@ const DownloadApp = () => {
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: 'auto', opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
-                      className="faq-body"
+                      className="faq-answer"
                     >
-                      {faq.a}
+                      <div className="faq-answer-inner">
+                        {faq.a}
+                      </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -279,42 +258,21 @@ const DownloadApp = () => {
         </div>
       </section>
 
-      {/* Final CTA */}
-      <section className="final-cta-section">
-        <div className="final-cta-content">
-          <h2 className="section-title" style={{ fontSize: '3rem', marginBottom: '30px' }}>جاهز لبدء تجربة تسوق أفضل؟</h2>
-          <div className="hero-ctas" style={{ justifyContent: 'center' }}>
-            <button className="btn-download-large" onClick={handleDownload} style={{ padding: '20px 40px', fontSize: '1.2rem' }}>
-              <Download size={28} />
-              حمل التطبيق الآن
-            </button>
-            <button className="btn-secondary-large" onClick={() => navigate('/')} style={{ padding: '20px 40px', fontSize: '1.2rem' }}>
-              العودة للمتجر
-            </button>
-          </div>
-        </div>
+      {/* Final Grand CTA */}
+      <section className="cta-grand">
+        <motion.div 
+          className="cta-content"
+          initial={{ opacity: 0, scale: 0.95 }}
+          whileInView={{ opacity: 1, scale: 1 }}
+          viewport={{ once: true }}
+        >
+          <h2 className="cta-title">مستعد للبدء؟</h2>
+          <button className="btn-premium" onClick={handleDownload} style={{ padding: '20px 50px', fontSize: '1.25rem' }}>
+            <Download size={24} />
+            حمل التطبيق الآن
+          </button>
+        </motion.div>
       </section>
-
-      {/* Sticky Mobile CTA */}
-      <AnimatePresence>
-        {showStickyCta && (
-          <motion.div 
-            className="sticky-mobile-cta"
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 100, opacity: 0 }}
-          >
-            <div>
-              <div style={{ fontWeight: 800, fontSize: '0.9rem' }}>متجر السعيدة</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>مجاني - أندرويد</div>
-            </div>
-            <button className="sticky-cta-btn" onClick={handleDownload}>
-              <Download size={18} />
-              تحميل
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
     </div>
   );

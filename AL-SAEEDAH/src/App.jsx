@@ -50,6 +50,12 @@ const Home = () => (
   </motion.div>
 );
 
+const ConditionalNavbar = () => {
+  const location = useLocation();
+  if (location.pathname === '/download') return null;
+  return <Navbar />;
+};
+
 const AnimatedRoutes = () => {
   const location = useLocation();
   return (
@@ -294,7 +300,13 @@ function SystemBarsSync() {
 // ── Auth Gate: renders LoginPage until user is logged in ──
 function AuthGate({ children }) {
   const { currentUser } = useAuth();
-  if (!currentUser) return <LoginPage />;
+  const location = useLocation();
+  
+  const publicPaths = ['/download', '/reset-password'];
+  if (!currentUser && !publicPaths.includes(location.pathname)) {
+    return <LoginPage />;
+  }
+  
   return children;
 }
 
@@ -324,7 +336,7 @@ function App() {
                         <SEOHelper />
                         <div className="app-container">
                           <SystemBarsSync />
-                          <Navbar />
+                          <ConditionalNavbar />
                           <CartSidebar />
                           <AuthModal />
                           <LogoutConfirmModal />
