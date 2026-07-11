@@ -28,6 +28,7 @@ import ScrollToTop from './components/ScrollToTop';
 import BackButtonHandler from './components/BackButtonHandler';
 import PullToRefresh from './components/PullToRefresh';
 import AppDownloadBanner from './components/AppDownloadBanner';
+import DownloadApp from './pages/DownloadApp';
 import { StatusBar } from '@capacitor/status-bar';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
@@ -49,20 +50,12 @@ const Home = () => (
   </motion.div>
 );
 
-const RedirectToApp = () => {
-  useEffect(() => {
-    window.location.href = '/app/index.html';
-  }, []);
-  return null;
-};
-
 const AnimatedRoutes = () => {
   const location = useLocation();
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
         <Route path="/" element={<Home />} />
-        <Route path="/app" element={<RedirectToApp />} />
         <Route path="/product/:id" element={
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -91,6 +84,16 @@ const AnimatedRoutes = () => {
             transition={{ duration: 0.4 }}
           >
             <ResetPasswordPage />
+          </motion.div>
+        } />
+        <Route path="/download" element={
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.4 }}
+          >
+            <DownloadApp />
           </motion.div>
         } />
       </Routes>

@@ -33,7 +33,7 @@ export default function AppDownloadBanner() {
 
     const handleDownload = () => {
         // Link to the mobile app landing page
-        window.location.href = '/app';
+        window.location.href = '/download';
     };
 
     return (
