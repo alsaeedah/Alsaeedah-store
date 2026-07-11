@@ -24,7 +24,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="com.timetick.store" />
+                <data android:scheme="com.alsaeedah.store" />
             </intent-filter>
 
             <!-- App Links (Direct Web URL to App) -->
@@ -32,7 +32,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="timetick.vercel.app" />
+                <data android:scheme="https" android:host="alsaeedah.vercel.app" />
             </intent-filter>
         </activity>
 

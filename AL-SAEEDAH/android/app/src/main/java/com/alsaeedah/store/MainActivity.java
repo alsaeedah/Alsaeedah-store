@@ -1,4 +1,4 @@
-package com.timetick.store;
+package com.alsaeedah.store;
 
 import com.getcapacitor.BridgeActivity;
 
