@@ -90,7 +90,7 @@ export default function AppDownloadBanner() {
                         </div>
                         
                         <div style={{ flex: 1 }}>
-                            <h4 style={{ color: '#fff', fontSize: '1rem', fontWeight: '900', marginBottom: '2px' }}>تطبيق Time Tick</h4>
+                            <h4 style={{ color: '#fff', fontSize: '1rem', fontWeight: '900', marginBottom: '2px' }}>متجر السعيدة للأندرويد</h4>
                             <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem', lineHeight: '1.3', fontWeight: '500' }}>
                                 تجربة تسوق متكاملة، أسرع وبدون انقطاع
                             </p>
