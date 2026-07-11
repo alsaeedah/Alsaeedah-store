@@ -281,7 +281,7 @@
   padding: 0 50px 0 48px;
   border-radius: 14px;
   border:none;
-  box-shadow: 0 0 10px 5px rgba(212, 175, 55, 0.10);
+  box-shadow: 0 0 10px 3px var(--border-input-color);
   background: var(--bg-main);
   color: var(--text-main);
   font-family: 'Cairo', sans-serif;
@@ -297,7 +297,7 @@
 .lp-input:focus {
   border-color: rgba(212, 175, 55, 0.6);
   background: rgba(212, 175, 55, 0.04);
-  box-shadow: 0 0 20px 10px rgba(212, 175, 55, 0.10);
+  box-shadow: 0 0 20px 10px var(--focus-input-color);
 }
 .lp-input:disabled {
   opacity: 0.55;

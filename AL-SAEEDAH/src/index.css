@@ -26,6 +26,11 @@
   /* PRD: Root Color Syncing */
   --store-bg-color: var(--bg-main);
   background-color: var(--store-bg-color);
+  
+  /* boredr for inputs in login page */
+  --focus-input-color:rgba(212, 175, 55, 0.10);
+  --border-input-color:rgba(212, 175, 55, 0.10);
+  
 }
 
 [data-theme='light'] {
@@ -40,6 +45,10 @@
   --shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.08);
   /* Softer shadow */
   --store-bg-color: var(--bg-main);
+
+  /* border for inputs in login page */
+  --focus-input-color:rgba(255, 196, 0, 0.384);
+  --border-input-color:rgba(255, 196, 0, 0.24);
 }
 
 * {
