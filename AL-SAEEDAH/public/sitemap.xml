@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+  <!-- صفحة المتجر الاساسيه -->
+    <loc>https://alsaeedah.vercel.app/</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <!-- صفحة تحميل التطبيق  -->
+  <url>
+    <loc>https://alsaeedah.vercel.app/download</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- المنتج الوحيد حالياً -->
+  <url>
+    <loc>https://alsaeedah.vercel.app/product/cdfac175-f015-450e-a44e-7146818be880</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+</urlset>
