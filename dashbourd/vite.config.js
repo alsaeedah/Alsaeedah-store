@@ -8,22 +8,26 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg', 'dashlogo.ico'],
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg', 'logo.png'],
       manifest: {
         name: 'لوحة تحكم السعيدة',
         short_name: 'السعيدة',
         description: 'لوحة تحكم متجر السعيدة',
         theme_color: '#000000',
+        background_color: '#000000',
+        display: 'standalone',
         icons: [
           {
-            src: 'dashlogo.ico',
+            src: 'logo.png',
             sizes: '192x192',
-            type: 'image/icon'
+            type: 'image/png',
+            purpose: 'any maskable'
           },
           {
-            src: 'dashlogo.ico',
+            src: 'logo.png',
             sizes: '512x512',
-            type: 'image/icon'
+            type: 'image/png',
+            purpose: 'any maskable'
           }
         ]
       }
