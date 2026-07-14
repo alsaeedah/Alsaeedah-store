@@ -52,15 +52,16 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # ── 7. Add Android platform via Capacitor ──────────────────────────────
-      - name: Add Android Platform
-        working-directory: ./dashbourd
-        run: npx cap add android
-
-      # ── 8. Sync web assets into Android project ────────────────────────────
-      - name: Sync Capacitor
-        working-directory: ./dashbourd
-        run: npx cap sync android
+      # ── 8. Flexible Android Platform Handling (Add or Sync) ─────────────────
+      - name: Sync or Add Android Platform
+        run: |
+          if [ -d "dashbourd/android" ]; then
+            echo "Android folder detected. Syncing web assets..."
+            cd dashbourd && npx cap sync android
+          else
+            echo "Android folder missing. Adding platform..."
+            cd dashbourd && npx cap add android
+          fi
 
       # ── 9. Grant Gradle permission ─────────────────────────────────────────
       - name: Grant execute permission for gradlew
