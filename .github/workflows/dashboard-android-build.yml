@@ -80,6 +80,16 @@ jobs:
         working-directory: ./dashbourd/android
         run: chmod +x gradlew
 
+      # ── 9.5 Create google-services.json ────────────────────────────────────
+      - name: Create google-services.json
+        working-directory: ./dashbourd/android/app
+        run: |
+          if [ -n "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" ]; then
+            echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 --decode > google-services.json
+          else
+            echo "GOOGLE_SERVICES_JSON_BASE64 secret not found, skipping."
+          fi
+
       # ── 10. Build Debug APK ─────────────────────────────────────────────────
       - name: Build Debug APK
         working-directory: ./dashbourd/android
@@ -89,6 +99,11 @@ jobs:
       - name: Build Release AAB
         working-directory: ./dashbourd/android
         run: ./gradlew bundleRelease --no-daemon
+
+      # ── 11.5 Build Release APK (unsigned) ──────────────────────────────────
+      - name: Build Release APK
+        working-directory: ./dashbourd/android
+        run: ./gradlew assembleRelease --no-daemon
 
       # ── 12. Sign the Release AAB ───────────────────────────────────────────
       - name: Sign Release AAB
@@ -109,7 +124,26 @@ jobs:
           path: dashbourd/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
-      # ── 14. Upload Signed Release AAB artifact ─────────────────────────────
+      # ── 14. Sign the Release APK ───────────────────────────────────────────
+      - name: Sign Release APK
+        id: sign_apk
+        uses: r0adkll/sign-android-release@v1
+        with:
+          releaseDirectory: dashbourd/android/app/build/outputs/apk/release
+          signingKeyBase64: ${{ secrets.DASHBOARD_KEYSTORE_BASE64 }}
+          alias: ${{ secrets.DASHBOARD_KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.DASHBOARD_KEYSTORE_PASSWORD }}
+          keyPassword: ${{ secrets.DASHBOARD_KEY_PASSWORD }}
+
+      # ── 15. Upload Signed Release APK artifact ─────────────────────────────
+      - name: Upload Signed Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-release-apk
+          path: ${{ steps.sign_apk.outputs.signedReleaseFile }}
+          retention-days: 30
+
+      # ── 16. Upload Signed Release AAB artifact ─────────────────────────────
       - name: Upload Signed Release AAB
         uses: actions/upload-artifact@v4
         with:
