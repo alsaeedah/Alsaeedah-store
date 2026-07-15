@@ -77,7 +77,7 @@ jobs:
           APKSIGNER="$ANDROID_SDK_ROOT/build-tools/$BUILD_TOOLS/apksigner"
           ZIPALIGN="$ANDROID_SDK_ROOT/build-tools/$BUILD_TOOLS/zipalign"
 
-          UNSIGNED_APK="admin-mobile/android/app/build/outputs/apk/release/app-release.apk"
+          UNSIGNED_APK="admin-mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk"
           ALIGNED_APK="/tmp/app-release-aligned.apk"
           SIGNED_APK="admin-mobile/android/app/build/outputs/apk/release/app-release-signed.apk"
 
