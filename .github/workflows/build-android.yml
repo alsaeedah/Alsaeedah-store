@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Admin Android APK
 
 on:
   push:
@@ -11,56 +11,72 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    
     defaults:
       run:
         working-directory: ./admin-mobile
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: 18
-          cache: 'npm'
-          cache-dependency-path: ./admin-mobile/package-lock.json
+          node-version: '20'
 
-      - name: Setup EAS
-        uses: expo/expo-github-action@v8
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Create .env file
+        run: |
+          echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}" >> .env
+          echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}" >> .env
+          echo "VITE_ADMIN_EMAIL=${{ secrets.VITE_ADMIN_EMAIL }}" >> .env
+          echo "VITE_ADMIN_PASSWORD=${{ secrets.VITE_ADMIN_PASSWORD }}" >> .env
+          echo "VITE_FIREBASE_API_KEY=${{ secrets.VITE_FIREBASE_API_KEY }}" >> .env
+          echo "VITE_FIREBASE_AUTH_DOMAIN=${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}" >> .env
+          echo "VITE_FIREBASE_PROJECT_ID=${{ secrets.VITE_FIREBASE_PROJECT_ID }}" >> .env
+          echo "VITE_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}" >> .env
+          echo "VITE_FIREBASE_APP_ID=${{ secrets.VITE_FIREBASE_APP_ID }}" >> .env
+          echo "VITE_FIREBASE_VAPID_KEY=${{ secrets.VITE_FIREBASE_VAPID_KEY }}" >> .env
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Inject Firebase JSON and .env
+      - name: Build Web App
+        run: npm run build
+
+      - name: Add Android Platform
         run: |
-          echo "${{ secrets.GOOGLE_SERVICES_JSON }}" | base64 -d > google-services.json
-          echo "${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}" | base64 -d > GoogleService-Info.plist
-          cat > .env << 'EOF'
-          VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_ADMIN_EMAIL=${{ secrets.VITE_ADMIN_EMAIL }}
-          VITE_ADMIN_PASSWORD=${{ secrets.VITE_ADMIN_PASSWORD }}
-          VITE_CLOUDINARY_CLOUD_NAME=${{ secrets.VITE_CLOUDINARY_CLOUD_NAME }}
-          VITE_CLOUDINARY_UPLOAD_PRESET=${{ secrets.VITE_CLOUDINARY_UPLOAD_PRESET }}
-          VITE_CLOUDINARY_API_KEY=${{ secrets.VITE_CLOUDINARY_API_KEY }}
-          VITE_CLOUDINARY_API_SECRET=${{ secrets.VITE_CLOUDINARY_API_SECRET }}
-          VITE_FIREBASE_API_KEY=${{ secrets.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN=${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID=${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-          VITE_FIREBASE_APP_ID=${{ secrets.VITE_FIREBASE_APP_ID }}
-          VITE_FIREBASE_VAPID_KEY=${{ secrets.VITE_FIREBASE_VAPID_KEY }}
-          EOF
+          npx cap add android || npx cap sync android
+          
+      - name: Setup Keystore
+        run: |
+          echo "${{ secrets.ADMIN_KEYSTORE_BASE64 }}" | base64 --decode > android/app/keystore.jks
 
-      - name: Build Android APK
-        run: eas build --platform android --profile production --non-interactive --local
+      - name: Build and Sign APK
+        working-directory: ./admin-mobile/android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ADMIN_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ADMIN_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ADMIN_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=keystore.jks \
+            -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD \
+            -Pandroid.injected.signing.key.alias=$KEY_ALIAS \
+            -Pandroid.injected.signing.key.password=$KEY_PASSWORD
 
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v3
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
         with:
-          name: admin-app-apk
-          path: admin-mobile/build-*.apk
+          name: admin-app-release
+          path: admin-mobile/android/app/build/outputs/apk/release/app-release.apk
