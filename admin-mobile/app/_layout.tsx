@@ -1,88 +1,85 @@
 import { useFonts } from 'expo-font';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
-import { View, Text, Button, StyleSheet } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
-import { requestUserPermission, setupNotificationListeners } from './utils/firebaseHelper';
-
 import { ErrorBoundaryProps } from 'expo-router';
 
+// ─── Error Boundary ───────────────────────────────────────────────────────────
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   return (
     <View style={styles.errorContainer}>
-      <Text style={styles.errorTitle}>Something went wrong!</Text>
+      <Text style={styles.errorTitle}>حدث خطأ ما!</Text>
       <Text style={styles.errorText}>{error.message}</Text>
-      <Button title="Retry" onPress={retry} />
+      <TouchableOpacity style={styles.retryButton} onPress={retry}>
+        <Text style={styles.retryText}>إعادة المحاولة</Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#fff',
-  },
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: 'red',
-    marginBottom: 10,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#333',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-});
+// ─── Prevent splash auto-hide ─────────────────────────────────────────────────
+SplashScreen.preventAutoHideAsync();
 
 export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
   initialRouteName: '(tabs)',
 };
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
-
+// ─── Root Layout ─────────────────────────────────────────────────────────────
 export default function RootLayout() {
-  const [loaded, error] = useFonts({
+  const [loaded, fontError] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
 
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
-    if (error) throw error;
-  }, [error]);
-
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
+    // Always hide splash screen — whether fonts loaded or errored.
+    // This ensures the screen is never permanently frozen/gray.
+    if (loaded || fontError) {
+      SplashScreen.hideAsync().catch(() => {});
     }
-  }, [loaded]);
+  }, [loaded, fontError]);
 
-  if (!loaded) {
+  // Wait for fonts (or error) before rendering
+  if (!loaded && !fontError) {
     return null;
   }
 
   return <RootLayoutNav />;
 }
 
+// ─── Navigation ───────────────────────────────────────────────────────────────
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  const [firebaseReady, setFirebaseReady] = useState(false);
 
   useEffect(() => {
-    requestUserPermission();
-    const unsubscribe = setupNotificationListeners();
-    
+    // Firebase initialization — wrapped in try/catch so a missing
+    // google-services.json or permissions error never kills the UI.
+    let unsubscribe: (() => void) | undefined;
+
+    const initFirebase = async () => {
+      try {
+        const { requestUserPermission, setupNotificationListeners } =
+          await import('./utils/firebaseHelper');
+        await requestUserPermission();
+        unsubscribe = setupNotificationListeners();
+      } catch (error) {
+        console.warn('[Firebase] Initialization skipped:', error);
+      } finally {
+        setFirebaseReady(true);
+      }
+    };
+
+    initFirebase();
+
     return () => {
       if (unsubscribe) {
-        unsubscribe();
+        try {
+          unsubscribe();
+        } catch (_) {}
       }
     };
   }, []);
@@ -92,7 +89,43 @@ function RootLayoutNav() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="+not-found" options={{ title: 'Not Found' }} />
       </Stack>
     </ThemeProvider>
   );
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+const styles = StyleSheet.create({
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    backgroundColor: '#FFFFFF',
+  },
+  errorTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#EF4444',
+    marginBottom: 12,
+  },
+  errorText: {
+    fontSize: 15,
+    color: '#374151',
+    marginBottom: 28,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  retryButton: {
+    backgroundColor: '#1E3A5F',
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  retryText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});
