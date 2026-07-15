@@ -65,7 +65,7 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # ── 8. Flexible Android Platform Handling (Add or Sync) ─────────────────
+      # ── 7. Sync or Add Android Platform ────────────────────────────────────
       - name: Sync or Add Android Platform
         run: |
           if [ -d "dashbourd/android" ]; then
@@ -76,12 +76,12 @@ jobs:
             cd dashbourd && npx cap add android
           fi
 
-      # ── 9. Grant Gradle permission ─────────────────────────────────────────
+      # ── 8. Grant Gradle permission ─────────────────────────────────────────
       - name: Grant execute permission for gradlew
         working-directory: ./dashbourd/android
         run: chmod +x gradlew
 
-      # ── 9.5 Create google-services.json ────────────────────────────────────
+      # ── 9. Create google-services.json ─────────────────────────────────────
       - name: Create google-services.json
         working-directory: ./dashbourd/android/app
         run: |
@@ -101,24 +101,65 @@ jobs:
         working-directory: ./dashbourd/android
         run: ./gradlew bundleRelease --no-daemon
 
-      # ── 11.5 Build Release APK (unsigned) ──────────────────────────────────
+      # ── 12. Build Release APK (unsigned) ───────────────────────────────────
       - name: Build Release APK
         working-directory: ./dashbourd/android
         run: ./gradlew assembleRelease --no-daemon
 
-      # ── 12. Sign the Release AAB ───────────────────────────────────────────
-      - name: Sign Release AAB
-        id: sign_aab
-        uses: r0adkll/sign-android-release@v1.0.4
-        with:
-          releaseDirectory: dashbourd/android/app/build/outputs/bundle/release
-          signingKeyBase64: ${{ secrets.DASHBOARD_KEYSTORE_BASE64 }}
-          alias: ${{ secrets.DASHBOARD_KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.DASHBOARD_KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.DASHBOARD_KEY_PASSWORD }}
-          buildToolsVersion: "34.0.0"
+      # ── 13. Decode Keystore ────────────────────────────────────────────────
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.DASHBOARD_KEYSTORE_BASE64 }}" | base64 --decode > /tmp/release.keystore
 
-      # ── 13. Upload Debug APK artifact ─────────────────────────────────────
+      # ── 14. Sign & Zipalign Release APK ────────────────────────────────────
+      - name: Sign Release APK
+        run: |
+          # Auto-detect the latest installed build-tools version
+          BUILD_TOOLS=$(ls $ANDROID_SDK_ROOT/build-tools/ | sort -V | tail -1)
+          echo "Using build-tools: $BUILD_TOOLS"
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/$BUILD_TOOLS/apksigner"
+          ZIPALIGN="$ANDROID_SDK_ROOT/build-tools/$BUILD_TOOLS/zipalign"
+
+          UNSIGNED_APK="dashbourd/android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          ALIGNED_APK="/tmp/app-release-aligned.apk"
+          SIGNED_APK="dashbourd/android/app/build/outputs/apk/release/app-release-signed.apk"
+
+          # Zipalign
+          $ZIPALIGN -v -p 4 "$UNSIGNED_APK" "$ALIGNED_APK"
+
+          # Sign with apksigner
+          $APKSIGNER sign \
+            --ks /tmp/release.keystore \
+            --ks-key-alias "${{ secrets.DASHBOARD_KEY_ALIAS }}" \
+            --ks-pass pass:"${{ secrets.DASHBOARD_KEYSTORE_PASSWORD }}" \
+            --key-pass pass:"${{ secrets.DASHBOARD_KEY_PASSWORD }}" \
+            --out "$SIGNED_APK" \
+            "$ALIGNED_APK"
+
+          # Verify
+          $APKSIGNER verify "$SIGNED_APK"
+          echo "APK signed successfully: $SIGNED_APK"
+
+      # ── 15. Sign Release AAB ───────────────────────────────────────────────
+      - name: Sign Release AAB
+        run: |
+          UNSIGNED_AAB="dashbourd/android/app/build/outputs/bundle/release/app-release.aab"
+          SIGNED_AAB="dashbourd/android/app/build/outputs/bundle/release/app-release-signed.aab"
+
+          jarsigner \
+            -verbose \
+            -sigalg SHA256withRSA \
+            -digestalg SHA-256 \
+            -keystore /tmp/release.keystore \
+            -storepass "${{ secrets.DASHBOARD_KEYSTORE_PASSWORD }}" \
+            -keypass "${{ secrets.DASHBOARD_KEY_PASSWORD }}" \
+            -signedjar "$SIGNED_AAB" \
+            "$UNSIGNED_AAB" \
+            "${{ secrets.DASHBOARD_KEY_ALIAS }}"
+
+          echo "AAB signed successfully: $SIGNED_AAB"
+
+      # ── 16. Upload Debug APK ───────────────────────────────────────────────
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
@@ -126,30 +167,18 @@ jobs:
           path: dashbourd/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
-      # ── 14. Sign the Release APK ───────────────────────────────────────────
-      - name: Sign Release APK
-        id: sign_apk
-        uses: r0adkll/sign-android-release@v1.0.4
-        with:
-          releaseDirectory: dashbourd/android/app/build/outputs/apk/release
-          signingKeyBase64: ${{ secrets.DASHBOARD_KEYSTORE_BASE64 }}
-          alias: ${{ secrets.DASHBOARD_KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.DASHBOARD_KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.DASHBOARD_KEY_PASSWORD }}
-          buildToolsVersion: "34.0.0"
-
-      # ── 15. Upload Signed Release APK artifact ─────────────────────────────
+      # ── 17. Upload Signed Release APK ──────────────────────────────────────
       - name: Upload Signed Release APK
         uses: actions/upload-artifact@v4
         with:
           name: dashboard-release-apk
-          path: ${{ steps.sign_apk.outputs.signedReleaseFile }}
+          path: dashbourd/android/app/build/outputs/apk/release/app-release-signed.apk
           retention-days: 30
 
-      # ── 16. Upload Signed Release AAB artifact ─────────────────────────────
+      # ── 18. Upload Signed Release AAB ──────────────────────────────────────
       - name: Upload Signed Release AAB
         uses: actions/upload-artifact@v4
         with:
           name: dashboard-release-signed-aab
-          path: ${{ steps.sign_aab.outputs.signedReleaseFile }}
+          path: dashbourd/android/app/build/outputs/bundle/release/app-release-signed.aab
           retention-days: 30
