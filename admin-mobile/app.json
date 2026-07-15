@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "admin-mobile",
-    "slug": "admin-mobile",
+    "name": "لوحة التحكم السعيدة",
+    "slug": "alsaeedah-control-panel",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
