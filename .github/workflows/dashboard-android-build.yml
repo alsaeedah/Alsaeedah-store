@@ -89,7 +89,8 @@ jobs:
           LOGO = 'dashbourd/public/logo.png'
           RES_DIR = 'dashbourd/android/app/src/main/res'
 
-          icons = {
+          # Standard icon sizes per density
+          icon_sizes = {
               'mipmap-mdpi':    48,
               'mipmap-hdpi':    72,
               'mipmap-xhdpi':   96,
@@ -97,21 +98,47 @@ jobs:
               'mipmap-xxxhdpi': 192,
           }
 
+          # Adaptive icon foreground canvas sizes (108dp equivalent per density)
+          foreground_sizes = {
+              'mipmap-mdpi':    108,
+              'mipmap-hdpi':    162,
+              'mipmap-xhdpi':   216,
+              'mipmap-xxhdpi':  324,
+              'mipmap-xxxhdpi': 432,
+          }
+
           img = Image.open(LOGO).convert('RGBA')
 
-          for density, size in icons.items():
+          for density, size in icon_sizes.items():
               out_dir = os.path.join(RES_DIR, density)
               os.makedirs(out_dir, exist_ok=True)
+
+              # Legacy icons (Android < 8)
               resized = img.resize((size, size), Image.LANCZOS)
               resized.save(os.path.join(out_dir, 'ic_launcher.png'))
               resized.save(os.path.join(out_dir, 'ic_launcher_round.png'))
-              print(f'  Generated {density}: {size}x{size}')
 
+              # Adaptive icon foreground (Android 8+): logo centered on transparent canvas
+              fg_size = foreground_sizes[density]
+              canvas = Image.new('RGBA', (fg_size, fg_size), (0, 0, 0, 0))
+              logo_size = int(fg_size * 0.6)
+              logo_resized = img.resize((logo_size, logo_size), Image.LANCZOS)
+              offset = (fg_size - logo_size) // 2
+              canvas.paste(logo_resized, (offset, offset), logo_resized)
+              canvas.save(os.path.join(out_dir, 'ic_launcher_foreground.png'))
+
+              # Adaptive icon background: solid black to match dark app theme
+              bg = Image.new('RGBA', (fg_size, fg_size), (0, 0, 0, 255))
+              bg.save(os.path.join(out_dir, 'ic_launcher_background.png'))
+
+              print(f'  Generated {density}: icon={size}px foreground={fg_size}px')
+
+          # Splash screen - referenced by styles.xml as @drawable/splash
           splash_dir = os.path.join(RES_DIR, 'drawable')
           os.makedirs(splash_dir, exist_ok=True)
           splash = img.resize((1024, 1024), Image.LANCZOS)
           splash.save(os.path.join(splash_dir, 'splash.png'))
-          print('  Generated splash.png: 1024x1024')
+          print('  Generated drawable/splash.png: 1024x1024')
           print('All assets generated successfully.')
           PYEOF
 
