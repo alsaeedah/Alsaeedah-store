@@ -61,26 +61,45 @@ jobs:
         run: |
           npx cap add android || npx cap sync android
           
-      - name: Setup Keystore
-        run: |
-          echo "${{ secrets.ADMIN_KEYSTORE_BASE64 }}" | base64 --decode > android/app/keystore.jks
-
-      - name: Build and Sign APK
+      - name: Build Release APK (unsigned)
         working-directory: ./admin-mobile/android
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.ADMIN_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ADMIN_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ADMIN_KEY_PASSWORD }}
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file=keystore.jks \
-            -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD \
-            -Pandroid.injected.signing.key.alias=$KEY_ALIAS \
-            -Pandroid.injected.signing.key.password=$KEY_PASSWORD
+        run: ./gradlew assembleRelease --no-daemon
 
-      - name: Upload APK
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.ADMIN_KEYSTORE_BASE64 }}" | base64 --decode > /tmp/admin-release.keystore
+
+      - name: Sign Release APK
+        run: |
+          # Auto-detect the latest installed build-tools version
+          BUILD_TOOLS=$(ls $ANDROID_SDK_ROOT/build-tools/ | sort -V | tail -1)
+          echo "Using build-tools: $BUILD_TOOLS"
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/$BUILD_TOOLS/apksigner"
+          ZIPALIGN="$ANDROID_SDK_ROOT/build-tools/$BUILD_TOOLS/zipalign"
+
+          UNSIGNED_APK="admin-mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          ALIGNED_APK="/tmp/app-release-aligned.apk"
+          SIGNED_APK="admin-mobile/android/app/build/outputs/apk/release/app-release-signed.apk"
+
+          # Zipalign
+          $ZIPALIGN -v -p 4 "$UNSIGNED_APK" "$ALIGNED_APK"
+
+          # Sign with apksigner
+          $APKSIGNER sign \
+            --ks /tmp/admin-release.keystore \
+            --ks-key-alias "${{ secrets.ADMIN_KEY_ALIAS }}" \
+            --ks-pass pass:"${{ secrets.ADMIN_KEYSTORE_PASSWORD }}" \
+            --key-pass pass:"${{ secrets.ADMIN_KEY_PASSWORD }}" \
+            --out "$SIGNED_APK" \
+            "$ALIGNED_APK"
+
+          # Verify
+          $APKSIGNER verify "$SIGNED_APK"
+          echo "APK signed successfully: $SIGNED_APK"
+
+      - name: Upload Signed Release APK
         uses: actions/upload-artifact@v4
         with:
           name: admin-app-release
-          path: admin-mobile/android/app/build/outputs/apk/release/app-release.apk
+          path: admin-mobile/android/app/build/outputs/apk/release/app-release-signed.apk
+          retention-days: 30
