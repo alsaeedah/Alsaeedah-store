@@ -1,6 +1,6 @@
 {
   "appId": "com.alsaeedah.dashboard",
-  "appName": "لوحة السعيدة",
+  "appName": "لوحة التحكم السعيدة",
   "webDir": "dist",
   "backgroundColor": "#000000",
   "server": {

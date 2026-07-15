@@ -1,12 +1,14 @@
-name: Build Admin Android APK
+name: "[DEPRECATED] Build Admin Android APK"
 
+# DEPRECATED: admin-mobile has been replaced by dashbourd as the sole source
+# of truth per PRD. This workflow is disabled from automatic runs.
+# The active workflow is: dashboard-android-build.yml
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'admin-mobile/**'
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'This workflow is deprecated. Use dashboard-android-build.yml instead.'
+        required: false
 
 jobs:
   build:

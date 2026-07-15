@@ -14,22 +14,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ── 1. Checkout ────────────────────────────────────────────────────────
+      # -- 1. Checkout --------------------------------------------------------
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ── 2. Node.js ─────────────────────────────────────────────────────────
+      # -- 2. Node.js ---------------------------------------------------------
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      # ── 3. Install Dependencies ─────────────────────────────────────────────
+      # -- 3. Install Dependencies --------------------------------------------
       - name: Install Dependencies
         working-directory: ./dashbourd
         run: npm install
 
-      # ── 4. Write .env file ─────────────────────────────────────────────────
+      # -- 4. Write .env file -------------------------------------------------
       - name: Create .env file
         working-directory: ./dashbourd
         run: |
@@ -50,12 +50,12 @@ jobs:
           VITE_FIREBASE_VAPID_KEY=${{ secrets.VITE_FIREBASE_VAPID_KEY }}
           EOF
 
-      # ── 5. Build the web app ────────────────────────────────────────────────
+      # -- 5. Build the web app -----------------------------------------------
       - name: Build Web App
         working-directory: ./dashbourd
         run: npm run build
 
-      # ── 6. Java + Gradle ───────────────────────────────────────────────────
+      # -- 6. Java + Gradle ---------------------------------------------------
       - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
@@ -65,7 +65,7 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # ── 7. Sync or Add Android Platform ────────────────────────────────────
+      # -- 7. Sync or Add Android Platform ------------------------------------
       - name: Sync or Add Android Platform
         run: |
           if [ -d "dashbourd/android" ]; then
@@ -76,12 +76,51 @@ jobs:
             cd dashbourd && npx cap add android
           fi
 
-      # ── 8. Grant Gradle permission ─────────────────────────────────────────
+      # -- 8. Generate App Icons and Splash Screen from store logo ------------
+      - name: Install Python imaging library
+        run: pip install Pillow
+
+      - name: Generate Android Icons and Splash Screen
+        run: |
+          python3 << 'PYEOF'
+          from PIL import Image
+          import os
+
+          LOGO = 'dashbourd/public/logo.png'
+          RES_DIR = 'dashbourd/android/app/src/main/res'
+
+          icons = {
+              'mipmap-mdpi':    48,
+              'mipmap-hdpi':    72,
+              'mipmap-xhdpi':   96,
+              'mipmap-xxhdpi':  144,
+              'mipmap-xxxhdpi': 192,
+          }
+
+          img = Image.open(LOGO).convert('RGBA')
+
+          for density, size in icons.items():
+              out_dir = os.path.join(RES_DIR, density)
+              os.makedirs(out_dir, exist_ok=True)
+              resized = img.resize((size, size), Image.LANCZOS)
+              resized.save(os.path.join(out_dir, 'ic_launcher.png'))
+              resized.save(os.path.join(out_dir, 'ic_launcher_round.png'))
+              print(f'  Generated {density}: {size}x{size}')
+
+          splash_dir = os.path.join(RES_DIR, 'drawable')
+          os.makedirs(splash_dir, exist_ok=True)
+          splash = img.resize((1024, 1024), Image.LANCZOS)
+          splash.save(os.path.join(splash_dir, 'splash.png'))
+          print('  Generated splash.png: 1024x1024')
+          print('All assets generated successfully.')
+          PYEOF
+
+      # -- 9. Grant Gradle permission -----------------------------------------
       - name: Grant execute permission for gradlew
         working-directory: ./dashbourd/android
         run: chmod +x gradlew
 
-      # ── 9. Create google-services.json ─────────────────────────────────────
+      # -- 10. Create google-services.json ------------------------------------
       - name: Create google-services.json
         working-directory: ./dashbourd/android/app
         run: |
@@ -91,27 +130,27 @@ jobs:
             echo "GOOGLE_SERVICES_JSON_BASE64 secret not found, skipping."
           fi
 
-      # ── 10. Build Debug APK ─────────────────────────────────────────────────
+      # -- 11. Build Debug APK ------------------------------------------------
       - name: Build Debug APK
         working-directory: ./dashbourd/android
         run: ./gradlew assembleDebug --no-daemon
 
-      # ── 11. Build Release AAB (unsigned) ───────────────────────────────────
+      # -- 12. Build Release AAB (unsigned) -----------------------------------
       - name: Build Release AAB
         working-directory: ./dashbourd/android
         run: ./gradlew bundleRelease --no-daemon
 
-      # ── 12. Build Release APK (unsigned) ───────────────────────────────────
+      # -- 13. Build Release APK (unsigned) -----------------------------------
       - name: Build Release APK
         working-directory: ./dashbourd/android
         run: ./gradlew assembleRelease --no-daemon
 
-      # ── 13. Decode Keystore ────────────────────────────────────────────────
+      # -- 14. Decode Keystore ------------------------------------------------
       - name: Decode Keystore
         run: |
           echo "${{ secrets.DASHBOARD_KEYSTORE_BASE64 }}" | base64 --decode > /tmp/release.keystore
 
-      # ── 14. Sign & Zipalign Release APK ────────────────────────────────────
+      # -- 15. Sign and Zipalign Release APK ----------------------------------
       - name: Sign Release APK
         run: |
           # Auto-detect the latest installed build-tools version
@@ -124,7 +163,7 @@ jobs:
           ALIGNED_APK="/tmp/app-release-aligned.apk"
           SIGNED_APK="dashbourd/android/app/build/outputs/apk/release/app-release-signed.apk"
 
-          # Zipalign
+          # Zipalign the unsigned APK
           $ZIPALIGN -v -p 4 "$UNSIGNED_APK" "$ALIGNED_APK"
 
           # Sign with apksigner
@@ -136,11 +175,11 @@ jobs:
             --out "$SIGNED_APK" \
             "$ALIGNED_APK"
 
-          # Verify
+          # Verify signature
           $APKSIGNER verify "$SIGNED_APK"
           echo "APK signed successfully: $SIGNED_APK"
 
-      # ── 15. Sign Release AAB ───────────────────────────────────────────────
+      # -- 16. Sign Release AAB -----------------------------------------------
       - name: Sign Release AAB
         run: |
           UNSIGNED_AAB="dashbourd/android/app/build/outputs/bundle/release/app-release.aab"
@@ -159,7 +198,7 @@ jobs:
 
           echo "AAB signed successfully: $SIGNED_AAB"
 
-      # ── 16. Upload Debug APK ───────────────────────────────────────────────
+      # -- 17. Upload Debug APK -----------------------------------------------
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
@@ -167,7 +206,7 @@ jobs:
           path: dashbourd/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
-      # ── 17. Upload Signed Release APK ──────────────────────────────────────
+      # -- 18. Upload Signed Release APK --------------------------------------
       - name: Upload Signed Release APK
         uses: actions/upload-artifact@v4
         with:
@@ -175,7 +214,7 @@ jobs:
           path: dashbourd/android/app/build/outputs/apk/release/app-release-signed.apk
           retention-days: 30
 
-      # ── 18. Upload Signed Release AAB ──────────────────────────────────────
+      # -- 19. Upload Signed Release AAB --------------------------------------
       - name: Upload Signed Release AAB
         uses: actions/upload-artifact@v4
         with:
