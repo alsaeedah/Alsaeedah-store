@@ -1,4 +1,4 @@
-package com.alsaeedah.store;
+package com.alsaeedah.dashboard;
 
 import com.getcapacitor.BridgeActivity;
 
