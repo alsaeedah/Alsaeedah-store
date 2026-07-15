@@ -115,6 +115,7 @@ jobs:
           alias: ${{ secrets.DASHBOARD_KEY_ALIAS }}
           keyStorePassword: ${{ secrets.DASHBOARD_KEYSTORE_PASSWORD }}
           keyPassword: ${{ secrets.DASHBOARD_KEY_PASSWORD }}
+          buildToolsVersion: 34.0.0
 
       # ── 13. Upload Debug APK artifact ─────────────────────────────────────
       - name: Upload Debug APK
@@ -134,6 +135,7 @@ jobs:
           alias: ${{ secrets.DASHBOARD_KEY_ALIAS }}
           keyStorePassword: ${{ secrets.DASHBOARD_KEYSTORE_PASSWORD }}
           keyPassword: ${{ secrets.DASHBOARD_KEY_PASSWORD }}
+          buildToolsVersion: 34.0.0
 
       # ── 15. Upload Signed Release APK artifact ─────────────────────────────
       - name: Upload Signed Release APK
