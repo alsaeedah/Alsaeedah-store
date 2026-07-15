@@ -109,7 +109,7 @@ jobs:
       # ── 12. Sign the Release AAB ───────────────────────────────────────────
       - name: Sign Release AAB
         id: sign_aab
-        uses: r0adkll/sign-android-release@v1
+        uses: r0adkll/sign-android-release@v1.0.4
         with:
           releaseDirectory: dashbourd/android/app/build/outputs/bundle/release
           signingKeyBase64: ${{ secrets.DASHBOARD_KEYSTORE_BASE64 }}
@@ -129,7 +129,7 @@ jobs:
       # ── 14. Sign the Release APK ───────────────────────────────────────────
       - name: Sign Release APK
         id: sign_apk
-        uses: r0adkll/sign-android-release@v1
+        uses: r0adkll/sign-android-release@v1.0.4
         with:
           releaseDirectory: dashbourd/android/app/build/outputs/apk/release
           signingKeyBase64: ${{ secrets.DASHBOARD_KEYSTORE_BASE64 }}

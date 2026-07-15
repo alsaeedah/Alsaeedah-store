@@ -54,13 +54,14 @@ jobs:
 
       - name: Sign AAB for Google Play
         id: sign_app
-        uses: r0adkll/sign-android-release@v1
+        uses: r0adkll/sign-android-release@v1.0.4
         with:
           releaseDirectory: AL-SAEEDAH/android/app/build/outputs/bundle/release
           signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 }}
           alias: ${{ secrets.KEY_ALIAS }}
           keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
           keyPassword: ${{ secrets.KEY_PASSWORD }}
+          buildToolsVersion: 34.0.0
 
       - name: Upload Unsigned Debug APK
         uses: actions/upload-artifact@v4
