@@ -858,7 +858,7 @@ const Settings = () => {
             <div style={{ marginTop: '30px', display: 'flex', alignItems: 'center', gap: '12px', padding: '20px', background: 'rgba(34, 197, 94, 0.05)', borderRadius: '18px', border: '1px solid rgba(34, 197, 94, 0.1)' }}>
                 <Sparkles size={20} color="#22c55e" />
                 <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem' }}>
-                    <strong>نصيحة:</strong> مركز الإدارة الموحد يتيح لك التحكم في الصفحة الرئيسية من مكان واحد. التغييرات تظهر لحظياً للعملاء.
+                    <strong>ملاحظة:</strong> مركز الإدارة الموحد يتيح لك التحكم في الصفحة الرئيسية من مكان واحد. التغييرات تظهر لحظياً للعملاء.
                 </p>
             </div>
 

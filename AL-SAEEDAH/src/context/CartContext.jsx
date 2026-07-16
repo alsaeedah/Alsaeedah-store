@@ -193,7 +193,7 @@ export const CartProvider = ({ children }) => {
                 
                 <!-- Right Side: Store Info -->
                 <div style="flex: 1; text-align: right;">
-                    <h1 style="color: #d4af37; font-size: 28px; margin: 0 0 10px 0; font-weight: 700;">متجر السعيدة</h1>
+                    <h1 style="color: #d4af37; font-size: 28px; margin: 0 0 10px 0; font-weight: 700;letter-spacing: 0px;">متجر السعيدة</h1>
                     <div style="font-size: 13px; color: #444; line-height: 1.8;">
                          <p style="margin: 0;"><strong>تواصل : </strong> 772754414, 775055319</p>
                          <p style="margin: 0;"><strong>الإيميل : </strong> alsaeedah8@gmail.com</p>
@@ -224,13 +224,13 @@ export const CartProvider = ({ children }) => {
             
             <div data-segment="customer-info" style="display: flex; gap: 40px; margin-bottom: 30px; padding: 20px; background: #f9f9f9; border-radius: 8px; border: 1px solid #eee;">
                 <div style="flex: 1;">
-                    <h3 style="color: #d4af37; margin-bottom: 10px; font-size: 16px;">بيانات العميل</h3>
+                    <h3 style="color: #d4af37; margin-bottom: 10px; font-size: 16px;letter-spacing: 0px;">بيانات العميل</h3>
                     <p style="margin: 5px 0;"><strong> الاسم : </strong> ${currentUser.name}</p>
                     <p style="margin: 5px 0;"><strong> واتساب : </strong> ${currentUser.whatsapp}</p>
                     <p style="margin: 5px 0;"><strong>الإيميل : </strong> ${currentUser.email}</p>
                 </div>
                 <div style="flex: 1;">
-                    <h3 style="color: #d4af37; margin-bottom: 10px; font-size: 16px;">عنوان التوصيل</h3>
+                    <h3 style="color: #d4af37; margin-bottom: 10px; font-size: 16px;letter-spacing: 0px;">عنوان التوصيل</h3>
                     <p style="margin: 5px 0;"><strong> المحافظة : </strong> ${currentUser.governorate}</p>
                     <p style="margin: 5px 0;"><strong>المديرية : </strong> ${currentUser.district}</p>
                     <p style="margin: 5px 0;"><strong>الحي : </strong> ${currentUser.neighborhood}</p>

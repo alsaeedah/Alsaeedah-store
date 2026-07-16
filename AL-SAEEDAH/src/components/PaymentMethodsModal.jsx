@@ -10,34 +10,16 @@ export default function PaymentMethodsModal({ isOpen, onClose, onConfirm }) {
 
     const banks = [
         {
-            id: 'kuraimi-ye',
-            name: 'الكريمي (يمني)',
+            id: 'binDowal',
+            name: 'شركة بن دول',
             icon: <Landmark size={20} />,
             account: '3171354667'
         },
         {
-            id: 'kuraimi-sa',
-            name: 'الكريمي (سعودي)',
-            icon: <Landmark size={20} />,
-            account: '3171266447'
-        },
-        {
-            id: 'bkash',
-            name: 'محفظة بي كاش',
-            icon: <Smartphone size={20} />,
-            account: '770822310'
-        },
-        {
-            id: 'bank-busairi',
-            name: 'بنك البسيري',
-            icon: <Landmark size={20} />,
-            account: '60874 - فرع خور المكلا'
-        },
-        {
-            id: 'alamqi',
+            id: 'alomqi',
             name: 'صرافة العمقي',
             icon: <Banknote size={20} />,
-            account: '254281825'
+            account: '254154242'
         }
     ];
 
