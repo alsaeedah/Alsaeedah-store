@@ -1,4 +1,5 @@
 import { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import { supabase } from '../supabase/client';
 
@@ -8,9 +9,12 @@ export const useFavorites = () => useContext(FavoritesContext);
 
 export const FavoritesProvider = ({ children }) => {
     const { currentUser } = useAuth();
+    const navigate = useNavigate();
     const [favorites, setFavorites] = useState([]);
     const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
     const [loading, setLoading] = useState(false);
+
+    const openWishlist = () => navigate('/wishlist');
     
     // 1. Fetch Favorites from Supabase
     const fetchFavorites = useCallback(async (userId) => {
@@ -350,6 +354,7 @@ export const FavoritesProvider = ({ children }) => {
             isFavorite,
             isFavoritesOpen,
             setIsFavoritesOpen,
+            openWishlist,
             loading,
             refreshFavoriteProduct
         }}>

@@ -1,4 +1,5 @@
 import { createContext, useState, useContext, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase/client';
 import { useLoader } from './LoaderContext';
 import { App as CapApp } from '@capacitor/app';
@@ -10,6 +11,7 @@ export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children, openAuthOnMount = false, onAuthMountHandled }) => {
     const { showLoader, hideLoader } = useLoader();
+    const navigate = useNavigate();
     const [currentUser, setCurrentUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const tokenRef = useRef(null);
@@ -363,6 +365,7 @@ export const AuthProvider = ({ children, openAuthOnMount = false, onAuthMountHan
     const closeLogoutConfirm = () => setIsLogoutConfirmOpen(false);
     const openProfileModal = () => setIsProfileModalOpen(true);
     const closeProfileModal = () => setIsProfileModalOpen(false);
+    const openProfilePage = () => navigate('/profile');
 
     return (
         <AuthContext.Provider value={{
@@ -384,7 +387,8 @@ export const AuthProvider = ({ children, openAuthOnMount = false, onAuthMountHan
             openLogoutConfirm,
             closeLogoutConfirm,
             openProfileModal,
-            closeProfileModal
+            closeProfileModal,
+            openProfilePage
         }}>
             {!loading && children}
         </AuthContext.Provider>

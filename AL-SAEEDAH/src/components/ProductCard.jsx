@@ -118,9 +118,10 @@ const ProductCard = forwardRef(({ product }, ref) => {
     return (
         <motion.div
             ref={ref}
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 40 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
+            transition={{ duration: 0.6, ease: [0.25, 0.8, 0.25, 1] }}
+            viewport={{ once: true, margin: "-50px" }}
             className="product-card"
         >
             {/* Media Section */}

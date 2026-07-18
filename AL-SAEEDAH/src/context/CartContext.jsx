@@ -1,4 +1,5 @@
-import { createContext, useState, useContext, useEffect } from 'react';
+import { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { useAuth } from './AuthContext';
@@ -122,7 +123,9 @@ export const CartProvider = ({ children }) => {
         };
     }, []);
 
-    const openCart = () => setIsCartOpen(true);
+    const navigate = useNavigate();
+
+    const openCart = () => navigate('/cart');
     const closeCart = () => setIsCartOpen(false);
 
     const addToCart = (product, options = {}) => {

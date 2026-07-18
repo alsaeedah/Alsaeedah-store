@@ -1,10 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ProductCard from './ProductCard';
-import { Filter, SlidersHorizontal, ArrowUpDown, DollarSign, Loader2 } from 'lucide-react';
+import { Filter, SlidersHorizontal, ArrowUpDown, DollarSign, Loader2, X } from 'lucide-react';
 import { fetchProductsPaginated, subscribeToProducts } from '../services/productService';
 
-export default function ProductList() {
+export default function ProductList({ 
+    initialCategory = 'all', 
+    title = 'تشكيلة', 
+    subtitle = 'حصرية',
+    description = 'اختر ما يناسب ذوقك الرفيع من مجموعتنا المميزة'
+}) {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
@@ -13,7 +18,7 @@ export default function ProductList() {
     const [hasMore, setHasMore] = useState(true);
 
     // Filters state
-    const [filterType, setFilterType] = useState('all');
+    const [filterType, setFilterType] = useState(initialCategory);
     const [filterStyle, setFilterStyle] = useState('all');
     const [sortPrice, setSortPrice] = useState('none');
     const [minPrice, setMinPrice] = useState('');
@@ -33,7 +38,7 @@ export default function ProductList() {
         if (node) observer.current.observe(node);
     }, [loading, loadingMore, hasMore]);
 
-    const loadProducts = async (pageNum, isInitial = false, currentSeed = randomSeed) => {
+    const loadProducts = useCallback(async (pageNum, isInitial = false, currentSeed = randomSeed) => {
         try {
             if (isInitial) setLoading(true);
             else setLoadingMore(true);
@@ -72,12 +77,11 @@ export default function ProductList() {
             setLoading(false);
             setLoadingMore(false);
         }
-    };
+    }, [filterType, filterStyle, sortPrice, minPrice, maxPrice, searchQuery, randomSeed]);
 
     // Initial load and filter change load with DEBOUNCE
     useEffect(() => {
         const timer = setTimeout(() => {
-            // Generate a NEW seed on every filter change as requested
             const newSeed = Math.random().toString(36).substring(7);
             setRandomSeed(newSeed);
             setPage(0);
@@ -91,7 +95,7 @@ export default function ProductList() {
         if (page > 0) {
             loadProducts(page);
         }
-    }, [page]);
+    }, [page, loadProducts]);
 
     // Real-time subscription (simplified for performance)
     useEffect(() => {
@@ -147,14 +151,16 @@ export default function ProductList() {
                 style={{ textAlign: 'center', marginBottom: '50px' }}
             >
                 <h2 style={{
-                    fontSize: window.innerWidth < 480 ? '1.7rem' : '2.4rem',
-                    color: 'var(--text-main)',
-                    marginBottom: '10px'
+                    fontSize: window.innerWidth < 480 ? '2rem' : '3rem',
+                    color: '#fff',
+                    marginBottom: '15px',
+                    fontWeight: '800',
+                    textShadow: '0 4px 20px rgba(212, 175, 55, 0.2)'
                 }}>
-                    تشكيلة <span style={{ color: 'var(--primary)' }}>حصرية</span>
+                    {title} <span style={{ color: 'var(--primary)', textShadow: '0 0 30px rgba(212, 175, 55, 0.4)' }}>{subtitle}</span>
                 </h2>
-                <p style={{ color: 'var(--text-dim)', fontSize: '1.2rem' }}>
-                    اختر ما يناسب ذوقك الرفيع من مجموعتنا المميزة
+                <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '1.25rem', fontWeight: '500', maxWidth: '600px', margin: '0 auto' }}>
+                    {description}
                 </p>
             </motion.div>
 
@@ -163,16 +169,21 @@ export default function ProductList() {
                 initial={{ opacity: 0, scale: 0.95 }}
                 whileInView={{ opacity: 1, scale: 1 }}
                 viewport={{ once: true }}
-                className="glass-panel filter-bar"
+                className="filter-bar"
                 style={{
-                    padding: '20px',
-                    marginBottom: '40px',
+                    padding: '24px',
+                    marginBottom: '50px',
                     display: 'flex',
                     flexWrap: 'wrap',
-                    gap: '20px',
+                    gap: '24px',
                     alignItems: 'center',
                     justifyContent: 'center',
                     maxWidth: '100%',
+                    background: 'linear-gradient(145deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))',
+                    borderRadius: '24px',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+                    backdropFilter: 'blur(20px)'
                 }}
             >
                 {/* Search Bar - Priority 1 */}
@@ -189,16 +200,16 @@ export default function ProductList() {
                             width: '100%',
                             padding: '12px 45px 12px 15px',
                             background: 'rgba(255, 255, 255, 0.05)',
-                            border: '1.5px solid var(--border-color)',
-                            borderRadius: '12px',
+                            border: '1px solid rgba(255,255,255,0.15)',
+                            borderRadius: '16px',
                             color: 'var(--text-main)',
                             fontSize: '0.95rem',
                             outline: 'none',
-                            transition: '0.3s',
+                            transition: 'all 0.3s ease',
                             fontFamily: 'cairo'
                         }}
-                        onFocus={(e) => { e.target.style.borderColor = 'var(--primary)'; e.target.style.boxShadow = '0 0 15px rgba(212, 175, 55, 0.1)'; }}
-                        onBlur={(e) => { e.target.style.borderColor = 'var(--border-color)'; e.target.style.boxShadow = 'none'; }}
+                        onFocus={(e) => { e.target.style.borderColor = 'var(--primary)'; e.target.style.boxShadow = '0 0 20px rgba(212, 175, 55, 0.2)'; e.target.style.background = 'rgba(255, 255, 255, 0.08)'; }}
+                        onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.15)'; e.target.style.boxShadow = 'none'; e.target.style.background = 'rgba(255, 255, 255, 0.05)'; }}
                     />
                     {searchQuery && (
                         <button 
@@ -226,15 +237,16 @@ export default function ProductList() {
                                 onClick={() => setFilterType(type.value)}
                                 className={`category-btn ${filterType === type.value ? 'active' : ''}`}
                                 style={{
-                                    padding: '8px 16px',
+                                    padding: '8px 20px',
                                     borderRadius: '20px',
-                                    border: filterType === type.value ? '1px solid var(--primary)' : '1px solid var(--border-color)',
-                                    background: filterType === type.value ? 'var(--primary)' : 'transparent',
-                                    color: filterType === type.value ? '#000' : 'var(--text-main)',
+                                    border: filterType === type.value ? '1px solid var(--primary)' : '1px solid rgba(255,255,255,0.1)',
+                                    background: filterType === type.value ? 'var(--primary)' : 'rgba(255,255,255,0.03)',
+                                    color: filterType === type.value ? '#000' : 'rgba(255,255,255,0.8)',
                                     cursor: 'pointer',
-                                    transition: 'all 0.3s',
+                                    transition: 'all 0.3s ease',
                                     fontFamily: 'cairo',
-                                    whiteSpace: 'nowrap'
+                                    whiteSpace: 'nowrap',
+                                    fontWeight: filterType === type.value ? '700' : '500'
                                 }}
                             >
                                 {type.label}
@@ -251,14 +263,15 @@ export default function ProductList() {
                         value={filterStyle}
                         onChange={(e) => setFilterStyle(e.target.value)}
                         style={{
-                            padding: '8px 15px',
-                            borderRadius: '8px',
-                            background: 'var(--bg-card)',
-                            border: '1px solid var(--border-color)',
+                            padding: '10px 18px',
+                            borderRadius: '12px',
+                            background: 'rgba(255,255,255,0.05)',
+                            border: '1px solid rgba(255,255,255,0.15)',
                             color: 'var(--text-main)',
                             fontFamily: 'var(--font-main)',
                             outline: 'none',
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease'
                         }}
                     >
                         <option value="all">جميع الأنماط</option>
@@ -285,14 +298,15 @@ export default function ProductList() {
                                 if (val === '' || Number(val) >= 0) setMinPrice(val);
                             }}
                             style={{
-                                width: '80px',
-                                padding: '8px',
-                                borderRadius: '8px',
-                                background: 'var(--bg-card)',
-                                border: '1px solid var(--border-color)',
+                                width: '90px',
+                                padding: '10px',
+                                borderRadius: '12px',
+                                background: 'rgba(255,255,255,0.05)',
+                                border: '1px solid rgba(255,255,255,0.15)',
                                 color: 'var(--text-main)',
                                 fontFamily: 'var(--font-main)',
-                                outline: 'none'
+                                outline: 'none',
+                                transition: 'all 0.3s ease'
                             }}
                         />
                         <span style={{ color: 'var(--text-dim)' }}>-</span>
@@ -306,14 +320,15 @@ export default function ProductList() {
                                 if (val === '' || Number(val) >= 0) setMaxPrice(val);
                             }}
                             style={{
-                                width: '80px',
-                                padding: '8px',
-                                borderRadius: '8px',
-                                background: 'var(--bg-card)',
-                                border: '1px solid var(--border-color)',
+                                width: '90px',
+                                padding: '10px',
+                                borderRadius: '12px',
+                                background: 'rgba(255,255,255,0.05)',
+                                border: '1px solid rgba(255,255,255,0.15)',
                                 color: 'var(--text-main)',
                                 fontFamily: 'var(--font-main)',
-                                outline: 'none'
+                                outline: 'none',
+                                transition: 'all 0.3s ease'
                             }}
                         />
                     </div>
@@ -326,14 +341,15 @@ export default function ProductList() {
                         value={sortPrice}
                         onChange={(e) => setSortPrice(e.target.value)}
                         style={{
-                            padding: '8px 15px',
-                            borderRadius: '8px',
-                            background: 'var(--bg-card)',
-                            border: '1px solid var(--border-color)',
+                            padding: '10px 18px',
+                            borderRadius: '12px',
+                            background: 'rgba(255,255,255,0.05)',
+                            border: '1px solid rgba(255,255,255,0.15)',
                             color: 'var(--text-main)',
                             fontFamily: 'var(--font-main)',
                             outline: 'none',
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease'
                         }}
                     >
                         <option value="none">ترتيب حسب</option>

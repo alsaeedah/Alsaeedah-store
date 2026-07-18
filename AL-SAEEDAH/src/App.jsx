@@ -14,14 +14,11 @@ import BestSellers from './components/BestSellers';
 import LatestProducts from './components/LatestProducts';
 import ProductList from './components/ProductList';
 import ProductDetails from './pages/ProductDetails';
-import Orders from './pages/Orders';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import LoginPage from './pages/LoginPage';
-import CartSidebar from './components/CartSidebar';
 import AuthModal from './components/AuthModal';
 import LogoutConfirmModal from './components/LogoutConfirmModal';
 import ProfileModal from './components/ProfileModal';
-import FavoritesModal from './components/FavoritesModal';
 import Footer from './components/Footer';
 import SEOHelper from './components/SEOHelper';
 import ScrollToTop from './components/ScrollToTop';
@@ -29,31 +26,78 @@ import BackButtonHandler from './components/BackButtonHandler';
 import PullToRefresh from './components/PullToRefresh';
 import AppDownloadBanner from './components/AppDownloadBanner';
 import DownloadApp from './pages/DownloadApp';
+
+// New Pages
+import CartPage from './pages/CartPage';
+import WishlistPage from './pages/WishlistPage';
+import ProfilePage from './pages/ProfilePage';
+import CheckoutPage from './pages/CheckoutPage';
+import AboutUs from './pages/AboutUs';
+import ContactUs from './pages/ContactUs';
+import Terms from './pages/Terms';
+import Privacy from './pages/Privacy';
+import Shipping from './pages/Shipping';
+import Returns from './pages/Returns';
+import MenWatches from './pages/MenWatches';
+import WomenWatches from './pages/WomenWatches';
+import ChildrenWatches from './pages/ChildrenWatches';
+
 import { StatusBar } from '@capacitor/status-bar';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { useEffect, useRef, useState, useCallback } from 'react';
+import Lenis from 'lenis';
+
+// Page transition variants
+const pageVariants = {
+  initial: { opacity: 0, y: 16 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -8 }
+};
+const pageTransition = { duration: 0.3, ease: [0.4, 0, 0.2, 1] };
+
+const PageWrapper = ({ children }) => (
+  <motion.div
+    initial="initial"
+    animate="animate"
+    exit="exit"
+    variants={pageVariants}
+    transition={pageTransition}
+  >
+    {children}
+  </motion.div>
+);
 
 // Home Page Component
 const Home = () => (
-  <motion.div
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    exit={{ opacity: 0 }}
-    transition={{ duration: 0.5 }}
-  >
+  <PageWrapper>
     <Hero />
     <Features />
     <BestSellers />
     <LatestProducts />
     <ProductList />
-  </motion.div>
+  </PageWrapper>
 );
+
+// Routes where navbar/footer should be hidden
+const ISOLATED_ROUTES = ['/checkout', '/download'];
 
 const ConditionalNavbar = () => {
   const location = useLocation();
-  if (location.pathname === '/download') return null;
+  if (ISOLATED_ROUTES.includes(location.pathname)) return null;
   return <Navbar />;
+};
+
+const ConditionalFooter = () => {
+  const location = useLocation();
+  if (ISOLATED_ROUTES.includes(location.pathname)) return null;
+  return <Footer />;
+};
+
+const ConditionalAppBanner = () => {
+  const location = useLocation();
+  if (ISOLATED_ROUTES.includes(location.pathname)) return null;
+  return <AppDownloadBanner />;
 };
 
 const AnimatedRoutes = () => {
@@ -62,46 +106,23 @@ const AnimatedRoutes = () => {
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
         <Route path="/" element={<Home />} />
-        <Route path="/product/:id" element={
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.4 }}
-          >
-            <ProductDetails />
-          </motion.div>
-        } />
-        <Route path="/orders" element={
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.4 }}
-          >
-            <Orders />
-          </motion.div>
-        } />
-        <Route path="/reset-password" element={
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.4 }}
-          >
-            <ResetPasswordPage />
-          </motion.div>
-        } />
-        <Route path="/download" element={
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.4 }}
-          >
-            <DownloadApp />
-          </motion.div>
-        } />
+        <Route path="/product/:id" element={<PageWrapper><ProductDetails /></PageWrapper>} />
+        <Route path="/men-watches" element={<PageWrapper><MenWatches /></PageWrapper>} />
+        <Route path="/women-watches" element={<PageWrapper><WomenWatches /></PageWrapper>} />
+        <Route path="/children-watches" element={<PageWrapper><ChildrenWatches /></PageWrapper>} />
+        <Route path="/cart" element={<PageWrapper><CartPage /></PageWrapper>} />
+        <Route path="/wishlist" element={<PageWrapper><WishlistPage /></PageWrapper>} />
+        <Route path="/profile" element={<PageWrapper><ProfilePage /></PageWrapper>} />
+        <Route path="/orders" element={<PageWrapper><ProfilePage initialTab="orders" /></PageWrapper>} />
+        <Route path="/checkout" element={<CheckoutPage />} />
+        <Route path="/about" element={<PageWrapper><AboutUs /></PageWrapper>} />
+        <Route path="/contact" element={<PageWrapper><ContactUs /></PageWrapper>} />
+        <Route path="/terms" element={<PageWrapper><Terms /></PageWrapper>} />
+        <Route path="/privacy" element={<PageWrapper><Privacy /></PageWrapper>} />
+        <Route path="/shipping" element={<PageWrapper><Shipping /></PageWrapper>} />
+        <Route path="/returns" element={<PageWrapper><Returns /></PageWrapper>} />
+        <Route path="/reset-password" element={<PageWrapper><ResetPasswordPage /></PageWrapper>} />
+        <Route path="/download" element={<PageWrapper><DownloadApp /></PageWrapper>} />
       </Routes>
     </AnimatePresence>
   );
@@ -132,9 +153,7 @@ const DeepLinkHandler = () => {
       if (path) {
         path = path.replace(/\/+/g, '/');
         
-        if (path.startsWith('/product/') || path.startsWith('/orders')) {
-          // If cold start, we always navigate (with delay)
-          // If resume, only navigate if path is different
+        if (path.startsWith('/product/') || path.startsWith('/orders') || path.startsWith('/cart')) {
           if (isColdStart || location.pathname !== path) {
             const delay = isColdStart ? 600 : 0;
             setTimeout(() => {
@@ -151,8 +170,6 @@ const DeepLinkHandler = () => {
       isHandlingColdStart.current = true;
       CapApp.getLaunchUrl().then((launchUrl) => {
         if (launchUrl?.url) {
-          // Check if this specific launch URL has already been handled in this session
-          // This prevents re-navigating to the product after a page refresh
           const lastHandled = sessionStorage.getItem('lastHandledLaunchUrl');
           if (lastHandled !== launchUrl.url) {
             handleUrl(launchUrl.url, true);
@@ -175,17 +192,14 @@ const DeepLinkHandler = () => {
   return null;
 };
 
-// Global Scroll Lock Manager
+// Global Scroll Lock Manager — only modal-type overlays lock scroll now
 const ScrollLockManager = () => {
-  const { isAuthModalOpen, isLogoutConfirmOpen, isProfileModalOpen, isMenuOpen } = useAuth();
-  const { isCartOpen, isOptionsModalOpen } = useCart();
-  const { isFavoritesOpen } = useFavorites();
+  const { isAuthModalOpen, isLogoutConfirmOpen, isProfileModalOpen } = useAuth();
 
   useEffect(() => {
-    const isAnyOpen = isAuthModalOpen || isLogoutConfirmOpen || isProfileModalOpen || isMenuOpen || isCartOpen || isOptionsModalOpen || isFavoritesOpen;
+    const isAnyOpen = isAuthModalOpen || isLogoutConfirmOpen || isProfileModalOpen;
     
     if (isAnyOpen) {
-      // Save current scroll position
       const scrollY = window.scrollY;
       document.body.style.top = `-${scrollY}px`;
       document.body.style.position = 'fixed';
@@ -193,7 +207,6 @@ const ScrollLockManager = () => {
       document.body.classList.add('no-scroll');
       document.body.dataset.scrollY = scrollY.toString();
     } else {
-      // Restore scroll position
       const scrollY = document.body.dataset.scrollY;
       
       document.body.style.position = '';
@@ -202,13 +215,9 @@ const ScrollLockManager = () => {
       document.body.classList.remove('no-scroll');
       
       if (scrollY) {
-        // Disable smooth scroll temporarily for instant restoration
         const originalScrollBehavior = document.documentElement.style.scrollBehavior;
         document.documentElement.style.scrollBehavior = 'auto';
-        
         window.scrollTo(0, parseInt(scrollY));
-        
-        // Restore original scroll behavior
         document.documentElement.style.scrollBehavior = originalScrollBehavior;
         delete document.body.dataset.scrollY;
       }
@@ -220,35 +229,27 @@ const ScrollLockManager = () => {
       document.body.style.width = '';
       document.body.classList.remove('no-scroll');
     };
-  }, [isAuthModalOpen, isLogoutConfirmOpen, isProfileModalOpen, isMenuOpen, isCartOpen, isOptionsModalOpen, isFavoritesOpen]);
+  }, [isAuthModalOpen, isLogoutConfirmOpen, isProfileModalOpen]);
 
   return null;
 };
 
-// Pull-to-Refresh Gate — computes disabled state from route + overlay context
-// PRD: PTR is restricted to the native Mobile App only (no web browsers).
+// Pull-to-Refresh Gate
 function PullToRefreshGate({ children }) {
   const location = useLocation();
-  const { isMenuOpen, isProfileModalOpen } = useAuth();
-  const { isCartOpen, isOptionsModalOpen } = useCart();
-  const { isFavoritesOpen } = useFavorites();
+  const { isProfileModalOpen } = useAuth();
 
-  // ── Platform gate: disable entirely on Web (Desktop & Mobile browsers) ──
   const isNativeApp = Capacitor.isNativePlatform();
 
-  // Routes where PTR is explicitly ALLOWED (primary pages)
   const isAllowedRoute =
     location.pathname === '/' ||
+    location.pathname === '/cart' ||
+    location.pathname === '/wishlist' ||
+    location.pathname === '/profile' ||
     location.pathname === '/orders' ||
     location.pathname.startsWith('/product/');
 
-  // PTR must be off whenever ANY overlay / drawer / modal is open
-  const isAnyOverlayOpen =
-    isMenuOpen ||
-    isCartOpen ||
-    isFavoritesOpen ||
-    isOptionsModalOpen ||
-    isProfileModalOpen;
+  const isAnyOverlayOpen = isProfileModalOpen;
 
   const disabled = !isNativeApp || !isAllowedRoute || isAnyOverlayOpen;
 
@@ -264,12 +265,6 @@ function PullToRefreshGate({ children }) {
   );
 }
 
-// Inner component so it can access ThemeContext.
-// Controls:
-//   1. <meta name="theme-color"> — web / Capacitor browser chrome
-//   2. StatusBar icon style     — LIGHT on dark BG, DARK on light BG
-//   3. Android Navigation Bar   — transparent bg already set in styles.xml;
-//      icon brightness is flipped here to match theme.
 function SystemBarsSync() {
   const { theme } = useTheme();
 
@@ -277,7 +272,6 @@ function SystemBarsSync() {
     const isDark  = theme === 'dark';
     const bgColor = isDark ? '#0a0a0a' : '#ffffff';
 
-    // ── Web: keep <meta name="theme-color"> in sync ──────────────────────
     let metaThemeColor = document.querySelector('meta[name="theme-color"]');
     if (!metaThemeColor) {
       metaThemeColor = document.createElement('meta');
@@ -286,18 +280,14 @@ function SystemBarsSync() {
     }
     metaThemeColor.content = bgColor;
 
-    // ── Native only ──────────────────────────────────────────────────────
     if (!Capacitor.isNativePlatform()) return;
-
-    // Flip status bar icon colour to contrast with the active theme:
-    // LIGHT icons on dark backgrounds, DARK icons on light backgrounds.
     StatusBar.setStyle({ style: isDark ? 'LIGHT' : 'DARK' });
   }, [theme]);
 
   return null;
 }
 
-// ── Auth Gate: renders LoginPage until user is logged in ──
+// Auth Gate: renders LoginPage until user is logged in
 function AuthGate({ children }) {
   const { currentUser } = useAuth();
   const location = useLocation();
@@ -312,11 +302,38 @@ function AuthGate({ children }) {
 
 function App() {
   useEffect(() => {
-    // Force Immersive Full Screen on Mobile — transparent overlay status bar
     if (Capacitor.isNativePlatform()) {
       StatusBar.setOverlaysWebView({ overlay: true });
       StatusBar.setBackgroundColor({ color: '#00000000' });
-      // Initial icon style handled by <StatusBarSync> below
+    }
+  }, []);
+
+  // Initialize Lenis for smooth scrolling
+  useEffect(() => {
+    // Check if user prefers reduced motion
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    
+    if (!prefersReducedMotion && !Capacitor.isNativePlatform()) {
+      const lenis = new Lenis({
+        duration: 1.2,
+        easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+        direction: 'vertical',
+        gestureDirection: 'vertical',
+        smooth: true,
+        smoothTouch: false,
+        touchMultiplier: 2,
+      });
+
+      function raf(time) {
+        lenis.raf(time);
+        requestAnimationFrame(raf);
+      }
+
+      requestAnimationFrame(raf);
+
+      return () => {
+        lenis.destroy();
+      };
     }
   }, []);
 
@@ -337,16 +354,14 @@ function App() {
                         <div className="app-container">
                           <SystemBarsSync />
                           <ConditionalNavbar />
-                          <CartSidebar />
                           <AuthModal />
                           <LogoutConfirmModal />
                           <ProfileModal />
-                          <FavoritesModal />
                           <PullToRefreshGate>
                             <AnimatedRoutes />
                           </PullToRefreshGate>
-                          <Footer />
-                          <AppDownloadBanner />
+                          <ConditionalFooter />
+                          <ConditionalAppBanner />
                         </div>
                       </CartProvider>
                     </VideoProvider>

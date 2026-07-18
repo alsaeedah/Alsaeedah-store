@@ -1,16 +1,101 @@
 import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Flame, ChevronLeft, ChevronRight, ArrowLeft } from 'lucide-react';
+import { motion, useMotionValue, useTransform } from 'framer-motion';
 import { fetchBestSellers, subscribeToProducts } from '../services/productService';
 import { useNavigate } from 'react-router-dom';
+import MinimalProductCard from './MinimalProductCard';
+import CinematicBackground from './CinematicBackground';
+
+const FeaturedProduct = ({ product }) => {
+    const navigate = useNavigate();
+    const x = useMotionValue(0);
+    const y = useMotionValue(0);
+    
+    // Check if device supports touch to disable 3D hover on mobile
+    const isTouch = typeof window !== 'undefined' && (('ontouchstart' in window) || (navigator.maxTouchPoints > 0));
+    
+    const handleMouseMove = (e) => {
+        if (isTouch) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const xPct = (mouseX / width - 0.5) * 2; // -1 to 1
+        const yPct = (mouseY / height - 0.5) * 2; // -1 to 1
+        x.set(xPct);
+        y.set(yPct);
+    };
+    
+    const handleMouseLeave = () => {
+        x.set(0);
+        y.set(0);
+    };
+
+    // Subtle 3-5 degrees tilt
+    const rotateX = useTransform(y, [-1, 1], [4, -4]);
+    const rotateY = useTransform(x, [-1, 1], [-4, 4]);
+
+    return (
+        <motion.div 
+            className="featured-layout"
+            onMouseMove={handleMouseMove}
+            onMouseLeave={handleMouseLeave}
+            style={{ 
+                rotateX: isTouch ? 0 : rotateX, 
+                rotateY: isTouch ? 0 : rotateY, 
+                transformPerspective: 1000 
+            }}
+            initial={{ opacity: 0, y: 40, filter: 'blur(10px)' }}
+            whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            viewport={{ once: true, amount: 0.3 }}
+            transition={{ duration: 0.8, ease: [0.25, 0.8, 0.25, 1] }}
+        >
+            <div className="featured-media">
+                <img 
+                    src={product.imageUrl || product.image} 
+                    alt={product.name} 
+                    loading="lazy" 
+                    decoding="async" 
+                />
+            </div>
+            <div className="featured-info">
+                <motion.span 
+                    initial={{ opacity: 0 }}
+                    whileInView={{ opacity: 1 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: 0.4 }}
+                    style={{ color: 'var(--primary)', fontWeight: 'bold', fontSize: '0.9rem' }}
+                >
+                    ★ اختيار العملاء الأول
+                </motion.span>
+                <h3 className="featured-title">{product.name}</h3>
+                <span className="featured-price">{Number(product.price).toLocaleString()} <small>ر.س</small></span>
+                <button 
+                    className="btn-primary" 
+                    style={{ alignSelf: 'flex-start', marginTop: '10px' }}
+                    onClick={() => navigate(`/product/${product.id}`)}
+                >
+                    تسوق الآن
+                </button>
+            </div>
+        </motion.div>
+    );
+};
+
+const SkeletonLoader = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '40px' }}>
+        <div className="featured-layout skeleton-shimmer" style={{ height: '400px' }}></div>
+        <div className="collection-grid-carousel">
+            {[1, 2, 3, 4].map(i => (
+                <div key={i} className="carousel-item skeleton-shimmer" style={{ height: '380px', borderRadius: '20px' }}></div>
+            ))}
+        </div>
+    </div>
+);
 
 const BestSellers = () => {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
-    const scrollRef = useRef(null);
-    const navigate = useNavigate();
-    const [canScrollRight, setCanScrollRight] = useState(false);
-    const [canScrollLeft, setCanScrollLeft] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -23,278 +108,84 @@ const BestSellers = () => {
         return () => unsubscribe();
     }, []);
 
-    useEffect(() => {
-        checkScroll();
-        window.addEventListener('resize', checkScroll);
-        return () => window.removeEventListener('resize', checkScroll);
-    }, [products]);
-
     const loadData = async () => {
         const data = await fetchBestSellers();
         setProducts(data);
         setLoading(false);
     };
 
-    const checkScroll = () => {
-        if (scrollRef.current) {
-            const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
-            const isAtStart = Math.abs(scrollLeft) < 10;
-            const isAtEnd = Math.abs(scrollLeft) + clientWidth >= scrollWidth - 10;
-            
-            setCanScrollRight(!isAtStart);
-            setCanScrollLeft(!isAtEnd);
-        }
-    };
-
-    const scroll = (direction) => {
-        const { current } = scrollRef;
-        const scrollAmount = 300;
-        if (direction === 'left') {
-            current.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
-        } else {
-            current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-        }
-    };
-
-    // Keep title visible during loading to inform the user.
-    // Only return null if fetching is done and no products were found.
     if (!loading && products.length === 0) return null;
 
+    const featuredProduct = products.length > 0 ? products[0] : null;
+    const carouselProducts = products.length > 1 ? products.slice(1) : [];
+
     return (
-        <section className="best-sellers-section" style={{ padding: '60px 0', background: 'rgba(255,255,255,0.01)', position: 'relative', overflow: 'hidden' }}>
-            <div className="container" style={{ maxWidth: '1400px', margin: '0 auto', padding: '0 20px' }}>
+        <section className="immersive-section">
+            {/* Cinematic Animated Background System */}
+            <CinematicBackground />
+
+            <div className="immersive-content container">
                 {/* Section Header */}
                 <motion.div
-                    initial={{ opacity: 0, y: -20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
+                    initial={{ opacity: 0, y: -20, filter: 'blur(5px)' }}
+                    whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                    viewport={{ once: true, amount: 0.5 }}
+                    transition={{ duration: 0.6 }}
                     style={{ textAlign: 'center', marginBottom: '50px' }}
                 >
                     <h2 style={{
-                        fontSize: window.innerWidth < 480 ? '1.7rem' : '2.4rem',
+                        fontSize: typeof window !== 'undefined' && window.innerWidth < 480 ? '2rem' : '2.8rem',
                         color: 'var(--text-main)',
-                        marginBottom: '10px'
+                        marginBottom: '10px',
+                        fontFamily: 'var(--font-heading)'
                     }}>
                         أكثر <span style={{ color: 'var(--primary)' }}>الطلبات</span>
                     </h2>
                     <p style={{ color: 'var(--text-dim)', fontSize: '1.2rem' }}>
-                        إليك المنتجات الأكثر رواجاً واختياراً من قبل عملائنا
+                        اكتشف الساعات الأكثر رواجاً واختياراً من قبل عملائنا
                     </p>
                 </motion.div>
 
-                {/* Horizontal Scroll Wrapper with Side Buttons */}
-                <div style={{ position: 'relative', padding: '0 10px' }}>
-                    {/* Right Button */}
-                    <AnimatePresence>
-                        {canScrollRight && (
-                            <motion.button 
-                                initial={{ opacity: 0, scale: 0.5 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.5 }}
-                                onClick={() => scroll('right')} 
-                                className="nav-circle right"
-                                style={{ zIndex: 100 }}
-                            >
-                                <ChevronRight size={24} />
-                            </motion.button>
+                {loading ? (
+                    <SkeletonLoader />
+                ) : (
+                    <>
+                        {/* Featured Product */}
+                        {featuredProduct && (
+                            <FeaturedProduct product={featuredProduct} />
                         )}
-                    </AnimatePresence>
 
-                    <div 
-                        ref={scrollRef}
-                        onScroll={checkScroll}
-                        className="no-scrollbar"
-                        style={{ 
-                            display: 'flex', 
-                            gap: '20px', 
-                            overflowX: 'auto', 
-                            padding: '20px 0',
-                            scrollBehavior: 'smooth',
-                            WebkitOverflowScrolling: 'touch',
-                            minHeight: '200px'
-                        }}
-                    >
-                        {loading && products.length === 0 ? (
-                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%', padding: '100px 0' }}>
-                                <div className="loading-dots">
-                                    <span></span>
-                                    <span></span>
-                                    <span></span>
-                                </div>
-                            </div>
-                        ) : products.map((product, idx) => (
-                            <motion.div
-                                key={product.id}
-                                initial={{ opacity: 0, y: 20 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                transition={{ delay: idx * 0.05 }}
-                                viewport={{ once: true }}
-                                className="product-slider-card"
+                        {/* Remaining Products Carousel */}
+                        {carouselProducts.length > 0 && (
+                            <motion.div 
+                                className="collection-grid-carousel"
+                                initial="hidden"
+                                whileInView="visible"
+                                viewport={{ once: true, amount: 0.1 }}
+                                variants={{
+                                    visible: {
+                                        transition: { staggerChildren: 0.1 }
+                                    }
+                                }}
+                                style={{ marginTop: '40px' }}
                             >
-                                <img 
-                                    src={product.imageUrl || product.image} 
-                                    alt={product.name}
-                                    style={{ width: '100%', height: '100%', objectFit: 'cover', transition: '0.6s' }}
-                                    className="slider-img"
-                                />
-                                <div style={{ 
-                                    position: 'absolute', 
-                                    inset: 0, 
-                                    background: 'linear-gradient(to top, rgba(0,0,0,0.95) 0%, transparent 60%)',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    justifyContent: 'flex-end',
-                                    padding: '20px'
-                                }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--primary)', marginBottom: '8px' }}>
-                                        <Flame size={14} fill="var(--primary)" />
-                                        <span style={{ fontSize: '0.7rem', fontWeight: '900' }}>#الأكثر_طلباً</span>
-                                    </div>
-                                    <h3 className="card-title">{product.name}</h3>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span className="card-price">
-                                            {Number(product.price).toLocaleString()} <small style={{ fontSize: '0.75rem', color: '#fff' }}>ر.س</small>
-                                        </span>
-                                        <motion.div 
-                                            whileHover={{ scale: 1.1, background: 'var(--primary)', color: '#000' }}
-                                            whileTap={{ scale: 0.9 }}
-                                            onClick={() => navigate(`/product/${product.id}`)}
-                                            className="arrow-circle"
-                                            style={{ cursor: 'pointer' }}
-                                        >
-                                            <ArrowLeft size={18} />
-                                        </motion.div>
-                                    </div>
-                                </div>
+                                {carouselProducts.map((product) => (
+                                    <motion.div 
+                                        key={product.id} 
+                                        className="carousel-item"
+                                        variants={{
+                                            hidden: { opacity: 0, x: 50 },
+                                            visible: { opacity: 1, x: 0, transition: { duration: 0.6, ease: "easeOut" } }
+                                        }}
+                                    >
+                                        <MinimalProductCard product={product} />
+                                    </motion.div>
+                                ))}
                             </motion.div>
-                        ))}
-                    </div>
-
-                    {/* Left Button */}
-                    <AnimatePresence>
-                        {canScrollLeft && (
-                            <motion.button 
-                                initial={{ opacity: 0, scale: 0.5 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.5 }}
-                                onClick={() => scroll('left')} 
-                                className="nav-circle left"
-                                style={{ zIndex: 100 }}
-                            >
-                                <ChevronLeft size={24} />
-                            </motion.button>
                         )}
-                    </AnimatePresence>
-                </div>
+                    </>
+                )}
             </div>
-
-            <style>{`
-                .no-scrollbar::-webkit-scrollbar { display: none; }
-                .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-                
-                .nav-circle {
-                    width: 50px;
-                    height: 50px;
-                    background: var(--primary);
-                    color: #000;
-                    border: none;
-                    border-radius: 50%;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    cursor: pointer;
-                    box-shadow: 0 10px 20px rgba(212, 175, 55, 0.4);
-                    position: absolute;
-                    top: 50%;
-                    transform: translateY(-50%) !important;
-                    transition: 0.3s;
-                }
-                
-                .nav-circle.right { right: -5px; }
-                .nav-circle.left { left: -5px; }
-                
-                .nav-circle:hover {
-                    box-shadow: 0 15px 30px rgba(212, 175, 55, 0.5);
-                    scale: 1.1;
-                }
-
-                .product-slider-card {
-                    width: 280px;
-                    min-width: 280px;
-                    height: 380px;
-                    border-radius: 20px;
-                    position: relative;
-                    cursor: pointer;
-                    overflow: hidden;
-                    border: 1px solid rgba(255,255,255,0.08);
-                    flex-shrink: 0;
-                }
-
-                .card-title {
-                    color: #fff;
-                    font-size: 1.2rem;
-                    font-weight: 800;
-                    margin-bottom: 8px;
-                }
-
-                .card-price {
-                    font-size: 1.2rem;
-                    font-weight: 950;
-                    color: var(--primary);
-                }
-
-                .arrow-circle {
-                    width: 36px;
-                    height: 36px;
-                    border-radius: 50%;
-                    background: rgba(255,255,255,0.1);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    color: #fff;
-                    backdrop-filter: blur(5px);
-                }
-                
-                .slider-img:hover { transform: scale(1.08); }
-
-                .loading-dots {
-                    display: flex;
-                    gap: 8px;
-                }
-                .loading-dots span {
-                    width: 10px;
-                    height: 10px;
-                    background-color: var(--primary);
-                    border-radius: 50%;
-                    display: inline-block;
-                    animation: dots 1.4s infinite ease-in-out both;
-                }
-                .loading-dots span:nth-child(1) { animation-delay: -0.32s; }
-                .loading-dots span:nth-child(2) { animation-delay: -0.16s; }
-                @keyframes dots {
-                    0%, 80%, 100% { transform: scale(0); }
-                    40% { transform: scale(1.0); }
-                }
-                
-                @media (max-width: 768px) {
-                    .product-slider-card {
-                        min-width: 220px;
-                        height: 300px;
-                    }
-                    .card-title { font-size: 1rem; }
-                    .card-price { font-size: 1rem; }
-                    .nav-circle {
-                        width: 40px;
-                        height: 40px;
-                    }
-                }
-
-                .best-sellers-section {
-                    border-top: 1px solid rgba(255,255,255,0.05);
-                    border-bottom: 1px solid rgba(255,255,255,0.05);
-                    background: radial-gradient(circle at center, rgba(212, 175, 55, 0.02) 0%, transparent 70%);
-                }
-            `}</style>
         </section>
     );
 };

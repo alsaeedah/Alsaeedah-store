@@ -1,31 +1,119 @@
-import { ShoppingBag, Sun, Moon, User, LogOut, Heart, Menu, X, Home, Watch, List as ListIcon } from 'lucide-react';
+import { ShoppingBag, Sun, Moon, User, Heart, X, AlignJustify } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useFavorites } from '../context/FavoritesContext';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import logo from '../assets/logo.png';
-import Dock from './Dock';
+
+const FAB = ({ isMobile }) => {
+    const { theme, toggleTheme } = useTheme();
+    const { currentUser, openAuthModal, openProfilePage } = useAuth();
+    const { openWishlist } = useFavorites();
+    const [isOpen, setIsOpen] = useState(false);
+    const toggleOpen = () => setIsOpen(!isOpen);
+
+    // Adjust radius based on screen size
+    const radius = isMobile ? 65 : 75; 
+    
+    const subButtons = [
+        { icon: <User size={20} strokeWidth={1.5} />, onClick: () => { currentUser ? openProfilePage() : openAuthModal(); setIsOpen(false); }, label: 'Profile' },
+        { icon: <Heart size={20} strokeWidth={1.5} />, onClick: () => { openWishlist(); setIsOpen(false); }, label: 'Favorites' },
+        { icon: theme === 'dark' ? <Sun size={20} strokeWidth={1.5} /> : <Moon size={20} strokeWidth={1.5} />, onClick: () => { toggleTheme(); setIsOpen(false); }, label: 'Theme' },
+    ];
+
+    return (
+        <div style={{ position: 'relative', zIndex: 1001 }}>
+            <AnimatePresence>
+                {isOpen && subButtons.map((btn, index) => {
+                    // Calculate positions for an arc extending downwards and to the LEFT
+                    const targetX = index === 0 ? -radius : index === 1 ? -radius * 0.707 : 0;
+                    const targetY = index === 0 ? 0 : index === 1 ? radius * 0.707 : radius;
+
+                    return (
+                        <motion.button
+                            key={index}
+                            initial={{ opacity: 0, x: 0, y: 0, scale: 0 }}
+                            animate={{ opacity: 1, x: targetX, y: targetY, scale: 1 }}
+                            exit={{ opacity: 0, x: 0, y: 0, scale: 0.5 }}
+                            transition={{ type: "spring", stiffness: 300, damping: 20, delay: index * 0.04 }}
+                            onClick={btn.onClick}
+                            title={btn.label}
+                            style={{
+                                position: 'absolute',
+                                top: isMobile ? 2 : 4, 
+                                left: isMobile ? 2 : 4,
+                                width: isMobile ? '42px' : '46px', 
+                                height: isMobile ? '42px' : '46px',
+                                borderRadius: '50%',
+                                // Premium glassmorphism
+                                background: theme === 'dark' ? 'rgba(25,25,25,0.85)' : 'rgba(255,255,255,0.9)',
+                                border: '1px solid rgba(212,175,55,0.5)', // Subtle golden border
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                color: 'var(--primary)',
+                                cursor: 'pointer',
+                                backdropFilter: 'blur(10px)',
+                                WebkitBackdropFilter: 'blur(10px)',
+                                zIndex: 1,
+                                boxShadow: '0 8px 16px rgba(0,0,0,0.15)'
+                            }}
+                            whileHover={{ scale: 1.1, backgroundColor: 'rgba(212,175,55,0.1)' }}
+                            whileTap={{ scale: 0.95 }}
+                        >
+                            {btn.icon}
+                        </motion.button>
+                    );
+                })}
+            </AnimatePresence>
+
+            {/* Main FAB Button */}
+            <motion.button
+                onClick={toggleOpen}
+                whileTap={{ scale: 0.9 }}
+                style={{
+                    position: 'relative',
+                    width: isMobile ? '46px' : '54px', 
+                    height: isMobile ? '46px' : '54px',
+                    borderRadius: '50%',
+                    background: isOpen ? 'var(--primary)' : (theme === 'dark' ? 'rgba(20,20,20,0.6)' : 'rgba(255,255,255,0.6)'),
+                    border: isOpen ? '1px solid var(--primary)' : '1px solid rgba(212,175,55,0.6)', 
+                    boxShadow: isOpen 
+                        ? '0 0 15px rgba(212,175,55,0.6)' 
+                        : '0 0 10px rgba(212,175,55,0.3), inset 0 0 5px rgba(212,175,55,0.1)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: isOpen ? '#000' : 'var(--primary)',
+                    zIndex: 2,
+                    backdropFilter: 'blur(8px)',
+                    transition: 'all 0.3s ease'
+                }}
+                whileHover={{ boxShadow: '0 0 15px rgba(212,175,55,0.8), inset 0 0 8px rgba(212,175,55,0.3)' }}
+            >
+                <motion.div 
+                    animate={{ rotate: isOpen ? 90 : 0 }} 
+                    transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                >
+                    {isOpen ? <X size={26} strokeWidth={1.5} /> : <AlignJustify size={26} strokeWidth={1.5} />}
+                </motion.div>
+            </motion.button>
+        </div>
+    );
+};
 
 export default function Navbar() {
     const { cart, openCart } = useCart();
-    const { theme, toggleTheme } = useTheme();
-    const { currentUser, openLogoutConfirm, openAuthModal, openProfileModal, isMenuOpen, setIsMenuOpen, toggleMenu } = useAuth();
-    const { favorites, setIsFavoritesOpen } = useFavorites();
+    const { theme } = useTheme();
     const navigate = useNavigate();
+    
     const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
-
     const itemCount = cart.reduce((acc, item) => acc + item.dp_qty, 0);
 
     useEffect(() => {
         const handleResize = () => {
             setIsMobile(window.innerWidth < 1024);
-            if (window.innerWidth >= 1024) {
-                setIsMenuOpen(false);
-            }
         };
-
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
@@ -33,240 +121,113 @@ export default function Navbar() {
     const handleLogoClick = () => {
         navigate('/');
         window.scrollTo(0, 0);
-        setIsMenuOpen(false);
     };
 
-    const NavIcon = ({ icon: Icon, onClick, badge, color = "var(--text-main)", title = "" }) => (
-        <div
-            style={{ position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-            onClick={onClick}
-            title={title}
-        >
-            <Icon color={color} size={24} />
-            {badge > 0 && (
-                <span style={{
-                    position: 'absolute',
-                    top: '-8px',
-                    right: '-8px',
-                    background: 'var(--primary)',
-                    color: 'black',
-                    borderRadius: '50%',
-                    width: '18px',
-                    height: '18px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '11px',
-                    fontWeight: 'bold'
-                }}>
-                    {badge}
-                </span>
-            )}
-        </div>
-    );
-
-    const dockItems = [
-        { icon: <Home size={22} />, label: "الرئيسية", onClick: () => navigate('/') },
-        { icon: <ListIcon size={22} />, label: "طلباتي", onClick: () => navigate('/orders') },
-        { icon: <Heart size={22} />, label: "المفضلة", onClick: () => setIsFavoritesOpen(true), badgeCount: favorites.length },
-        {
-            icon: theme === 'dark' ? <Sun size={22} /> : <Moon size={22} />,
-            label: theme === 'dark' ? 'الوضع النهاري' : 'الوضع الليلي',
-            onClick: toggleTheme
-        },
-    ];
-
-    // Sidebar Content (Mobile)
-    const SidebarContent = () => (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            height: '100%',
-            padding: '40px 25px',
-            color: 'var(--text-main)',
-            background: 'var(--bg-main)'
-        }}>
-            {/* Header: User Profile */}
-            <div style={{ marginBottom: '50px', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)', paddingBottom: '15px' }}>
-                {currentUser ? (
-                    <>
-                        <img
-                            src={currentUser.image || `https://ui-avatars.com/api/?name=${currentUser.name}&background=d4af37&color=000`}
-                            alt={currentUser.name}
-                            style={{ width: '60px', height: '60px', borderRadius: '50%', border: '2px solid var(--primary)', objectFit: 'cover' }}
-                            onClick={() => { openProfileModal(); setIsMenuOpen(false); }}
-                        />
-                        <div onClick={() => { openProfileModal(); setIsMenuOpen(false); }}>
-                            <h3 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--text-main)' }}>{currentUser.name}</h3>
-                            <span style={{ fontSize: '0.8rem', color: 'var(--primary)' }}>عضو مميز</span>
-                        </div>
-                    </>
-                ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }} onClick={() => { openAuthModal(); setIsMenuOpen(false); }}>
-                        <div style={{
-                            width: '50px', height: '50px', borderRadius: '50%', background: 'var(--bg-card)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-color)'
-                        }}>
-                            <User size={24} color="var(--primary)" />
-                        </div>
-                        <div>
-                            <h3 style={{ fontSize: '1.1rem', margin: 0, color: 'var(--text-main)' }}>زائر</h3>
-                            <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>سجل دخولك الآن</span>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {/* Navigation Links */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '20px' }}>
-                <div className="action-icon" style={{ justifyContent: 'flex-start', padding: '10px 0' }} onClick={() => { navigate('/'); setIsMenuOpen(false); }}>
-                    <Home size={22} color="var(--primary)" />
-                    <span style={{ fontSize: '1.1rem' }}>الرئيسية</span>
-                </div>
-
-                <div className="action-icon" style={{ justifyContent: 'flex-start', padding: '10px 0' }} onClick={() => { navigate('/orders'); setIsMenuOpen(false); }}>
-                    <ListIcon size={22} color="var(--primary)" />
-                    <span style={{ fontSize: '1.1rem' }}>طلباتي</span>
-                </div>
-
-            </div>
-
-            {/* Bottom: Service Icons */}
-            <div style={{
-                display: 'flex',
-                justifyContent: 'space-around',
-                paddingTop: '20px',
-                borderTop: '1px solid var(--border-color)'
-            }}>
-                <div className="action-icon" onClick={toggleTheme}>
-                    {theme === 'dark' ? <Sun size={24} /> : <Moon size={24} />}
-                    <span>{theme === 'dark' ? 'نهاري' : 'ليلي'}</span>
-                </div>
-
-                <div className="action-icon" style={{ justifyContent: 'flex-start', }} onClick={() => { setIsFavoritesOpen(true); setIsMenuOpen(false); }}>
-                    <Heart size={22} color="#ff4b4b" />
-                    <span style={{ fontSize: '1.1rem' }}>المفضلة ({favorites.length})</span>
-                </div>
-
-                {currentUser && (
-                    <div className="action-icon" onClick={() => { openLogoutConfirm(); setIsMenuOpen(false); }}>
-                        <LogOut size={24} color="#ff4b4b" />
-                        <span>خروج</span>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-
     return (
-        <>
-            <nav className="glass-panel" style={{
-                position: 'fixed',
-                top: isMobile ? '0' : '10px',
-                left: isMobile ? '0' : '10px',
-                right: isMobile ? '0' : '10px',
-                zIndex: 1000,
-                width: isMobile ? '100%' : 'calc(100% - 20px)',
-                /* Mobile: top padding grows by safe-area-top so icons clear the OS status bar */
-                padding: isMobile
-                    ? 'calc(10px + var(--safe-area-top, 0px)) 15px 10px 15px'
-                    : '10px 40px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                /* Mobile: height extends by the same inset for visual continuity behind the status bar */
-                height: isMobile ? 'calc(70px + var(--safe-area-top, 0px))' : '70px',
-                borderRadius: isMobile ? '0' : 'var(--radius)'
-            }}>
-                {/* Desktop LAYOUT: LEFT (Logo - Position swapped) */}
-                {!isMobile && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '25px', flex: 1, justifyContent: 'flex-start' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }} onClick={handleLogoClick}>
-                            <img src={logo} alt="متجر السعيدة" style={{ width: '65px', height: '65px', objectFit: 'cover' }} />
-                            <h1 style={{ fontSize: '1.6rem', fontWeight: '900', margin: 0 }}>
-                                <span style={{ color: 'var(--primary)' }}>متجر</span> <span style={{ color: 'var(--text-main)' }}>السعيدة</span>
-                            </h1>
-                        </div>
-                    </div>
-                )}
+        <nav className="glass-panel" style={{
+            position: 'fixed',
+            top: '0',
+            left: '0',
+            right: '0',
+            zIndex: 1000,
+            width: '100%',
+            padding: isMobile
+                ? 'calc(10px + var(--safe-area-top, 0px)) 20px 10px 20px'
+                : '10px 50px',
+            display: 'grid',
+            gridTemplateColumns: '1fr auto 1fr',
+            alignItems: 'center',
+            height: isMobile ? 'calc(75px + var(--safe-area-top, 0px))' : '85px',
+            borderRadius: '0',
+            // Thin horizontal golden line, more elegant opacity
+            borderBottom: '1px solid rgba(212,175,55,0.4)',
+            background: theme === 'dark' ? 'rgba(10, 10, 10, 0.85)' : 'rgba(255, 255, 255, 0.9)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.05)'
+        }}>
+            
+            {/* Left Section: FAB (Swapped) */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
+                <FAB isMobile={isMobile} />
+            </div>
 
-                {/* Mobile LAYOUT: Left (Menu) */}
-                {isMobile && (
-                    <div onClick={toggleMenu} style={{ cursor: 'pointer', zIndex: 102 }}>
-                        <Menu size={28} color="var(--text-main)" />
-                    </div>
-                )}
-
-                {/* Desktop LAYOUT: CENTER (Dock) */}
-                {!isMobile && (
-                    <div style={{ flex: 2, display: 'flex', justifyContent: 'center' }}>
-                        <Dock items={dockItems} />
-                    </div>
-                )}
-
-                {/* Mobile LAYOUT: Center (Logo) */}
-                {isMobile && (
-                    <div style={{
-                        position: 'absolute',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        cursor: 'pointer'
-                    }} onClick={handleLogoClick}>
-                        <img src={logo} alt="متجر السعيدة" style={{ width: '50px', height: '50px', borderRadius: '50%', objectFit: 'cover' }} />
-                        <h1 style={{ fontSize: '1.3rem', fontWeight: 'bold', margin: 0 }}>
-                            <span style={{ color: 'var(--primary)' }}>متجر</span> <span style={{ color: 'var(--text-main)' }}>السعيدة</span>
-                        </h1>
-                    </div>
-                )}
-
-                {/* RIGHT SIDE: Icons (On right for Desktop, Cart on right for Mobile) */}
-                <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: isMobile ? '15px' : '20px',
-                    flex: isMobile ? 0 : 1,
-                    justifyContent: 'flex-end'
+            {/* Center Section: Logo */}
+            <div 
+                style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', justifyContent: 'center' }} 
+                onClick={handleLogoClick}
+            >
+                <motion.img 
+                    src={logo} 
+                    alt="متجر السعيدة" 
+                    style={{ 
+                        width: isMobile ? '48px' : '58px', 
+                        height: isMobile ? '48px' : '58px', 
+                        objectFit: 'cover',
+                        filter: 'drop-shadow(0 2px 4px rgba(212,175,55,0.2))'
+                    }} 
+                    whileHover={{ scale: 1.05 }}
+                    transition={{ type: 'spring', stiffness: 300 }}
+                />
+                <h1 style={{ 
+                    fontSize: isMobile ? '1.3rem' : '1.9rem', 
+                    fontWeight: '800', 
+                    margin: 0, 
+                    fontFamily: 'var(--font-heading)',
+                    color: 'var(--primary)',
+                    letterSpacing: '0.5px',
+                    textShadow: theme === 'dark' ? '0 2px 8px rgba(0,0,0,0.5)' : 'none'
                 }}>
-                    {!isMobile ? (
-                        <>
-                            {currentUser ? (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                                    <img
-                                        src={currentUser.image || logo}
-                                        alt="user"
-                                        style={{ width: '38px', height: '38px', borderRadius: '50%', border: '2px solid var(--primary)', cursor: 'pointer' }}
-                                        onClick={openProfileModal}
-                                    />
-                                    <NavIcon icon={LogOut} onClick={openLogoutConfirm} color="#ff4b4b" title="تسجيل الخروج" />
-                                </div>
-                            ) : (
-                                <button onClick={openAuthModal} className="btn-primary" style={{ padding: '8px 22px', fontSize: '0.9rem' }}>تسجيل الدخول</button>
-                            )}
-                            <NavIcon icon={ShoppingBag} onClick={openCart} badge={itemCount} title="السلة" />
-                        </>
-                    ) : (
-                        /* Mobile Cart icon on the Right */
-                        <NavIcon icon={ShoppingBag} onClick={openCart} badge={itemCount} />
+                    متجر السعيدة
+                </h1>
+            </div>
+
+            {/* Right Section: Cart (Swapped) */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                <motion.div
+                    style={{ 
+                        position: 'relative', 
+                        cursor: 'pointer', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        width: isMobile ? '46px' : '54px', 
+                        height: isMobile ? '46px' : '54px',
+                        borderRadius: '50%',
+                        color: 'var(--primary)', 
+                        background: theme === 'dark' ? 'rgba(212,175,55,0.05)' : 'rgba(212,175,55,0.08)',
+                        border: '1px solid rgba(212,175,55,0.2)',
+                        transition: 'all 0.3s ease'
+                    }}
+                    onClick={openCart}
+                    title="السلة"
+                    whileHover={{ 
+                        backgroundColor: 'rgba(212,175,55,0.15)',
+                        borderColor: 'rgba(212,175,55,0.5)',
+                        scale: 1.05
+                    }}
+                    whileTap={{ scale: 0.95 }}
+                >
+                    <ShoppingBag size={24} strokeWidth={1.5} />
+                    {itemCount > 0 && (
+                        <motion.span 
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            style={{
+                                position: 'absolute', top: '-2px', right: '-2px',
+                                background: 'var(--primary)', color: '#000', borderRadius: '50%',
+                                width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '11px', fontWeight: '800', fontFamily: 'var(--font-body)',
+                                border: `2px solid ${theme === 'dark' ? '#121212' : '#ffffff'}`,
+                                boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+                            }}
+                        >
+                            {itemCount > 99 ? '99+' : itemCount}
+                        </motion.span>
                     )}
-                </div>
-            </nav>
-
-            {/* Sidebar Overlay */}
-            <div className={`sidebar-overlay ${isMenuOpen ? 'open' : ''}`} onClick={() => setIsMenuOpen(false)}>
-                <div className="overlay-logo">
-                    <img src={logo} alt="Time Tick" style={{ width: '80px', height: '80px', marginBottom: '10px' }} />
-                    <h2 style={{ color: 'var(--primary)', margin: 0 }}>متجر السعيدة</h2>
-                </div>
+                </motion.div>
             </div>
 
-            {/* Sidebar Drawer */}
-            <div className={`sidebar-drawer ${isMenuOpen ? 'open' : ''}`}>
-                <SidebarContent />
-            </div>
-        </>
-    )
+        </nav>
+    );
 }

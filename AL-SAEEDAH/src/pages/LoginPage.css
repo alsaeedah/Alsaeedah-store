@@ -109,9 +109,10 @@
 
 /* Headline */
 .lp-left-headline {
-  font-size: clamp(1.8rem, 3vw, 2.6rem);
-  font-weight: 800;
+  font-size: clamp(2.2rem, 3.5vw, 3.2rem);
+  font-weight: 700;
   color: #ffffff;
+  font-family: var(--font-heading);
   line-height: 1.25;
   margin: 0;
 }
@@ -226,10 +227,10 @@
   /* margin-bottom: 5px; */
 }
 .lp-card-title {
-  font-size: 1.75rem;
-  font-weight: 800;
+  font-size: 2rem;
+  font-weight: 700;
   color: var(--text-main);
-  /* margin-bottom: 3px; */
+  font-family: var(--font-heading);
   background: linear-gradient(135deg, var(--text-main) 40%, var(--primary) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;

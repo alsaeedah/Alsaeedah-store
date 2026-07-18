@@ -1,13 +1,34 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '../supabase/client';
+import { ShoppingBag, ChevronRight, ChevronLeft } from 'lucide-react';
 import { subscribeToHero } from '../services/productService';
 
 export default function Hero() {
     const [slides, setSlides] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [logoLoaded, setLogoLoaded] = useState(false); // New state to handle logo flash
-    const [currentSlide, setCurrentSlide] = useState(0);
+    const [logoLoaded, setLogoLoaded] = useState(false);
+    const [currentSlide, setCurrentSlide] = useState(1);
+    const [isJump, setIsJump] = useState(false);
+    
+    const imageIndex = slides.length > 0 
+        ? (currentSlide - 1 + slides.length) % slides.length 
+        : 0;
+
+    const paginate = (newDirection) => {
+        setIsJump(false);
+        setCurrentSlide(prev => {
+            if (slides.length <= 1) return prev;
+            const maxIndex = slides.length + 1;
+            let next = prev + newDirection;
+            if (next > maxIndex) return maxIndex;
+            if (next < 0) return 0;
+            return next;
+        });
+    };
+
+    const extendedSlides = slides.length > 1 
+        ? [slides[slides.length - 1], ...slides, slides[0]] 
+        : slides;
 
     useEffect(() => {
         const unsubscribe = subscribeToHero((data) => {
@@ -22,23 +43,35 @@ export default function Hero() {
     useEffect(() => {
         if (slides.length <= 1 || loading) return;
         const timer = setInterval(() => {
-            setCurrentSlide((prev) => (prev + 1) % slides.length);
-        }, 5000); 
+            paginate(1);
+        }, 5000); // 5 seconds per slide, continuous auto-slide
         return () => clearInterval(timer);
-    }, [slides.length, loading]);
+    }, [slides.length, loading, currentSlide]);
+
+    const handleNext = () => {
+        paginate(1);
+    };
+
+    const handlePrev = () => {
+        paginate(-1);
+    };
 
     return (
-        <div style={{
-            position: 'relative',
-            width: '100%',
-            height: '100vh',
-            minHeight: '600px',
-            overflow: 'hidden',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#0a0a0a'
-        }}>
+        <div 
+            style={{
+                position: 'relative',
+                width: '100%',
+                height: '100vh',
+                minHeight: '700px',
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: '#050505',
+                touchAction: 'pan-y',
+                overscrollBehaviorX: 'none'
+            }}
+        >
             <AnimatePresence>
                 {/* Default Hero Section / Loading Placeholder */}
                 {(loading || slides.length === 0) && (
@@ -53,9 +86,7 @@ export default function Hero() {
                             left: 0,
                             width: '100%',
                             height: '100%',
-                            background: 'linear-gradient(-45deg, #050505, #1a150a, #050505, #120f06)',
-                            backgroundSize: '400% 400%',
-                            animation: 'glowBg 8s ease infinite',
+                            background: '#050505',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -66,39 +97,35 @@ export default function Hero() {
                     >
                         <motion.div
                             animate={{ 
-                                scale: [1, 1.02, 1],
-                                opacity: [0.8, 1, 0.8] 
+                                scale: [1, 1.05, 1],
+                                opacity: [0.7, 1, 0.7] 
                             }}
-                            transition={{ duration: 3, repeat: Infinity }}
+                            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
                             style={{ textAlign: 'center' }}
                         >
-                            {/* Only show image tag if it is fully loaded to avoid broken icon mark */}
                             <img 
                                 src="/logo.png" 
                                 onLoad={() => setLogoLoaded(true)}
                                 style={{ 
-                                    width: '240px', 
-                                    height: '240px', 
+                                    width: '180px', 
+                                    height: '180px', 
                                     border: 'none', 
                                     outline: 'none',
                                     opacity: logoLoaded ? 1 : 0,
-                                    transition: 'opacity 0.5s ease-in',
-                                    filter: 'drop-shadow(0 0 30px rgba(212, 175, 55, 0.4))' 
+                                    transition: 'opacity 0.8s ease-in',
                                 }}
                             />
                             <h2 style={{ 
-                                color: 'var(--primary)', 
-                                marginTop: '20px',
-                                fontSize: 'clamp(2.5rem, 8vw, 4.5rem)', // Responsive bold font
-                                letterSpacing: '2px', 
-                                fontWeight: '900', 
-                                textTransform: 'uppercase',
-                                fontFamily: 'var(--font-main)',
-                                textShadow: '0 0 40px rgba(212, 175, 55, 0.4)',
+                                color: 'var(--text-main)', 
+                                marginTop: '24px',
+                                fontSize: 'clamp(2rem, 6vw, 3.5rem)', 
+                                letterSpacing: '4px', 
+                                fontWeight: '300', 
+                                fontFamily: 'var(--font-heading)',
                                 textAlign: 'center',
                                 width: '100%'
                             }}>
-                                متجر السعيدة
+                                متجر <span style={{ color: 'var(--primary)', fontWeight: '600' }}>السعيدة</span>
                             </h2>
                         </motion.div>
 
@@ -119,12 +146,12 @@ export default function Hero() {
                                 color: 'var(--primary)'
                             }}
                         >
-                            <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '2px' }}>اسحب للأسفل</span>
+                            <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '2px', fontWeight: '500' }}>استكشف الآن</span>
                             <div style={{
-                                width: '26px',
-                                height: '45px',
+                                width: '24px',
+                                height: '40px',
                                 border: '2px solid var(--primary)',
-                                borderRadius: '15px',
+                                borderRadius: '12px',
                                 position: 'relative'
                             }}>
                                 <div style={{
@@ -133,10 +160,10 @@ export default function Hero() {
                                     background: 'var(--primary)',
                                     borderRadius: '2px',
                                     position: 'absolute',
-                                    top: '8px',
+                                    top: '6px',
                                     left: '50%',
                                     transform: 'translateX(-50%)',
-                                    animation: 'scrollAnim 2s infinite'
+                                    animation: 'scrollAnim 2s infinite ease-in-out'
                                 }} />
                             </div>
                         </motion.div>
@@ -157,136 +184,338 @@ export default function Hero() {
                             left: 0,
                             width: '100%',
                             height: '100%',
-                            zIndex: 0
+                            zIndex: 0,
+                            overflow: 'hidden'
                         }}
                     >
-                        {/* Background images for slider */}
-                        {slides.map((slide, index) => (
-                            <div key={slide.id} style={{
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
+                        <motion.div
+                            drag="x"
+                            dragConstraints={{ left: 0, right: 0 }}
+                            dragElastic={1}
+                            onDragEnd={(e, { offset, velocity }) => {
+                                const swipeDistance = offset.x;
+                                if (swipeDistance > 50 || velocity.x > 500) {
+                                    paginate(1);
+                                } else if (swipeDistance < -50 || velocity.x < -500) {
+                                    paginate(-1);
+                                }
+                            }}
+                            animate={{ x: slides.length > 1 ? `${currentSlide * 100}%` : '0%' }}
+                            transition={isJump ? { duration: 0 } : { type: 'spring', stiffness: 300, damping: 30 }}
+                            onAnimationComplete={() => {
+                                if (slides.length <= 1) return;
+                                if (currentSlide >= extendedSlides.length - 1) {
+                                    setIsJump(true);
+                                    setCurrentSlide(1);
+                                } else if (currentSlide <= 0) {
+                                    setIsJump(true);
+                                    setCurrentSlide(extendedSlides.length - 2);
+                                } else if (isJump) {
+                                    setIsJump(false);
+                                }
+                            }}
+                            style={{
+                                display: 'flex',
                                 width: '100%',
                                 height: '100%',
-                                opacity: currentSlide === index ? 1 : 0,
-                                transition: 'opacity 1.5s ease-in-out'
-                            }}>
-                                <div style={{
-                                    position: 'absolute',
-                                    top: 0,
-                                    left: 0,
+                                cursor: 'grab',
+                                direction: 'rtl'
+                            }}
+                        >
+                            {extendedSlides.map((slide, index) => (
+                                <div key={`${slide.id}-${index}`} style={{
+                                    flex: '0 0 100%',
                                     width: '100%',
                                     height: '100%',
-                                    backgroundImage: `url(${slide.image_url || slide.image})`,
-                                    backgroundSize: 'cover',
-                                    backgroundPosition: 'center',
-                                    filter: 'brightness(0.6)'
-                                }} />
-                                <div style={{
-                                    position: 'absolute',
-                                    top: 0,
-                                    left: 0,
-                                    width: '100%',
-                                    height: '100%',
-                                    background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent 60%)',
-                                }} />
-                            </div>
-                        ))}
+                                    position: 'relative',
+                                    direction: 'rtl'
+                                }}>
+                                    {/* Background */}
+                                    <div style={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        left: 0,
+                                        width: '100%',
+                                        height: '100%'
+                                    }}>
+                                        <div 
+                                            style={{
+                                                position: 'absolute',
+                                                top: 0,
+                                                left: 0,
+                                                width: '100%',
+                                                height: '100%',
+                                                backgroundImage: `url(${slide.image_url || slide.image})`,
+                                                backgroundSize: 'cover',
+                                                backgroundPosition: 'center',
+                                            }} 
+                                        />
+                                        {/* Premium Multi-layer Overlay */}
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            left: 0,
+                                            width: '100%',
+                                            height: '100%',
+                                            background: 'linear-gradient(to right, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 50%, rgba(0,0,0,0.85) 100%)',
+                                        }} />
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            left: 0,
+                                            width: '100%',
+                                            height: '100%',
+                                            background: 'linear-gradient(to top, #050505 0%, transparent 40%, rgba(0,0,0,0.3) 100%)',
+                                        }} />
+                                    </div>
 
-                        <div className="container" style={{
-                            position: 'relative',
-                            zIndex: 10,
-                            textAlign: 'center',
-                            color: '#fff',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center', // Center the whole group
-                            height: '100%',
-                            gap: '20px'
-                        }}>
-                            {/* Text Area - Reserved Space to prevent button jump */}
-                            <div style={{ minHeight: '320px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                {slides.map((slide, index) => (
-                                    <motion.div 
-                                        key={slide.id} 
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ 
-                                            opacity: currentSlide === index ? 1 : 0,
-                                            y: currentSlide === index ? 0 : 20
-                                        }}
-                                        transition={{ duration: 0.8 }}
+                                    {/* Content inside the slide */}
+                                    <div className="container" style={{
+                                        position: 'relative',
+                                        zIndex: 10,
+                                        color: '#fff',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        justifyContent: 'center',
+                                        height: '100%',
+                                        padding: '0 20px',
+                                        maxWidth: '1200px',
+                                        margin: '0 auto',
+                                        paddingBottom: '80px'
+                                    }}>
+                                        {(() => {
+                                            const realIndex = slides.length > 1 
+                                                ? (index === 0 ? slides.length - 1 : index === slides.length + 1 ? 0 : index - 1)
+                                                : index;
+                                            const isActiveText = imageIndex === realIndex;
+                                            
+                                            return (
+                                                <motion.div 
+                                                    initial={{ opacity: 0, y: 40, scale: 0.95 }}
+                                                    animate={{ 
+                                                        opacity: isActiveText ? 1 : 0,
+                                                        y: isActiveText ? 0 : 40,
+                                                        scale: isActiveText ? 1 : 0.95,
+                                                    }}
+                                                    transition={isJump ? { duration: 0 } : { 
+                                                        duration: 0.8, 
+                                                        ease: [0.16, 1, 0.3, 1],
+                                                        delay: isActiveText ? 0.2 : 0 
+                                                    }}
+                                                    style={{
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        textAlign: 'center',
+                                                        width: '100%'
+                                                    }}
+                                                >
+                                            <div style={{
+                                                padding: 'clamp(20px, 5vw, 40px) clamp(10px, 4vw, 30px)',
+                                                maxWidth: '800px',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                alignItems: 'center',
+                                            }}>
+                                                <h1 style={{
+                                                    fontSize: 'clamp(2.5rem, 6vw, 5rem)',
+                                                    fontWeight: '700',
+                                                    marginBottom: '20px',
+                                                    fontFamily: 'var(--font-heading)',
+                                                    lineHeight: '1.4',
+                                                    padding: '10px 0',
+                                                    letterSpacing: '0px',
+                                                    textShadow: '0 4px 20px rgba(0,0,0,0.5)',
+                                                    background: 'linear-gradient(to bottom, #ffffff, #d1d1d1)',
+                                                    WebkitBackgroundClip: 'text',
+                                                    WebkitTextFillColor: 'transparent',
+                                                }}>
+                                                    {slide.title}
+                                                </h1>
+                                                
+                                                <p style={{
+                                                    fontSize: 'clamp(1rem, 2vw, 1.25rem)',
+                                                    color: '#e0e0e0',
+                                                    maxWidth: '600px',
+                                                    margin: '0 auto 35px auto',
+                                                    fontFamily: 'var(--font-main)',
+                                                    lineHeight: '1.8',
+                                                    fontWeight: '300'
+                                                }}>
+                                                    {slide.description || 'مجموعة حصرية تجمع بين أصالة الماضي وتقنيات المستقبل، صُممت خصيصاً لترتقي بأسلوب حياتك.'}
+                                                </p>
+
+                                                <motion.button
+                                                    whileHover={{ scale: 1.05, boxShadow: '0 0 25px rgba(212, 175, 55, 0.4)' }}
+                                                    whileTap={{ scale: 0.98 }}
+                                                    onClick={() => document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' })}
+                                                    style={{
+                                                        background: 'linear-gradient(135deg, var(--primary) 0%, #b8860b 100%)',
+                                                        color: '#000',
+                                                        border: 'none',
+                                                        padding: '16px 40px',
+                                                        fontSize: '1.1rem',
+                                                        fontWeight: 'bold',
+                                                        letterSpacing: '1px',
+                                                        borderRadius: '30px',
+                                                        fontFamily: 'var(--font-main)',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '10px',
+                                                        boxShadow: '0 10px 20px rgba(0,0,0,0.3)',
+                                                    }}
+                                                >
+                                                    <ShoppingBag size={20} />
+                                                    تسوق التشكيلة
+                                                </motion.button>
+                                            </div>
+                                        </motion.div>
+                                        );
+                                        })()}
+                                    </div>
+                                </div>
+                            ))}
+                        </motion.div>
+
+                            {/* Left/Right Navigation Arrows */}
+                            {slides.length > 1 && (
+                                <>
+                                    <button 
+                                        onClick={handleNext} // For Arabic (RTL), Next is usually Left Arrow, but let's map visually
+                                        className="hero-nav-btn"
                                         style={{
-                                            position: currentSlide === index ? 'relative' : 'absolute',
-                                            display: currentSlide === index ? 'block' : 'none',
-                                            marginBottom: '10px'
+                                            position: 'absolute',
+                                            left: '20px',
+                                            top: '50%',
+                                            transform: 'translateY(-50%)',
+                                            background: 'rgba(255,255,255,0.1)',
+                                            border: '1px solid rgba(255,255,255,0.2)',
+                                            color: '#fff',
+                                            width: '50px',
+                                            height: '50px',
+                                            borderRadius: '50%',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            cursor: 'pointer',
+                                            backdropFilter: 'blur(10px)',
+                                            transition: 'all 0.3s ease',
+                                            zIndex: 20
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.background = 'var(--primary)';
+                                            e.currentTarget.style.color = '#000';
+                                            e.currentTarget.style.borderColor = 'var(--primary)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                                            e.currentTarget.style.color = '#fff';
+                                            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
                                         }}
                                     >
-                                        <h1 style={{
-                                            fontSize: '5rem',
-                                            fontWeight: '700',
-                                            marginBottom: '10px',
-                                            textShadow: '0 4px 20px rgba(0,0,0,0.5)',
-                                        }}>
-                                            {slide.title}
-                                            <br />
-                                            <span style={{
-                                                color: 'var(--primary)',
-                                                fontSize: '2.5rem',
-                                                fontWeight: '300',
-                                                display: 'block'
-                                            }}>
-                                                {slide.subtitle}
-                                            </span>
-                                        </h1>
-                                        <p style={{
-                                            fontSize: '1.1rem',
-                                            color: '#e0e0e0',
-                                            maxWidth: '600px',
-                                            margin: '0 auto'
-                                        }}>
-                                            {slide.description || 'مجموعة حصرية تجمع بين أصالة الماضي وتقنيات المستقبل'}
-                                        </p>
-                                    </motion.div>
-                                ))}
-                            </div>
+                                        <ChevronLeft size={24} />
+                                    </button>
+                                    <button 
+                                        onClick={handlePrev}
+                                        className="hero-nav-btn"
+                                        style={{
+                                            position: 'absolute',
+                                            right: '20px',
+                                            top: '50%',
+                                            transform: 'translateY(-50%)',
+                                            background: 'rgba(255,255,255,0.1)',
+                                            border: '1px solid rgba(255,255,255,0.2)',
+                                            color: '#fff',
+                                            width: '50px',
+                                            height: '50px',
+                                            borderRadius: '50%',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            cursor: 'pointer',
+                                            backdropFilter: 'blur(10px)',
+                                            transition: 'all 0.3s ease',
+                                            zIndex: 20
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.background = 'var(--primary)';
+                                            e.currentTarget.style.color = '#000';
+                                            e.currentTarget.style.borderColor = 'var(--primary)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                                            e.currentTarget.style.color = '#fff';
+                                            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
+                                        }}
+                                    >
+                                        <ChevronRight size={24} />
+                                    </button>
+                                </>
+                            )}
 
-                            {/* Permanent Shop Now Button */}
-                            <div style={{ marginTop: '0px' }}>
-                                <button
-                                    className="btn-primary"
-                                    onClick={() => document.getElementById('products').scrollIntoView({ behavior: 'smooth' })}
-                                >
-                                    تسوق الآن
-                                </button>
-                            </div>
-
-                            {/* Indicators */}
-                            <div style={{ height: '70px', display: 'flex', alignItems: 'center' }}>
-                                <div style={{
-                                    display: 'flex',
-                                    gap: '12px',
-                                    background: 'rgba(0,0,0,0.3)',
-                                    padding: '10px 20px',
-                                    borderRadius: '30px',
-                                    backdropFilter: 'blur(5px)'
+                            {/* Premium Progress Indicators */}
+                            {slides.length > 1 && (
+                                <div style={{ 
+                                    position: 'absolute',
+                                    bottom: '40px',
+                                    left: '0',
+                                    width: '100%',
+                                    display: 'flex', 
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                    zIndex: 20
                                 }}>
-                                    {slides.map((_, index) => (
-                                        <div
-                                            key={index}
-                                            onClick={() => setCurrentSlide(index)}
-                                            style={{
-                                                width: currentSlide === index ? '12px' : '8px',
-                                                height: currentSlide === index ? '12px' : '8px',
-                                                borderRadius: '50%',
-                                                background: currentSlide === index ? 'var(--primary)' : 'rgba(255,255,255,0.5)',
-                                                cursor: 'pointer'
-                                            }}
-                                        />
-                                    ))}
+                                    <div style={{
+                                        display: 'flex',
+                                        gap: '12px',
+                                        background: 'rgba(10, 10, 10, 0.6)',
+                                        padding: '12px 24px',
+                                        borderRadius: '30px',
+                                        backdropFilter: 'blur(10px)',
+                                        border: '1px solid rgba(255,255,255,0.1)'
+                                    }}>
+                                        {slides.map((_, index) => (
+                                            <div
+                                                key={index}
+                                                onClick={() => {
+                                                    const diff = index - imageIndex;
+                                                    if (diff !== 0) {
+                                                        paginate(diff);
+                                                    }
+                                                }}
+                                                style={{
+                                                    width: imageIndex === index ? '30px' : '10px',
+                                                    height: '6px',
+                                                    borderRadius: '10px',
+                                                    background: imageIndex === index ? 'var(--primary)' : 'rgba(255,255,255,0.3)',
+                                                    cursor: 'pointer',
+                                                    position: 'relative',
+                                                    overflow: 'hidden',
+                                                    transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
+                                                }}
+                                            >
+                                                {imageIndex === index && (
+                                                    <motion.div
+                                                        initial={{ width: '0%' }}
+                                                        animate={{ width: '100%' }}
+                                                        transition={{ duration: 3, ease: "linear" }}
+                                                        style={{
+                                                            position: 'absolute',
+                                                            top: 0,
+                                                            left: 0,
+                                                            height: '100%',
+                                                            background: '#fff',
+                                                            opacity: 0.5
+                                                        }}
+                                                    />
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        </div>
+                            )}
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -297,10 +526,11 @@ export default function Hero() {
                     50% { opacity: 1; transform: translate(-50%, 15px); }
                     100% { opacity: 0; transform: translate(-50%, 25px); }
                 }
-                @keyframes glowBg {
-                    0% { background-position: 0% 50%; }
-                    50% { background-position: 100% 50%; }
-                    100% { background-position: 0% 50%; }
+                
+                @media (max-width: 768px) {
+                    .hero-nav-btn {
+                        display: none !important;
+                    }
                 }
             `}</style>
         </div>
