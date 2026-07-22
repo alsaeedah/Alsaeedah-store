@@ -882,28 +882,30 @@ input, textarea, [contenteditable="true"] {
 
 .cinematic-aurora {
   position: absolute;
-  width: 200%;
-  height: 100%;
-  top: -50%;
-  left: -50%;
-  background: conic-gradient(from 0deg at 50% 50%, rgba(212, 175, 55, 0.12) 0deg, transparent 60deg, rgba(255, 255, 255, 0.08) 120deg, transparent 180deg, rgba(212, 175, 55, 0.15) 240deg, transparent 360deg);
+  width: 3000px;
+  height: 3000px;
+  top: 0%;
+  left: 50%;
+  margin-top: -1500px;
+  margin-left: -1500px;
+  background: conic-gradient(from 0deg at 50% 50%, rgba(212, 175, 55, 0.12) 0deg, transparent 60deg, rgba(255, 255, 255, 0.08) 120deg, transparent 180deg, rgba(212, 175, 55, 0.15) 240deg, transparent 300deg, rgba(212, 175, 55, 0.12) 360deg);
   filter: blur(80px);
   animation: rotateAurora 30s linear infinite;
   opacity: 1;
 }
 
 .cinematic-aurora.wave-2 {
-  top: 0%;
-  left: -20%;
+  top: 50%;
+  left: 80%;
   animation-direction: reverse;
   animation-duration: 40s;
-  background: conic-gradient(from 180deg at 50% 50%, rgba(212, 175, 55, 0.12) 0deg, transparent 90deg, rgba(255, 255, 255, 0.08) 180deg, transparent 360deg);
+  background: conic-gradient(from 180deg at 50% 50%, rgba(212, 175, 55, 0.12) 0deg, transparent 90deg, rgba(255, 255, 255, 0.08) 180deg, transparent 270deg, rgba(212, 175, 55, 0.12) 360deg);
 }
 
 @keyframes rotateAurora {
-  0% { transform: rotate(0deg) scale(1); }
-  50% { transform: rotate(180deg) scale(1.2); }
-  100% { transform: rotate(360deg) scale(1); }
+  0% { rotate: 0deg; scale: 1; }
+  50% { rotate: 180deg; scale: 1.2; }
+  100% { rotate: 360deg; scale: 1; }
 }
 
 .cinematic-orb {
