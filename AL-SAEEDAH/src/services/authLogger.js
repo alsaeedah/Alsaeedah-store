@@ -16,7 +16,8 @@
  *   auth_error         — Any authentication error
  */
 
-import { supabase } from '../supabase/client';
+import { db } from '../firebase/config';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 /**
  * Log an authentication event to the database.
@@ -36,21 +37,14 @@ export const logAuthEvent = async (userId, eventType, provider = null, metadata 
             platform: navigator?.platform || 'unknown',
         };
 
-        const { error } = await supabase
-            .from('auth_event_logs')
-            .insert({
-                user_id: userId || null,
-                event_type: eventType,
-                provider: provider || null,
-                metadata: enrichedMetadata,
-            });
-
-        if (error) {
-            // Silently fail — logging should never block auth operations
-            console.warn('[AuthLogger] Failed to log event:', eventType, error.message);
-        } else {
-            console.log(`[AuthLogger] ✓ Logged: ${eventType}`, { userId, provider });
-        }
+        const docRef = await addDoc(collection(db, 'auth_event_logs'), {
+            user_id: userId || null,
+            event_type: eventType,
+            provider: provider || null,
+            metadata: enrichedMetadata,
+            created_at: serverTimestamp()
+        });
+        console.log(`[AuthLogger] ✓ Logged: ${eventType}`, { userId, provider, docId: docRef.id });
     } catch (err) {
         // Silently fail — logging must never break auth flows
         console.warn('[AuthLogger] Unexpected error:', err.message);

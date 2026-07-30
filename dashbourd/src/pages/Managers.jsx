@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLoading } from '../context/LoadingContext';
-import { useAuth } from '../context/AuthContext';
-import { supabase } from '../supabase/client';
+import useAuthStore from '../store/useAuthStore';
+import { db, firebaseConfig } from '../firebase/config';
+import { collection, query, orderBy, getDocs, doc, deleteDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { initializeApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import Swal from 'sweetalert2';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -45,7 +48,7 @@ const getLastActiveText = (lastSeen) => {
 
 // ── Add Manager Modal ─────────────────────────────────────────────────────────
 const AddManagerModal = ({ onClose, onSuccess }) => {
-    const { user } = useAuth();
+    const user = useAuthStore(state => state.user);
     const [formData, setFormData] = useState({
         name: '',
         email: '',
@@ -101,15 +104,23 @@ const AddManagerModal = ({ onClose, onSuccess }) => {
 
         setIsSubmitting(true);
         try {
-            const { data, error: rpcError } = await supabase.rpc('create_manager', {
-                p_name: formData.name.trim(),
-                p_email: formData.email.trim(),
-                p_password: formData.password,
-                p_permissions: formData.permissions,
-                p_created_by: user.email
+            const secondaryApp = initializeApp(firebaseConfig, 'SecondaryManagerApp');
+            const secondaryAuth = getAuth(secondaryApp);
+            
+            const userCredential = await createUserWithEmailAndPassword(secondaryAuth, formData.email.trim(), formData.password);
+            
+            await setDoc(doc(db, 'managers', userCredential.user.uid), {
+                name: formData.name.trim(),
+                email: formData.email.trim(),
+                permissions: formData.permissions,
+                created_by: user.email,
+                is_active: true,
+                created_at: new Date().toISOString(),
+                is_online: false,
+                last_seen: null
             });
-
-            if (rpcError) throw rpcError;
+            
+            await signOut(secondaryAuth);
 
             Swal.fire({
                 icon: 'success',
@@ -356,28 +367,22 @@ const EditManagerModal = ({ manager, onClose, onSuccess }) => {
 
         setIsSubmitting(true);
         try {
-            const { error: rpcError } = await supabase.rpc('update_manager', {
-                p_id: manager.id,
-                p_name: formData.name.trim(),
-                p_email: formData.email.trim(),
-                p_password: formData.password || null,
-                p_permissions: formData.permissions,
-                p_is_active: formData.is_active
+            await updateDoc(doc(db, 'managers', manager.id), {
+                name: formData.name.trim(),
+                email: formData.email.trim(),
+                permissions: formData.permissions,
+                is_active: formData.is_active
             });
 
-            if (rpcError) throw rpcError;
-
-            supabase.channel('global-manager-updates').send({
-                type: 'broadcast',
-                event: 'manager_updated',
-                payload: {
-                    id: manager.id,
-                    name: formData.name.trim(),
-                    email: formData.email.trim(),
-                    permissions: formData.permissions,
-                    is_active: formData.is_active
-                }
-            });
+            if (formData.password) {
+                Swal.fire({
+                    icon: 'info',
+                    title: 'تنبيه',
+                    text: 'تغيير كلمة المرور سيتاح لاحقاً عبر Cloud Functions. تم تحديث باقي البيانات بنجاح.',
+                    background: '#141414',
+                    color: '#fff'
+                });
+            }
 
             Swal.fire({
                 icon: 'success',
@@ -793,7 +798,7 @@ const ManagerCard = ({ manager, index, isMobile, onEdit, onDelete, onToggleActiv
 // ── Main Managers Component ─────────────────────────────────────────────────
 const Managers = () => {
     const { startLoading, stopLoading } = useLoading();
-    const { user } = useAuth();
+    const user = useAuthStore(state => state.user);
     const [managersList, setManagersList] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
@@ -810,8 +815,8 @@ const Managers = () => {
     const fetchManagers = async (isInitial = false) => {
         if (isInitial) { startLoading(); setLoading(true); }
         try {
-            const { data, error } = await supabase.rpc('get_managers');
-            if (error) throw error;
+            const snap = await getDocs(query(collection(db, 'managers'), orderBy('created_at', 'desc')));
+            const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setManagersList(data || []);
         } catch (error) {
             console.error('Failed to load managers:', error);
@@ -833,20 +838,11 @@ const Managers = () => {
 
     // Subscribe to database changes for managers table
     useEffect(() => {
-        const managersChannel = supabase
-            .channel('managers-db-changes')
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'managers' },
-                () => {
-                    fetchManagers(false); // Update list silently
-                }
-            )
-            .subscribe();
+        const unsubscribe = onSnapshot(collection(db, 'managers'), (snapshot) => {
+            fetchManagers(false); // Update list silently
+        });
 
-        return () => {
-            supabase.removeChannel(managersChannel);
-        };
+        return () => unsubscribe();
     }, []);
 
     const handleDeleteManager = async (managerId, managerName) => {
@@ -864,15 +860,8 @@ const Managers = () => {
         if (result.isConfirmed) {
             startLoading();
             try {
-                const { error } = await supabase.rpc('delete_manager', { p_id: managerId });
-                if (error) throw error;
+                await deleteDoc(doc(db, 'managers', managerId));
                 setManagersList(prev => prev.filter(m => m.id !== managerId));
-                
-                supabase.channel('global-manager-updates').send({
-                    type: 'broadcast',
-                    event: 'manager_deleted',
-                    payload: { id: managerId }
-                });
                 
                 Swal.fire({ icon: 'success', title: 'تم الحذف', text: 'تم حذف حساب المدير بنجاح.', background: '#141414', color: '#fff' });
             } catch (err) {
@@ -888,32 +877,13 @@ const Managers = () => {
         const nextStatus = mng.is_active === false;
         startLoading();
         try {
-            const { error } = await supabase.rpc('update_manager', {
-                p_id: mng.id,
-                p_name: mng.name,
-                p_email: mng.email,
-                p_password: null,
-                p_permissions: mng.permissions,
-                p_is_active: nextStatus
+            await updateDoc(doc(db, 'managers', mng.id), {
+                is_active: nextStatus
             });
-
-            if (error) throw error;
 
             setManagersList(prev => 
                 prev.map(m => m.id === mng.id ? { ...m, is_active: nextStatus } : m)
             );
-
-            supabase.channel('global-manager-updates').send({
-                type: 'broadcast',
-                event: 'manager_updated',
-                payload: {
-                    id: mng.id,
-                    name: mng.name,
-                    email: mng.email,
-                    permissions: mng.permissions,
-                    is_active: nextStatus
-                }
-            });
 
             Swal.fire({
                 icon: 'success',

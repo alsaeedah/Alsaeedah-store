@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ==========================================
+    // Helper Functions (Zero DB Reads)
+    // ==========================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && request.auth.token.role == 'super_admin';
+    }
+
+    function isManager() {
+      return isAuthenticated() && (request.auth.token.role == 'manager' || isSuperAdmin());
+    }
+
+    function hasPermission(permissionName) {
+      return isSuperAdmin() || (
+        isManager() && 
+        request.auth.token.permissions != null && 
+        request.auth.token.permissions[permissionName] == true
+      );
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ==========================================
+    // Collections Rules
+    // ==========================================
+
+    // 1. Products
+    match /products/{productId} {
+      allow read: if true;
+      allow create, update, delete: if hasPermission('products');
+    }
+
+    // 2. Orders
+    match /orders/{orderId} {
+      allow read: if isOwner(resource.data.user_id) || hasPermission('orders');
+      allow create: if isAuthenticated() && (request.resource.data.user_id == request.auth.uid || hasPermission('orders'));
+      allow update: if hasPermission('orders');
+      allow delete: if isSuperAdmin();
+    }
+
+    // 3. Users (Customers)
+    match /users/{userId} {
+      allow read: if isOwner(userId) || hasPermission('users');
+      allow create, update: if isOwner(userId) || hasPermission('users');
+      allow delete: if isSuperAdmin();
+    }
+
+    // 4. Managers Directory
+    match /managers/{managerId} {
+      allow read: if isOwner(managerId) || isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    // 5. Store Settings & Hero
+    match /hero/{document=**} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+    
+    match /settings/{document=**} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    // 6. Favorites
+    match /favorites/{favoriteId} {
+      allow read, delete: if isOwner(resource.data.user_id);
+      allow create, update: if isOwner(request.resource.data.user_id);
+    }
+
+    // 7. Push Tokens
+    match /manager_push_tokens/{tokenId} {
+      allow read, write: if isManager();
+    }
+
+    // Default Fallback
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

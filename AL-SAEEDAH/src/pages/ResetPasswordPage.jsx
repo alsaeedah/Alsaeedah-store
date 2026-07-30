@@ -1,65 +1,60 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Lock, CheckCircle, AlertCircle } from 'lucide-react';
-import { supabase } from '../supabase/client';
+import { auth } from '../firebase/config';
+import { verifyPasswordResetCode, confirmPasswordReset } from 'firebase/auth';
 import { logAuthEvent, AUTH_EVENTS } from '../services/authLogger';
 
 /**
  * ResetPasswordPage
  * 
- * Handles the password reset redirect from Supabase.
- * When a user clicks the reset link in their email, Supabase redirects them
- * to /reset-password with the session tokens in the URL hash fragment.
- * This page extracts those tokens, establishes the session, and lets the
+ * Handles the password reset redirect from Firebase.
+ * When a user clicks the reset link in their email, Firebase redirects them
+ * to /reset-password with the oobCode in the URL query string.
+ * This page extracts that code, verifies it, and lets the
  * user set a new password.
  * 
  * Route: /reset-password
  */
 export default function ResetPasswordPage() {
     const navigate = useNavigate();
+    const location = useLocation();
 
     const [status, setStatus] = useState('loading'); // 'loading' | 'ready' | 'success' | 'error'
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
-    const [userId, setUserId] = useState(null);
+    const [oobCode, setOobCode] = useState(null);
+    const [resetEmail, setResetEmail] = useState('');
 
-    // ── On mount: parse Supabase tokens from URL hash and establish session ──
+    // ── On mount: parse Firebase oobCode from URL and verify ──
     useEffect(() => {
         const handlePasswordReset = async () => {
-            const hash = window.location.hash.substring(1);
-            const params = new URLSearchParams(hash);
+            const params = new URLSearchParams(location.search);
+            const code = params.get('oobCode');
 
-            const accessToken  = params.get('access_token');
-            const refreshToken = params.get('refresh_token');
-            const type         = params.get('type'); // 'recovery' for password reset
-
-            // Validate this is a password-reset link
-            if (!accessToken || type !== 'recovery') {
+            if (!code) {
                 setStatus('error');
-                setError('رابط إعادة تعيين كلمة المرور غير صالح أو منتهي الصلاحية. يرجى طلب رابط جديد.');
+                setError('رابط إعادة تعيين كلمة المرور غير صالح أو مفقود. يرجى طلب رابط جديد.');
                 return;
             }
 
-            // Set the session so the user is authenticated enough to change password
-            const { data, error: sessionError } = await supabase.auth.setSession({
-                access_token:  accessToken,
-                refresh_token: refreshToken,
-            });
-
-            if (sessionError || !data?.user) {
+            try {
+                // Verify the code and get the user's email
+                const email = await verifyPasswordResetCode(auth, code);
+                setResetEmail(email);
+                setOobCode(code);
+                setStatus('ready');
+            } catch (err) {
+                console.error('[ResetPassword] Verification Error:', err);
                 setStatus('error');
-                setError('انتهت صلاحية الرابط. يرجى طلب رابط جديد من صفحة تسجيل الدخول.');
-                return;
+                setError('انتهت صلاحية الرابط أو أنه غير صالح. يرجى طلب رابط جديد من صفحة تسجيل الدخول.');
             }
-
-            setUserId(data.user.id);
-            setStatus('ready');
         };
 
         handlePasswordReset();
-    }, []);
+    }, [location.search]);
 
     // ── Submit new password ──────────────────────────────────────────────────
     const handleSubmit = async (e) => {
@@ -78,11 +73,10 @@ export default function ResetPasswordPage() {
 
         setIsSubmitting(true);
         try {
-            const { error: updateError } = await supabase.auth.updateUser({ password });
-            if (updateError) throw updateError;
+            await confirmPasswordReset(auth, oobCode, password);
 
             // Log the successful reset
-            await logAuthEvent(userId, AUTH_EVENTS.PASSWORD_RESET_COMPLETE, 'email', {});
+            await logAuthEvent('unknown_id', AUTH_EVENTS.PASSWORD_RESET_COMPLETE, 'email', { email: resetEmail });
 
             setStatus('success');
 
@@ -91,7 +85,7 @@ export default function ResetPasswordPage() {
 
         } catch (err) {
             console.error('[ResetPassword] Error:', err);
-            await logAuthEvent(userId, AUTH_EVENTS.AUTH_ERROR, 'email', {
+            await logAuthEvent('unknown_id', AUTH_EVENTS.AUTH_ERROR, 'email', {
                 error: err.message,
                 action: 'password_reset_complete'
             });

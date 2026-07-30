@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useLoading } from '../context/LoadingContext';
-import { supabase } from '../supabase/client';
+import { db } from '../firebase/config';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { deleteFromCloudinary } from '../utils/cloudinary';
 import Swal from 'sweetalert2';
 import ProductForm from '../components/ProductForm';
@@ -17,16 +18,11 @@ const EditProduct = () => {
     useEffect(() => {
         const fetchProduct = async () => {
             try {
-                const { data, error } = await supabase
-                    .from('products')
-                    .select('*')
-                    .eq('id', id)
-                    .single();
+                const docRef = doc(db, 'products', id);
+                const docSnap = await getDoc(docRef);
 
-                if (error) throw error;
-
-                if (data) {
-                    setInitialData(data);
+                if (docSnap.exists()) {
+                    setInitialData({ id: docSnap.id, ...docSnap.data() });
                 } else {
                     Swal.fire({ icon: 'error', title: 'خطأ', text: 'المنتج غير موجود', background: '#141414', color: '#fff' });
                     navigate('/products');
@@ -91,26 +87,22 @@ const EditProduct = () => {
             }
             // ─────────────────────────────────────────────────────────────────────
 
-            const { error } = await supabase
-                .from('products')
-                .update({
-                    displayId: Number(formData.displayId),
-                    name: formData.name,
-                    price: formData.price,
-                    old_price: formData.old_price || null,
-                    category: formData.category,
-                    style: formData.style,
-                    description: formData.description,
-                    video: formData.video,
-                    imageUrl: formData.imageUrl,
-                    images: formData.images || [],
-                    colors: formData.colors || [],
-                    materials: formData.materials || [],
-                    variants: formData.variants || []
-                })
-                .eq('id', id);
-
-            if (error) throw error;
+            await updateDoc(doc(db, 'products', id), {
+                displayId: Number(formData.displayId),
+                name: formData.name,
+                price: formData.price,
+                old_price: formData.old_price || null,
+                category: formData.category,
+                style: formData.style,
+                description: formData.description,
+                video: formData.video,
+                imageUrl: formData.imageUrl,
+                images: formData.images || [],
+                colors: formData.colors || [],
+                materials: formData.materials || [],
+                variants: formData.variants || [],
+                updated_at: new Date().toISOString()
+            });
 
             await Swal.fire({
                 icon: 'success',

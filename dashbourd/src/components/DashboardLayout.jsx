@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { supabase } from '../supabase/client';
+import useAuthStore from '../store/useAuthStore';
+import { db } from '../firebase/config';
+import { collection, query, where, getCountFromServer, onSnapshot } from 'firebase/firestore';
 import Swal from 'sweetalert2';
 import { listenForForegroundMessages } from '../utils/pushManager';
 import {
@@ -33,7 +34,8 @@ const playNotificationSound = () => {
 const DashboardLayout = ({ children }) => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { logout, user } = useAuth();
+    const user = useAuthStore(state => state.user);
+    const logout = useAuthStore(state => state.logout);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [pendingCount, setPendingCount] = useState(0);
     const notifiedOrdersRef = useRef(new Set());
@@ -82,13 +84,12 @@ const DashboardLayout = ({ children }) => {
     }, [user, navigate]);
 
     const fetchPendingCount = async () => {
-        const { count, error } = await supabase
-            .from('orders')
-            .select('*', { count: 'exact', head: true })
-            .eq('status', 'pending');
-
-        if (!error) {
-            setPendingCount(count || 0);
+        try {
+            const q = query(collection(db, 'orders'), where('status', '==', 'pending'));
+            const snapshot = await getCountFromServer(q);
+            setPendingCount(snapshot.data().count);
+        } catch (error) {
+            console.error('Error fetching pending count:', error);
         }
     };
 
@@ -98,27 +99,23 @@ const DashboardLayout = ({ children }) => {
 
         fetchPendingCount();
 
-        const channel = supabase
-            .channel('global-orders')
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'orders' },
-                (payload) => {
-                    fetchPendingCount();
-                    if (payload.eventType === 'INSERT') {
-                        // Silently update the pending count
-                        // Trigger real-time notification as fallback to FCM
-                        const newOrder = payload.new;
-                        if (newOrder && newOrder.id) {
-                            handleNewOrderNotification(newOrder.id, null, 'طلب جديد!', 'تم استلام طلب جديد');
-                        }
+        const q = query(collection(db, 'orders'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            fetchPendingCount();
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === 'added') {
+                    const newOrder = { id: change.doc.id, ...change.doc.data() };
+                    // Handle new order notification (only if it's recently created, though full real-time syncing might re-trigger. 
+                    // In a production app you might check if created_at is recent)
+                    if (newOrder.status === 'pending') {
+                        handleNewOrderNotification(newOrder.id, newOrder.order_number, 'طلب جديد!', 'تم استلام طلب جديد');
                     }
                 }
-            )
-            .subscribe();
+            });
+        });
 
         return () => {
-            supabase.removeChannel(channel);
+            unsubscribe();
         };
     }, [user]);
 

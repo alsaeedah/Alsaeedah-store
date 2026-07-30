@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { useLoading } from '../context/LoadingContext';
-import { supabase } from '../supabase/client';
+import { db } from '../firebase/config';
+import { collection, query, where, getDocs, onSnapshot, updateDoc, deleteDoc, doc, orderBy, limit, startAfter } from 'firebase/firestore';
 import Swal from 'sweetalert2';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Download, Trash2, CheckCircle, XCircle, RotateCcw, Loader2, ShoppingCart, TrendingUp, Clock, Users as UsersIcon, Box, ShoppingBag } from 'lucide-react';
@@ -64,55 +65,69 @@ const Orders = () => {
         if (node) observer.current.observe(node);
     }, [loading, loadingMore, hasMore]);
 
+    const lastDocRef = useRef(null);
+
     const fetchOrders = async (pageNum, isInitial = false) => {
         if (isInitial) {
             startLoading();
             setLoading(true);
+            lastDocRef.current = null;
         } else {
             setLoadingMore(true);
         }
 
         try {
-            let query = supabase.from('orders');
+            let q = collection(db, 'orders');
+            let constraints = [];
 
             if (searchQuery) {
-                const isUUID = searchQuery.length === 36 && /^[0-9a-f-]+$/i.test(searchQuery);
-                const isNumericSearch = /^\d+$/.test(searchQuery.replace(/^ord/i, ''));
-
-                if (isUUID) {
-                    query = query.select('*, users(name, phone)', { count: 'exact' })
-                        .eq('id', searchQuery);
-                } else if (isNumericSearch) {
+                const isNumericSearch = /^\\d+$/.test(searchQuery.replace(/^ord/i, ''));
+                if (isNumericSearch) {
                     const orderNum = parseInt(searchQuery.replace(/^ord/i, ''));
-                    query = query.select('*, users(name, phone)', { count: 'exact' })
-                        .eq('order_number', orderNum);
-                } else {
-                    query = query.select('*, users(name, phone)', { count: 'exact' })
-                        .or(`customer_name.ilike.%${searchQuery}%,customer_phone.ilike.%${searchQuery}%`);
+                    constraints.push(where('order_number', '==', orderNum));
                 }
-            } else {
-                query = query.select('*, users(name, phone)', { count: 'exact' });
             }
 
             if (statusFilter !== 'all') {
-                query = query.eq('status', statusFilter);
+                constraints.push(where('status', '==', statusFilter));
             }
 
-            query = query.order('created_at', { ascending: false });
+            constraints.push(orderBy('created_at', 'desc'));
 
-            const from = pageNum * 6;
-            const to = from + 5;
-            const { data, error, count } = await query.range(from, to);
+            if (!isInitial && lastDocRef.current) {
+                constraints.push(startAfter(lastDocRef.current));
+            }
 
-            if (error) throw error;
+            constraints.push(limit(6));
+
+            const finalQuery = query(q, ...constraints);
+            const snapshot = await getDocs(finalQuery);
+
+            let newOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            // Client side filtering for text search if not numeric
+            if (searchQuery && !/^\\d+$/.test(searchQuery.replace(/^ord/i, ''))) {
+                newOrders = newOrders.filter(o => 
+                    (o.customer_name && o.customer_name.includes(searchQuery)) ||
+                    (o.customer_phone && o.customer_phone.includes(searchQuery))
+                );
+            }
+
+            if (snapshot.docs.length > 0) {
+                lastDocRef.current = snapshot.docs[snapshot.docs.length - 1];
+            }
 
             if (isInitial) {
-                setOrders(data || []);
+                setOrders(newOrders);
             } else {
-                setOrders(prev => [...prev, ...data]);
+                setOrders(prev => {
+                    const existingIds = new Set(prev.map(o => o.id));
+                    const uniqueNew = newOrders.filter(o => !existingIds.has(o.id));
+                    return [...prev, ...uniqueNew];
+                });
             }
 
-            setHasMore(count > to + 1);
+            setHasMore(snapshot.docs.length === 6);
         } catch (error) {
             console.error("Critical Error fetching orders:", error);
             Swal.fire({
@@ -144,48 +159,31 @@ const Orders = () => {
     }, [page]);
 
     useEffect(() => {
-        const channel = supabase
-            .channel('orders_realtime')
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'orders' },
-                async (payload) => {
-                    if (payload.eventType === 'INSERT') {
-                        // Silently update the orders list, notification is handled by FCM
-                        const { data: newOrder, error } = await supabase
-                            .from('orders')
-                            .select('*, users(name, phone)')
-                            .eq('id', payload.new.id)
-                            .single();
-
-                        if (!error && newOrder) {
-                            setOrders(prev => [newOrder, ...prev]);
-                        } else {
-                            setPage(0);
-                            fetchOrders(0, true);
+        const q = query(collection(db, 'orders'), orderBy('created_at', 'desc'), limit(50));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === 'added') {
+                    const newOrder = { id: change.doc.id, ...change.doc.data() };
+                    setOrders(prev => {
+                        if (!prev.find(o => o.id === newOrder.id)) {
+                            return [newOrder, ...prev].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
                         }
-                    } else if (payload.eventType === 'UPDATE') {
-                        setOrders(prev => prev.map(o => o.id === payload.new.id ? { ...o, ...payload.new } : o));
-                    } else if (payload.eventType === 'DELETE') {
-                        setOrders(prev => prev.filter(o => o.id !== payload.old.id));
-                    }
+                        return prev;
+                    });
+                } else if (change.type === 'modified') {
+                    setOrders(prev => prev.map(o => o.id === change.doc.id ? { ...o, ...change.doc.data() } : o));
+                } else if (change.type === 'removed') {
+                    setOrders(prev => prev.filter(o => o.id !== change.doc.id));
                 }
-            )
-            .subscribe();
+            });
+        });
 
-        return () => {
-            supabase.removeChannel(channel);
-        };
+        return () => unsubscribe();
     }, []);
 
     const handleUpdateStatus = async (orderId, newStatus) => {
         try {
-            const { error } = await supabase
-                .from('orders')
-                .update({ status: newStatus })
-                .eq('id', orderId);
-
-            if (error) throw error;
+            await updateDoc(doc(db, 'orders', orderId), { status: newStatus, updated_at: new Date().toISOString() });
 
             if (statusFilter !== 'all' && statusFilter !== newStatus) {
                 setOrders(prev => prev.filter(o => o.id !== orderId));
@@ -233,12 +231,7 @@ const Orders = () => {
         if (result.isConfirmed) {
             startLoading();
             try {
-                const { error } = await supabase
-                    .from('orders')
-                    .delete()
-                    .eq('id', orderId);
-
-                if (error) throw error;
+                await deleteDoc(doc(db, 'orders', orderId));
 
                 setOrders(prev => prev.filter(order => order.id !== orderId));
                 Swal.fire({

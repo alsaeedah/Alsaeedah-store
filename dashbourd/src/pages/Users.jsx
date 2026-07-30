@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLoading } from '../context/LoadingContext';
-import { supabase } from '../supabase/client';
+import { db, firebaseConfig } from '../firebase/config';
+import { collection, query, orderBy, getDocs, doc, deleteDoc, setDoc, onSnapshot, getCountFromServer } from 'firebase/firestore';
+import { initializeApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import Swal from 'sweetalert2';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -40,14 +43,24 @@ const AddUserModal = ({ onClose, onSuccess }) => {
 
         setIsSubmitting(true);
         try {
-            const { data, error: rpcError } = await supabase.rpc('create_user_by_admin', {
-                p_name: formData.name.trim(),
-                p_phone: formData.phone.trim(),
-                p_password: formData.password,
-                p_store_owner_info: formData.store_owner_info.trim() || null
+            const secondaryApp = initializeApp(firebaseConfig, 'SecondaryUserApp');
+            const secondaryAuth = getAuth(secondaryApp);
+            const dummyEmail = `${formData.phone.trim()}@alsaeedah.store`;
+            
+            const userCredential = await createUserWithEmailAndPassword(secondaryAuth, dummyEmail, formData.password);
+            
+            await setDoc(doc(db, 'users', userCredential.user.uid), {
+                name: formData.name.trim(),
+                phone: formData.phone.trim(),
+                store_owner_info: formData.store_owner_info.trim() || null,
+                is_active: true,
+                created_at: new Date().toISOString(),
+                is_online: false,
+                last_seen: null,
+                profile_image_url: null
             });
-
-            if (rpcError) throw rpcError;
+            
+            await signOut(secondaryAuth);
 
             onSuccess();
             onClose();
@@ -424,31 +437,44 @@ const Users = () => {
         if (node) observer.current.observe(node);
     }, [loading, loadingMore, hasMore]);
 
+    const allUsersRef = useRef([]);
+
+    const fetchStats = async () => {
+        try {
+            const snap = await getCountFromServer(collection(db, 'users'));
+            setTotalCount(snap.data().count);
+        } catch (e) { console.error(e); }
+    };
+
     const fetchUsers = async (pageNum, isInitial = false) => {
         if (isInitial) { startLoading(); setLoading(true); }
         else setLoadingMore(true);
 
         try {
-            let query = supabase
-                .from('users')
-                .select('id, name, phone, profile_image_url, store_owner_info, is_active, created_at, is_online, last_seen', { count: 'exact' });
-
-            if (searchQuery) {
-                query = query.or(`name.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%,store_owner_info.ilike.%${searchQuery}%`);
+            if (isInitial) {
+                const snap = await getDocs(query(collection(db, 'users'), orderBy('created_at', 'desc')));
+                allUsersRef.current = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                fetchStats();
             }
 
-            query = query.order('created_at', { ascending: false });
+            let filtered = allUsersRef.current;
+            if (searchQuery) {
+                const lowerQ = searchQuery.toLowerCase();
+                filtered = filtered.filter(u => 
+                    (u.name && u.name.toLowerCase().includes(lowerQ)) ||
+                    (u.phone && String(u.phone).includes(lowerQ)) ||
+                    (u.store_owner_info && u.store_owner_info.toLowerCase().includes(lowerQ))
+                );
+            }
 
             const from = pageNum * 8;
-            const to = from + 7;
-            const { data, error, count } = await query.range(from, to);
+            const to = from + 8;
+            const slice = filtered.slice(from, to);
 
-            if (error) throw error;
+            if (isInitial) { setUsers(slice); }
+            else { setUsers(prev => [...prev, ...slice]); }
 
-            if (isInitial) { setUsers(data || []); setTotalCount(count || 0); }
-            else setUsers(prev => [...prev, ...(data || [])]);
-
-            setHasMore(count > to + 1);
+            setHasMore(filtered.length > to);
         } catch (error) {
             console.error(error);
             Swal.fire({ icon: 'error', title: 'خطأ', text: 'فشل تحميل بيانات المستخدمين', background: '#141414', color: '#fff' });
@@ -461,24 +487,17 @@ const Users = () => {
     useEffect(() => { setPage(0); fetchUsers(0, true); }, [searchQuery]);
     useEffect(() => { if (page > 0) fetchUsers(page); }, [page]);
 
-    // Realtime changes listener for online statuses, name/avatar/activation updates
     useEffect(() => {
-        const usersChannel = supabase
-            .channel('users-realtime-status')
-            .on(
-                'postgres_changes',
-                { event: 'UPDATE', schema: 'public', table: 'users' },
-                (payload) => {
-                    setUsers(prev => 
-                        prev.map(u => u.id === payload.new.id ? { ...u, ...payload.new } : u)
-                    );
+        const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === 'modified') {
+                    const data = { id: change.doc.id, ...change.doc.data() };
+                    setUsers(prev => prev.map(u => u.id === data.id ? { ...u, ...data } : u));
+                    allUsersRef.current = allUsersRef.current.map(u => u.id === data.id ? { ...u, ...data } : u);
                 }
-            )
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(usersChannel);
-        };
+            });
+        });
+        return () => unsubscribe();
     }, []);
 
     const handleDeleteUser = async (userId, userName) => {
@@ -496,11 +515,11 @@ const Users = () => {
         if (result.isConfirmed) {
             startLoading();
             try {
-                const { error } = await supabase.rpc('delete_user_by_admin', { target_user_id: userId });
-                if (error) throw error;
+                await deleteDoc(doc(db, 'users', userId));
                 setUsers(prev => prev.filter(u => u.id !== userId));
+                allUsersRef.current = allUsersRef.current.filter(u => u.id !== userId);
                 setTotalCount(prev => prev - 1);
-                Swal.fire({ icon: 'success', title: 'تم الحذف', text: 'تم حذف المستخدم بنجاح.', background: '#141414', color: '#fff' });
+                Swal.fire({ icon: 'success', title: 'تم الحذف', text: 'تم حذف المستخدم بنجاح. سيتم حذف الحساب بالكامل عند تفعيل Cloud Functions.', background: '#141414', color: '#fff' });
             } catch (error) {
                 console.error('Delete Error:', error);
                 Swal.fire({ icon: 'error', title: 'خطأ', text: 'فشل حذف المستخدم.', background: '#141414', color: '#fff' });

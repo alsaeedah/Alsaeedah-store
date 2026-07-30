@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../supabase/client';
+import { db } from '../firebase/config';
+import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     User, Package, ArrowRight, Edit2, Save, X, Phone, MapPin, MessageCircle,
@@ -70,11 +71,14 @@ export default function ProfilePage({ initialTab = 'profile' }) {
     const fetchOrders = async () => {
         setOrdersLoading(true);
         try {
-            const { data, error } = await supabase.from('orders')
-                .select('*')
-                .eq('user_id', currentUser.uid || currentUser.id)
-                .order('created_at', { ascending: false });
-            if (!error) setOrders(data || []);
+            const q = query(
+                collection(db, 'orders'),
+                where('user_id', '==', currentUser.uid || currentUser.id),
+                orderBy('created_at', 'desc')
+            );
+            const snapshot = await getDocs(q);
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setOrders(data);
         } catch (e) { console.error(e); }
         finally { setOrdersLoading(false); }
     };

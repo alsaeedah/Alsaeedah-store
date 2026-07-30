@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import useAuthStore from '../store/useAuthStore';
 import Swal from 'sweetalert2';
 import { Lock, Mail, ArrowLeft } from 'lucide-react';
 
@@ -11,7 +11,7 @@ const Login = () => {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
-    const { login } = useAuth();
+    const login = useAuthStore(state => state.login);
 
     const handleLogin = async (e) => {
         e.preventDefault();

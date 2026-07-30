@@ -10,30 +10,14 @@
 //   5. Store/update token in Supabase manager_push_tokens table
 // ============================================================
 
-import { initializeApp, getApps, getApp } from "firebase/app";
 import { getMessaging, getToken, onMessage, deleteToken } from "firebase/messaging";
-import { createClient } from "@supabase/supabase-js";
-
-// ── Firebase config (from Vite env vars) ──────────────────────────────────
-const firebaseConfig = {
-  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId:             import.meta.env.VITE_FIREBASE_APP_ID,
-};
+import { app, db, firebaseConfig } from "../firebase/config";
+import { doc, setDoc } from "firebase/firestore";
 
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 
-// ── Supabase client (anon key — dashboard uses anon key) ──────────────────
-const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
 // ── Lazy singleton: Firebase app + messaging ──────────────────────────────
 function getFirebaseMessaging() {
-  const app = getApps().length === 0
-    ? initializeApp(firebaseConfig)
-    : getApp();
   return getMessaging(app);
 }
 
@@ -47,30 +31,22 @@ function getDeviceName() {
   return ua.substring(0, 100);
 }
 
-// ── Save or update FCM token in Supabase ──────────────────────────────────
+// ── Save or update FCM token in Firestore ──────────────────────────────────
 async function saveTokenToDatabase(managerId, token) {
-  const supabase = createClient(supabaseUrl, supabaseAnon);
-
-  const { error } = await supabase
-    .from("manager_push_tokens")
-    .upsert(
-      {
-        manager_id:   managerId,
-        fcm_token:    token,
-        device_name:  getDeviceName(),
-        platform:     "web",
-        app_version:  import.meta.env.VITE_APP_VERSION || "1.0.0",
-        updated_at:   new Date().toISOString(),
-        last_seen_at: new Date().toISOString(),
-        active:       true,
-      },
-      { onConflict: "fcm_token" }   // upsert by token — one row per device
-    );
-
-  if (error) {
+  try {
+    await setDoc(doc(db, "manager_push_tokens", token), {
+      manager_id:   managerId,
+      fcm_token:    token,
+      device_name:  getDeviceName(),
+      platform:     "web",
+      app_version:  import.meta.env.VITE_APP_VERSION || "1.0.0",
+      updated_at:   new Date().toISOString(),
+      last_seen_at: new Date().toISOString(),
+      active:       true,
+    }, { merge: true });
+    console.log("[FCM] Token saved/updated in Firestore manager_push_tokens.");
+  } catch (error) {
     console.error("[FCM] Failed to save token to DB:", error.message);
-  } else {
-    console.log("[FCM] Token saved/updated in manager_push_tokens.");
   }
 }
 

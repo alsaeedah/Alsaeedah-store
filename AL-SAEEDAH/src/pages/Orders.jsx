@@ -4,6 +4,8 @@ import { Package, Calendar, CreditCard, ChevronDown, ChevronUp, ShoppingBag, Clo
 import { useAuth } from '../context/AuthContext';
 import { useLoader } from '../context/LoaderContext';
 import { useNavigate, Link } from 'react-router-dom';
+import { db } from '../firebase/config';
+import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
 
 export default function Orders() {
     const { currentUser, openAuthModal } = useAuth();
@@ -29,15 +31,14 @@ export default function Orders() {
         const fetchOrders = async () => {
             showLoader('جاري جلب السجل...');
             try {
-                const { supabase } = await import('../supabase/client');
-                const { data, error } = await supabase
-                    .from('orders')
-                    .select('*')
-                    .eq('user_id', currentUser.uid || currentUser.id)
-                    .order('created_at', { ascending: false });
-
-                if (error) throw error;
-                setOrders(data || []);
+                const q = query(
+                    collection(db, 'orders'),
+                    where('user_id', '==', currentUser.uid || currentUser.id),
+                    orderBy('created_at', 'desc')
+                );
+                const snapshot = await getDocs(q);
+                const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setOrders(data);
             } catch (error) {
                 console.error("Error fetching orders:", error);
             } finally {

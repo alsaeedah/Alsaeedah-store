@@ -3,7 +3,6 @@ import { motion, useMotionValue, useTransform } from 'framer-motion';
 import { fetchLatestProducts, subscribeToProducts } from '../services/productService';
 import { useNavigate } from 'react-router-dom';
 import MinimalProductCard from './MinimalProductCard';
-import CinematicBackground from './CinematicBackground';
 
 const FeaturedProduct = ({ product }) => {
     const navigate = useNavigate();
@@ -121,9 +120,6 @@ const LatestProducts = () => {
 
     return (
         <section className="immersive-section">
-            {/* Cinematic Animated Background System */}
-            <CinematicBackground />
-
             <div className="immersive-content container">
                 {/* Section Header */}
                 <motion.div

@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '../supabase/client';
+import { db } from '../firebase/config';
+import { collection, query, orderBy, getDocs, doc, deleteDoc, addDoc, updateDoc, where, limit } from 'firebase/firestore';
 import { useLoading } from '../context/LoadingContext';
 import { uploadToCloudinary } from '../utils/cloudinary';
 import { 
@@ -194,6 +196,9 @@ const SortableSlide = ({ slide, index, isExpanded, onToggle, onRemove, onImageUp
 
 const Settings = () => {
     const { startLoading, stopLoading } = useLoading();
+    const [activeUploads, setActiveUploads] = useState({});
+    const abortRefs = useRef({});
+    const cancelledRefs = useRef({});
     // Draft state: heroSlides holds the local (possibly unsaved) copy
     const [heroSlides, setHeroSlides] = useState([]);
     // savedSlides mirrors the last-saved server state for dirty detection
@@ -231,10 +236,9 @@ const Settings = () => {
         startLoading();
         setLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('hero')
-                .select('*')
-                .order('sort_order', { ascending: true });
+            const q = query(collection(db, 'hero'), orderBy('sort_order', 'asc'));
+            const snapshot = await getDocs(q);
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
             if (data) {
                 // Populate both the draft and the saved-state mirror
@@ -260,9 +264,35 @@ const Settings = () => {
     const handleImageUpload = async (id, file) => {
         if (!file) return;
         
-        startLoading();
+        const taskId = `slide_img_${id}_${Date.now()}`;
+        cancelledRefs.current[taskId] = false;
+
+        setActiveUploads(prev => ({
+            ...prev,
+            [taskId]: {
+                text: `جاري رفع صورة الشريحة...`,
+                percent: 0,
+                type: 'image'
+            }
+        }));
+
         try {
-            const imageUrl = await uploadToCloudinary(file, 'image');
+            const imageUrl = await uploadToCloudinary(
+                file, 
+                'image',
+                (progress) => {
+                    setActiveUploads(prev => ({
+                        ...prev,
+                        [taskId]: { ...prev[taskId], percent: progress }
+                    }));
+                },
+                (abortFn) => {
+                    abortRefs.current[taskId] = abortFn;
+                }
+            );
+
+            if (cancelledRefs.current[taskId]) return;
+
             handleSlideChange(id, 'image_url', imageUrl);
 
             Swal.fire({
@@ -277,10 +307,19 @@ const Settings = () => {
                 color: '#fff'
             });
         } catch (error) {
+            if (error.message === 'UserCancelled' || cancelledRefs.current[taskId]) {
+                return;
+            }
             console.error("Upload error:", error);
             Swal.fire({ icon: 'error', title: 'خطأ', text: 'فشل رفع الصورة: ' + (error.message || ''), background: '#141414', color: '#fff' });
         } finally {
-            stopLoading();
+             setActiveUploads(prev => {
+                const updated = { ...prev };
+                delete updated[taskId];
+                return updated;
+            });
+            delete abortRefs.current[taskId];
+            delete cancelledRefs.current[taskId];
         }
     };
 
@@ -344,57 +383,35 @@ const Settings = () => {
         try {
             // ── Step 1: Delete removed slides ─────────────────────────────────
             if (deletedSlideIds.length > 0) {
-                const { error } = await supabase
-                    .from('hero')
-                    .delete()
-                    .in('id', deletedSlideIds);
-                if (error) throw new Error(`خطأ في حذف الشرائح: ${error.message}`);
+                for (const delId of deletedSlideIds) {
+                    await deleteDoc(doc(db, 'hero', delId));
+                }
             }
 
             // ── Step 2: Insert new slides (typeof number = temp ID) ───────────
             const newSlides = heroSlides.filter(s => typeof s.id === 'number');
-            const insertedIdMap = {}; // tempId → real DB id
             for (let idx = 0; idx < newSlides.length; idx++) {
                 const slide = newSlides[idx];
-                const { data, error } = await supabase
-                    .from('hero')
-                    .insert([{
-                        title: slide.title,
-                        subtitle: slide.subtitle,
-                        description: slide.description,
-                        image_url: slide.image_url || slide.image,
-                        sort_order: slide.sort_order
-                    }])
-                    .select()
-                    .single();
-                if (error) throw new Error(`خطأ في إضافة الشريحة "${slide.title}": ${error.message}`);
-                if (!data) throw new Error(`لم يتم إرجاع بيانات الشريحة الجديدة "${slide.title}" — تحقق من صلاحيات RLS.`);
-                insertedIdMap[slide.id] = data.id;
+                await addDoc(collection(db, 'hero'), {
+                    title: slide.title,
+                    subtitle: slide.subtitle,
+                    description: slide.description,
+                    image_url: slide.image_url || slide.image,
+                    sort_order: slide.sort_order
+                });
             }
 
             // ── Step 3: Update existing slides (typeof string = real UUID) ───────
             const existingSlides = heroSlides.filter(s => typeof s.id === 'string');
             for (let idx = 0; idx < existingSlides.length; idx++) {
                 const slide = existingSlides[idx];
-                const { data, error } = await supabase
-                    .from('hero')
-                    .update({
-                        title: slide.title,
-                        subtitle: slide.subtitle,
-                        description: slide.description,
-                        image_url: slide.image_url || slide.image,
-                        sort_order: slide.sort_order
-                    })
-                    .eq('id', slide.id)
-                    .select();
-                if (error) throw new Error(`خطأ في الشريحة "${slide.title}": ${error.message}`);
-                // Supabase returns empty array when RLS silently blocks the update
-                if (!data || data.length === 0) {
-                    throw new Error(
-                        `لم يتم تحديث الشريحة "${slide.title}" — قد تكون سياسة RLS تمنع التعديل. ` +
-                        `تأكد من تطبيق ملف fix_hero_rls.sql على قاعدة البيانات.`
-                    );
-                }
+                await updateDoc(doc(db, 'hero', slide.id), {
+                    title: slide.title,
+                    subtitle: slide.subtitle,
+                    description: slide.description,
+                    image_url: slide.image_url || slide.image,
+                    sort_order: slide.sort_order
+                });
             }
 
             // ── Step 4: Refresh from DB to sync clean state ───────────────────
@@ -467,20 +484,14 @@ const Settings = () => {
 
     const loadHubData = async () => {
         try {
-            const { data: latestData } = await supabase
-                .from('products')
-                .select('*')
-                .eq('is_latest', true)
-                .order('created_at', { ascending: false });
+            const latestSnap = await getDocs(query(collection(db, 'products'), where('is_latest', '==', true), orderBy('created_at', 'desc')));
+            const latestData = latestSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             
-            const { data: bestData } = await supabase
-                .from('products')
-                .select('*')
-                .eq('is_best_seller', true)
-                .order('created_at', { ascending: false });
+            const bestSnap = await getDocs(query(collection(db, 'products'), where('is_best_seller', '==', true), orderBy('created_at', 'desc')));
+            const bestData = bestSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            if (latestData) setLatestProducts(latestData);
-            if (bestData) setBestSellers(bestData);
+            setLatestProducts(latestData);
+            setBestSellers(bestData);
         } catch (err) { console.error(err); }
     };
 
@@ -493,14 +504,16 @@ const Settings = () => {
 
         setIsSearchingHub(true);
         try {
-            let queryBuilder = supabase.from('products').select('*');
-            if (!isNaN(query)) {
-                queryBuilder = queryBuilder.or(`name.ilike.%${query}%,displayId.eq.${query}`);
-            } else {
-                queryBuilder = queryBuilder.ilike('name', `%${query}%`);
-            }
-            const { data } = await queryBuilder.limit(10);
-            if (data) setHubSearchResults(data);
+            const snap = await getDocs(query(collection(db, 'products'), limit(50))); // limit to avoid fetching all if too large, doing client side filter
+            let allData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            const lq = query.toLowerCase();
+            let data = allData.filter(p => 
+                (p.name && p.name.toLowerCase().includes(lq)) ||
+                (p.displayId && String(p.displayId).includes(lq))
+            ).slice(0, 10);
+            
+            setHubSearchResults(data);
         } catch (err) { console.error(err); }
         finally { setIsSearchingHub(false); }
     };
@@ -509,12 +522,7 @@ const Settings = () => {
         startLoading();
         try {
             const column = type === 'latest' ? 'is_latest' : 'is_best_seller';
-            const { error } = await supabase
-                .from('products')
-                .update({ [column]: status })
-                .eq('id', product.id);
-            
-            if (error) throw error;
+            await updateDoc(doc(db, 'products', product.id), { [column]: status });
             
             if (type === 'latest') {
                 if (status) setLatestProducts(prev => [product, ...prev]);
@@ -862,7 +870,87 @@ const Settings = () => {
                 </p>
             </div>
 
+            {/* 🔴 ACTIVE UPLOADS PROGRESS OVERLAY 🔴 */}
+            {
+                Object.keys(activeUploads).length > 0 && createPortal(
+                    <div style={{
+                        position: 'fixed',
+                        bottom: isMobile ? '0' : '20px',
+                        right: isMobile ? '0' : '20px',
+                        width: isMobile ? '100%' : '320px',
+                        maxHeight: isMobile ? '50vh' : '400px',
+                        overflowY: 'auto',
+                        background: '#1a1a1a',
+                        border: isMobile ? 'none' : '1px solid var(--glass-border)',
+                        borderTop: isMobile ? '2px solid var(--primary)' : 'none',
+                        borderRadius: isMobile ? '20px 20px 0 0' : '16px',
+                        padding: '15px',
+                        boxShadow: '0 -10px 30px rgba(0,0,0,0.5)',
+                        zIndex: 99999,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px',
+                        animation: isMobile ? 'slideInUp 0.3s ease' : 'slideInRight 0.3s ease'
+                    }}>
+                        <div style={{ padding: '5px 10px', borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: '5px', display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 'bold' }}>عمليات الرفع النشطة ({Object.keys(activeUploads).length})</span>
+                        </div>
+                        {Object.entries(activeUploads).map(([taskId, progress]) => (
+                            <div key={taskId} style={{
+                                background: 'rgba(255,255,255,0.03)',
+                                padding: '12px',
+                                borderRadius: '12px',
+                                border: '1px solid rgba(255,255,255,0.05)'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                    <span style={{ fontSize: '0.8rem', color: '#fff', fontWeight: '500' }}>
+                                        {progress.type === 'video' ? '📽️ فيديو' : '🖼️ صور'}
+                                    </span>
+                                    <button
+                                        onClick={() => {
+                                            cancelledRefs.current[taskId] = true;
+                                            if (abortRefs.current[taskId]) abortRefs.current[taskId]();
+                                            setActiveUploads(prev => {
+                                                const updated = { ...prev };
+                                                delete updated[taskId];
+                                                return updated;
+                                            });
+                                        }}
+                                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', padding: '0 5px' }}
+                                    >
+                                        إلغاء ✕
+                                    </button>
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '8px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {progress.text}
+                                </div>
+                                <div style={{ height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '2px', overflow: 'hidden' }}>
+                                    <div style={{
+                                        width: `${progress.percent}%`,
+                                        height: '100%',
+                                        background: 'var(--primary)',
+                                        transition: 'width 0.3s ease'
+                                    }} />
+                                </div>
+                                <div style={{ marginTop: '5px', fontSize: '0.7rem', color: 'var(--primary)', textAlign: 'right' }}>
+                                    {progress.percent}%
+                                </div>
+                            </div>
+                        ))}
+                    </div>,
+                    document.body
+                )
+            }
+
             <style>{`
+                @keyframes slideInRight {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                @keyframes slideInUp {
+                    from { transform: translateY(100%); opacity: 0; }
+                    to { transform: translateY(0); opacity: 1; }
+                }
                 .admin-hub-item {
                     transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
                 }

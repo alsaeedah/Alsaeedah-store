@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLoading } from '../context/LoadingContext';
-import { supabase } from '../supabase/client';
+import { db } from '../firebase/config';
+import { collection, query, where, getCountFromServer, getDocs, onSnapshot, updateDoc, deleteDoc, doc, orderBy, limit, startAfter } from 'firebase/firestore';
 import Swal from 'sweetalert2';
 import { 
     Plus, Trash2, Edit, Loader2, Search, Layers, Users, 
@@ -54,33 +55,25 @@ const Products = () => {
 
     const fetchStats = async () => {
         try {
-            const { count: total } = await supabase.from('products').select('*', { count: 'exact', head: true });
-            const { count: men } = await supabase.from('products').select('*', { count: 'exact', head: true }).eq('category', 'men');
-            const { count: women } = await supabase.from('products').select('*', { count: 'exact', head: true }).eq('category', 'women');
-            const { count: kids } = await supabase.from('products').select('*', { count: 'exact', head: true }).eq('category', 'kids');
+            const productsRef = collection(db, 'products');
+            const totalSnap = await getCountFromServer(productsRef);
+            
+            const menQ = query(productsRef, where('category', '==', 'men'));
+            const menSnap = await getCountFromServer(menQ);
+            
+            const womenQ = query(productsRef, where('category', '==', 'women'));
+            const womenSnap = await getCountFromServer(womenQ);
+            
+            const kidsQ = query(productsRef, where('category', '==', 'kids'));
+            const kidsSnap = await getCountFromServer(kidsQ);
 
-            setTotalStats({ total: total || 0, men: men || 0, women: women || 0, kids: kids || 0 });
+            setTotalStats({ total: totalSnap.data().count || 0, men: menSnap.data().count || 0, women: womenSnap.data().count || 0, kids: kidsSnap.data().count || 0 });
         } catch (error) {
             console.error("Stats fetch error:", error);
         }
     };
 
-    const buildQuery = (selectString = '*', { count = null, head = false } = {}) => {
-        let query = supabase.from('products').select(selectString, { count, head });
-
-        if (filterType !== 'all') query = query.eq('category', filterType);
-        if (filterStyle !== 'all') query = query.eq('style', filterStyle);
-        if (minPrice !== '') query = query.gte('price', Number(minPrice));
-        if (maxPrice !== '') query = query.lte('price', Number(maxPrice));
-        if (searchQuery) {
-            if (!isNaN(searchQuery)) {
-                query = query.or(`name.ilike.%${searchQuery}%,displayId.eq.${searchQuery}`);
-            } else {
-                query = query.ilike('name', `%${searchQuery}%`);
-            }
-        }
-        return query;
-    };
+    const allFilteredProductsRef = useRef([]); // To handle pagination in memory
 
     const fetchProducts = async (pageNum, isInitial = false) => {
         if (isInitial) {
@@ -91,27 +84,47 @@ const Products = () => {
         }
 
         try {
-            let query = buildQuery('*', { count: 'exact' });
-
-            // Apply Sorting
-            if (sortPrice === 'asc') query = query.order('price', { ascending: true });
-            else if (sortPrice === 'desc') query = query.order('price', { ascending: false });
-            else query = query.order('created_at', { ascending: false });
-
-            const from = pageNum * 6;
-            const to = from + 5;
-            const { data, error, count } = await query.range(from, to);
-
-            if (error) throw error;
-
             if (isInitial) {
-                setProducts(data || []);
-                setTotalMatchingCount(count || 0);
-            } else {
-                setProducts(prev => [...prev, ...data]);
+                let q = collection(db, 'products');
+                let constraints = [];
+                if (filterType !== 'all') constraints.push(where('category', '==', filterType));
+                if (filterStyle !== 'all') constraints.push(where('style', '==', filterStyle));
+                if (minPrice !== '') constraints.push(where('price', '>=', Number(minPrice)));
+                if (maxPrice !== '') constraints.push(where('price', '<=', Number(maxPrice)));
+                
+                const finalQuery = query(q, ...constraints);
+                const snapshot = await getDocs(finalQuery);
+                let allData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                // In-memory text search
+                if (searchQuery) {
+                    const lq = searchQuery.toLowerCase();
+                    allData = allData.filter(p => 
+                        (p.name && p.name.toLowerCase().includes(lq)) ||
+                        (p.displayId && String(p.displayId).includes(lq))
+                    );
+                }
+
+                // In-memory sort
+                if (sortPrice === 'asc') allData.sort((a, b) => Number(a.price) - Number(b.price));
+                else if (sortPrice === 'desc') allData.sort((a, b) => Number(b.price) - Number(a.price));
+                else allData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+                allFilteredProductsRef.current = allData;
+                setTotalMatchingCount(allData.length);
             }
 
-            setHasMore(count > to + 1);
+            const from = pageNum * 6;
+            const to = from + 6;
+            const paginatedData = allFilteredProductsRef.current.slice(from, to);
+
+            if (isInitial) {
+                setProducts(paginatedData);
+            } else {
+                setProducts(prev => [...prev, ...paginatedData]);
+            }
+
+            setHasMore(allFilteredProductsRef.current.length > to);
         } catch (error) {
             console.error(error);
             Swal.fire({
@@ -146,29 +159,26 @@ const Products = () => {
     }, [page]);
 
     useEffect(() => {
-        const subscription = supabase
-            .channel('products-realtime')
-            .on(
-                'postgres_changes',
-                { event: '*', table: 'products', schema: 'public' },
-                (payload) => {
-                    if (payload.eventType === 'INSERT') {
+        const q = query(collection(db, 'products'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === 'added') {
+                    // Only fetch stats and restart on major changes if needed, but here we can just do:
+                    fetchStats();
+                    if (products.length < 6) {
                         setPage(0);
                         fetchProducts(0, true);
-                        fetchStats();
-                    } else if (payload.eventType === 'UPDATE') {
-                        setProducts(prev => prev.map(p => p.id === payload.new.id ? { ...p, ...payload.new } : p));
-                    } else if (payload.eventType === 'DELETE') {
-                        setProducts(prev => prev.filter(p => p.id !== payload.old.id));
-                        fetchStats();
                     }
+                } else if (change.type === 'modified') {
+                    setProducts(prev => prev.map(p => p.id === change.doc.id ? { ...p, ...change.doc.data() } : p));
+                } else if (change.type === 'removed') {
+                    setProducts(prev => prev.filter(p => p.id !== change.doc.id));
+                    fetchStats();
                 }
-            )
-            .subscribe();
+            });
+        });
 
-        return () => {
-            supabase.removeChannel(subscription);
-        };
+        return () => unsubscribe();
     }, []);
 
     const handleDelete = async (id) => {
@@ -188,13 +198,11 @@ const Products = () => {
         if (result.isConfirmed) {
             startLoading();
             try {
-                const { data: productToDelete, error: fetchError } = await supabase
-                    .from('products')
-                    .select('video, images, imageUrl')
-                    .eq('id', id)
-                    .single();
-
-                if (!fetchError && productToDelete) {
+                // Fetch product to get images and video
+                const productSnap = await getDocs(query(collection(db, 'products'), where('__name__', '==', id)));
+                
+                if (!productSnap.empty) {
+                    const productToDelete = productSnap.docs[0].data();
                     if (productToDelete.video && productToDelete.video.includes('cloudinary')) {
                         await deleteFromCloudinary(productToDelete.video, 'video');
                     }
@@ -207,12 +215,7 @@ const Products = () => {
                     }
                 }
 
-                const { error } = await supabase
-                    .from('products')
-                    .delete()
-                    .eq('id', id);
-
-                if (error) throw error;
+                await deleteDoc(doc(db, 'products', id));
 
                 setProducts(prev => prev.filter(p => p.id !== id));
                 fetchStats();
@@ -229,12 +232,7 @@ const Products = () => {
     const toggleBestSellerStatus = async (id, currentStatus) => {
         startLoading();
         try {
-            const { error } = await supabase
-                .from('products')
-                .update({ is_best_seller: !currentStatus })
-                .eq('id', id);
-
-            if (error) throw error;
+            await updateDoc(doc(db, 'products', id), { is_best_seller: !currentStatus });
             
             setProducts(prev => prev.map(p => p.id === id ? { ...p, is_best_seller: !currentStatus } : p));
             
@@ -260,12 +258,7 @@ const Products = () => {
     const toggleLatestStatus = async (id, currentStatus) => {
         startLoading();
         try {
-            const { error } = await supabase
-                .from('products')
-                .update({ is_latest: !currentStatus })
-                .eq('id', id);
-
-            if (error) throw error;
+            await updateDoc(doc(db, 'products', id), { is_latest: !currentStatus });
             
             setProducts(prev => prev.map(p => p.id === id ? { ...p, is_latest: !currentStatus } : p));
             
@@ -304,16 +297,11 @@ const Products = () => {
         } else {
             startLoading();
             try {
-                let query = buildQuery('id');
-                const { data, error } = await query;
-
-                if (error) throw error;
-
-                if (data) {
-                    setSelectedProducts(new Set(data.map(p => p.id)));
+                if (allFilteredProductsRef.current.length > 0) {
+                    setSelectedProducts(new Set(allFilteredProductsRef.current.map(p => p.id)));
                     Swal.fire({
                         title: 'تم تحديد الكل',
-                        text: `تم تحديد ${data.length} منتج`,
+                        text: `تم تحديد ${allFilteredProductsRef.current.length} منتج`,
                         icon: 'success',
                         toast: true,
                         position: 'top-end',
@@ -355,33 +343,22 @@ const Products = () => {
         if (result.isConfirmed) {
             startLoading();
             try {
-                // Fetch media to delete
-                const { data: productsToDelete, error: fetchError } = await supabase
-                    .from('products')
-                    .select('id, video, images, imageUrl')
-                    .in('id', Array.from(selectedProducts));
+                // Find products to delete from in-memory cache to skip fetching
+                const productsToDelete = allFilteredProductsRef.current.filter(p => selectedProducts.has(p.id));
 
-                if (!fetchError && productsToDelete) {
-                    for (const product of productsToDelete) {
-                        if (product.video && product.video.includes('cloudinary')) {
-                            await deleteFromCloudinary(product.video, 'video');
-                        }
-                        const imagesToDelete = new Set(product.images || []);
-                        if (product.imageUrl) imagesToDelete.add(product.imageUrl);
-                        for (const img of imagesToDelete) {
-                            if (img && img.includes('cloudinary')) {
-                                await deleteFromCloudinary(img, 'image');
-                            }
+                for (const product of productsToDelete) {
+                    if (product.video && product.video.includes('cloudinary')) {
+                        await deleteFromCloudinary(product.video, 'video');
+                    }
+                    const imagesToDelete = new Set(product.images || []);
+                    if (product.imageUrl) imagesToDelete.add(product.imageUrl);
+                    for (const img of imagesToDelete) {
+                        if (img && img.includes('cloudinary')) {
+                            await deleteFromCloudinary(img, 'image');
                         }
                     }
+                    await deleteDoc(doc(db, 'products', product.id));
                 }
-
-                const { error } = await supabase
-                    .from('products')
-                    .delete()
-                    .in('id', Array.from(selectedProducts));
-
-                if (error) throw error;
 
                 setProducts(prev => prev.filter(p => !selectedProducts.has(p.id)));
                 setSelectedProducts(new Set());

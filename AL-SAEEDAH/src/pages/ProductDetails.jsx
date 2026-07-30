@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '../supabase/client';
+import { db } from '../firebase/config';
+import { collection, query, where, limit, getDocs } from 'firebase/firestore';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { createPortal } from 'react-dom';
 
@@ -940,11 +941,9 @@ const ProductDetails = () => {
   /* ── Load related products ── */
   useEffect(() => {
     const fetchRelated = async () => {
-      const { data } = await supabase
-        .from('products')
-        .select('*')
-        .neq('id', id)
-        .limit(12);
+      const q = query(collection(db, 'products'), where('id', '!=', id), limit(12));
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       if (data) {
         setRelatedProducts(data.map(p => ({
           ...p,

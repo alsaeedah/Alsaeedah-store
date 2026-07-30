@@ -1,11 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldAlert, LogOut, ArrowLeft } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import useAuthStore from '../store/useAuthStore';
 
 const Unauthorized = () => {
     const navigate = useNavigate();
-    const { logout } = useAuth();
+    const logout = useAuthStore(state => state.logout);
 
     const handleLogout = () => {
         logout();

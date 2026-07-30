@@ -1,19 +1,11 @@
-
-import { supabase } from '../supabase/client';
+import { db } from '../firebase/config';
+import { collection, query, orderBy, getDocs, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 
 export const fetchProductsFromFirestore = async () => {
     try {
-        const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .order('created_at', { ascending: false });
-
-        if (error) {
-            console.error('Error fetching products:', error);
-            throw error;
-        }
-
-        return data || [];
+        const q = query(collection(db, 'products'), orderBy('created_at', 'desc'));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } catch (error) {
         console.error('Unexpected error fetching products:', error);
         return [];
@@ -22,15 +14,10 @@ export const fetchProductsFromFirestore = async () => {
 
 export const fetchLatestProducts = async () => {
     try {
-        const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .eq('is_latest', true)
-            .order('created_at', { ascending: false });
-
-        if (error) throw error;
-        
-        return data || [];
+        const q = query(collection(db, 'products'), where('is_latest', '==', true));
+        const snapshot = await getDocs(q);
+        const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        return products.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     } catch (error) {
         console.error('Error in fetchLatestProducts:', error);
         return [];
@@ -39,15 +26,10 @@ export const fetchLatestProducts = async () => {
 
 export const fetchBestSellers = async () => {
     try {
-        const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .eq('is_best_seller', true)
-            .order('created_at', { ascending: false });
-        
-        if (error) throw error;
-
-        return data || [];
+        const q = query(collection(db, 'products'), where('is_best_seller', '==', true));
+        const snapshot = await getDocs(q);
+        const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        return products.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     } catch (error) {
         console.error('Error fetching best sellers:', error);
         return [];
@@ -57,76 +39,70 @@ export const fetchBestSellers = async () => {
 export const fetchProductsPaginated = async (page = 0, pageSize = 6, filters = {}) => {
     try {
         const from = page * pageSize;
-        const to = from + pageSize - 1;
+        const to = from + pageSize;
 
-        // If random sorting is requested (default)
-        if (filters.sortPrice === 'none' && filters.seed) {
-            try {
-                const { data, error } = await supabase.rpc('get_random_products', {
-                    p_seed: filters.seed,
-                    p_offset: from,
-                    p_limit: pageSize,
-                    p_category: filters.category || 'all',
-                    p_style: filters.style || 'all',
-                    p_min_price: filters.minPrice || null,
-                    p_max_price: filters.maxPrice || null,
-                    p_search: filters.search || null
-                });
+        // Note: Firestore doesn't support offset pagination or random sorting easily.
+        // For a typical e-commerce store with < 10,000 items, fetching the filtered set
+        // and slicing in memory is practical and guarantees UI compatibility.
 
-                if (!error && data) {
-                    return {
-                        products: data || [],
-                        // Simplified hasMore: if we got exactly pageSize, there's likely more
-                        hasMore: data.length === pageSize, 
-                        total: 0 // We don't have the exact total anymore but hasMore works for the UI
-                    };
-                }
-                
-                if (error) {
-                    console.warn('RPC random sort failed, falling back to standard sorting:', error.message);
-                }
-            } catch (rpcError) {
-                console.error('RPC Error:', rpcError);
-            }
-        }
-
-        // Standard filtering (Fallback or explicit sorting)
-        let query = supabase
-            .from('products')
-            .select('*', { count: 'exact' });
+        let q = collection(db, 'products');
+        const queryConstraints = [];
 
         if (filters.category && filters.category !== 'all') {
-            query = query.eq('category', filters.category);
+            queryConstraints.push(where('category', '==', filters.category));
         }
         if (filters.style && filters.style !== 'all') {
-            query = query.eq('style', filters.style);
+            queryConstraints.push(where('style', '==', filters.style));
         }
+        
+        // Firestore only allows inequality filters (>=, <=) on a single field.
+        // We will apply price filters in memory to allow combining with sorting.
+        
+        const finalQuery = query(q, ...queryConstraints);
+        const snapshot = await getDocs(finalQuery);
+        
+        let allProducts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // Apply price filters in memory (Firestore limitation workaround)
         if (filters.minPrice) {
-            query = query.gte('price', filters.minPrice);
+            allProducts = allProducts.filter(p => p.price >= filters.minPrice);
         }
         if (filters.maxPrice) {
-            query = query.lte('price', filters.maxPrice);
+            allProducts = allProducts.filter(p => p.price <= filters.maxPrice);
         }
+
+        // Apply search filter in memory
         if (filters.search) {
-            query = query.or(`name.ilike.%${filters.search}%,displayId.ilike.%${filters.search}%`);
+            const term = filters.search.toLowerCase();
+            allProducts = allProducts.filter(p => 
+                (p.name && p.name.toLowerCase().includes(term)) || 
+                (p.displayId && p.displayId.toLowerCase().includes(term))
+            );
         }
 
-        if (filters.sortPrice === 'asc') {
-            query = query.order('price', { ascending: true });
+        // Random sort fallback logic
+        if (filters.sortPrice === 'none' && filters.seed) {
+            // Simple deterministic shuffle based on seed
+            const seededRandom = (seed) => {
+                const x = Math.sin(seed++) * 10000;
+                return x - Math.floor(x);
+            };
+            allProducts.sort((a, b) => seededRandom(a.created_at?.length || 1) - 0.5);
+        } else if (filters.sortPrice === 'asc') {
+            allProducts.sort((a, b) => Number(a.price) - Number(b.price));
         } else if (filters.sortPrice === 'desc') {
-            query = query.order('price', { ascending: false });
+            allProducts.sort((a, b) => Number(b.price) - Number(a.price));
         } else {
-            query = query.order('created_at', { ascending: false });
+            // Default sort: newest first
+            allProducts.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
         }
 
-        const { data, error, count } = await query.range(from, to);
-
-        if (error) throw error;
+        const paginatedProducts = allProducts.slice(from, to);
 
         return {
-            products: data || [],
-            hasMore: count > to,
-            total: count
+            products: paginatedProducts,
+            hasMore: allProducts.length > to,
+            total: allProducts.length
         };
     } catch (error) {
         console.error('Error in fetchProductsPaginated:', error);
@@ -135,76 +111,59 @@ export const fetchProductsPaginated = async (page = 0, pageSize = 6, filters = {
 };
 
 export const subscribeToProducts = (callback) => {
-    // Unique channel name per subscription to avoid conflicts
-    const channelId = `products-changes-${Math.random().toString(36).substring(7)}`;
-    const subscription = supabase
-        .channel(channelId)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, (payload) => {
-            console.log('Change received in channel:', channelId, payload);
+    const q = query(collection(db, 'products'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        // Mock payload structure to match Supabase's expected format in some UI components
+        snapshot.docChanges().forEach(change => {
+            const payload = {
+                eventType: change.type === 'added' ? 'INSERT' : change.type === 'modified' ? 'UPDATE' : 'DELETE',
+                new: change.type !== 'removed' ? { id: change.doc.id, ...change.doc.data() } : null,
+                old: change.type === 'removed' ? { id: change.doc.id } : null
+            };
             callback(payload);
-        })
-        .subscribe();
+        });
+    });
 
-    return () => {
-        supabase.removeChannel(subscription);
-    };
+    return unsubscribe;
 };
 
 export const subscribeToProduct = (id, callback) => {
-    const fetchProduct = async () => {
-        const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .eq('id', id)
-            .single();
-
-        if (error) {
-            console.error('Error fetching product:', error);
-            callback(null);
+    const docRef = doc(db, 'products', String(id));
+    
+    // Initial fetch
+    getDoc(docRef).then(docSnap => {
+        if (docSnap.exists()) {
+            callback({ id: docSnap.id, ...docSnap.data() });
         } else {
-            callback(data);
+            callback(null);
         }
-    };
+    }).catch(err => {
+        console.error('Error fetching product:', err);
+        callback(null);
+    });
 
-    fetchProduct();
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+        if (docSnap.exists()) {
+            callback({ id: docSnap.id, ...docSnap.data() });
+        } else {
+            callback(null);
+        }
+    });
 
-    const subscription = supabase
-        .channel(`public:products:id=eq.${id}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'products', filter: `id=eq.${id}` }, (payload) => {
-            fetchProduct();
-        })
-        .subscribe();
-
-    return () => {
-        supabase.removeChannel(subscription);
-    };
+    return unsubscribe;
 };
 
 export const subscribeToHero = (callback) => {
-    const fetchHero = async () => {
-        const { data, error } = await supabase
-            .from('hero')
-            .select('*')
-            .order('sort_order', { ascending: true });
+    const q = query(collection(db, 'hero'), orderBy('sort_order', 'asc'));
+    
+    // Initial fetch
+    getDocs(q).then(snapshot => {
+        callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }).catch(err => console.error('Error fetching hero:', err));
 
-        if (error) {
-            console.error('Error fetching hero:', error);
-        } else {
-            callback(data || []);
-        }
-    };
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
 
-    fetchHero();
-
-    const subscription = supabase
-        .channel('public:hero')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'hero' }, (payload) => {
-            console.log('Hero change received!', payload);
-            fetchHero();
-        })
-        .subscribe();
-
-    return () => {
-        supabase.removeChannel(subscription);
-    };
+    return unsubscribe;
 };

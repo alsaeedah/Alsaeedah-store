@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabase/client';
+import { db } from '../firebase/config';
+import { collection, query, where, getCountFromServer, getDocs, orderBy, limit } from 'firebase/firestore';
 import { useLoading } from '../context/LoadingContext';
 import {
     ShoppingBag,
@@ -13,11 +14,11 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useAuth } from '../context/AuthContext';
+import useAuthStore from '../store/useAuthStore';
 
 const Home = () => {
     const { startLoading, stopLoading } = useLoading();
-    const { user } = useAuth();
+    const user = useAuthStore(state => state.user);
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState({
@@ -52,32 +53,31 @@ const Home = () => {
             setLoading(true);
             try {
                 // 1. Fetch Counts
-                const { count: productCount } = await supabase.from('products').select('*', { count: 'exact', head: true });
-                const { count: orderCount } = await supabase.from('orders').select('*', { count: 'exact', head: true });
-                const { count: userCount } = await supabase.from('users').select('*', { count: 'exact', head: true });
+                const productsCount = await getCountFromServer(collection(db, 'products'));
+                const ordersCount = await getCountFromServer(collection(db, 'orders'));
+                const usersCount = await getCountFromServer(collection(db, 'users'));
 
                 // 2. Fetch Recent Orders
-                const { data: ordersData } = await supabase
-                    .from('orders')
-                    .select('*, users(name, phone)')
-                    .order('created_at', { ascending: false })
-                    .limit(5);
+                const recentOrdersQuery = query(
+                    collection(db, 'orders'),
+                    orderBy('created_at', 'desc'),
+                    limit(5)
+                );
+                const recentOrdersSnapshot = await getDocs(recentOrdersQuery);
+                const ordersData = recentOrdersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
                 // 3. Calculate Total Revenue (completed orders)
-                const { data: revenueData } = await supabase
-                    .from('orders')
-                    .select('total_amount')
-                    .eq('status', 'completed');
-
-                const totalRevenue = revenueData?.reduce((acc, curr) => acc + (Number(curr.total_amount) || 0), 0) || 0;
+                const revenueQuery = query(collection(db, 'orders'), where('status', '==', 'completed'));
+                const revenueSnapshot = await getDocs(revenueQuery);
+                const totalRevenue = revenueSnapshot.docs.reduce((acc, doc) => acc + (Number(doc.data().total_amount) || 0), 0);
 
                 setStats({
-                    products: productCount || 0,
-                    orders: orderCount || 0,
-                    users: userCount || 0,
+                    products: productsCount.data().count,
+                    orders: ordersCount.data().count,
+                    users: usersCount.data().count,
                     revenue: totalRevenue
                 });
-                setRecentOrders(ordersData || []);
+                setRecentOrders(ordersData);
             } catch (error) {
                 console.error("Dashboard fetch error:", error);
             } finally {

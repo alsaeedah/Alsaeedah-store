@@ -7,7 +7,7 @@ import AddProduct from './pages/AddProduct';
 import EditProduct from './pages/EditProduct';
 import ProtectedRoute from './components/ProtectedRoute';
 import { LoadingProvider } from './context/LoadingContext';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import useAuthStore from './store/useAuthStore';
 import TopProgressBar from './components/TopProgressBar';
 import Users from './pages/Users';
 import Orders from './pages/Orders';
@@ -17,52 +17,50 @@ import Managers from './pages/Managers';
 import Unauthorized from './pages/Unauthorized';
 
 const ManagerRoute = ({ permission, children }) => {
-  const { user } = useAuth();
+  const user = useAuthStore(state => state.user);
   if (user?.role === 'super_admin') return children;
   if (user?.role === 'manager' && user?.permissions?.[permission]) return children;
   return <Navigate to="/unauthorized" replace />;
 };
 
 const SuperAdminRoute = ({ children }) => {
-  const { user } = useAuth();
+  const user = useAuthStore(state => state.user);
   if (user?.role === 'super_admin') return children;
   return <Navigate to="/unauthorized" replace />;
 };
 
 function App() {
   return (
-    <AuthProvider>
-      <LoadingProvider>
-        <TopProgressBar />
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route
-            path="/*"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Routes>
-                    <Route path="/" element={<Home />} />
-                    
-                    <Route path="/products" element={<ManagerRoute permission="products"><Products /></ManagerRoute>} />
-                    <Route path="/products/add" element={<ManagerRoute permission="products"><AddProduct /></ManagerRoute>} />
-                    <Route path="/products/edit/:id" element={<ManagerRoute permission="products"><EditProduct /></ManagerRoute>} />
-                    
-                    <Route path="/orders" element={<ManagerRoute permission="orders"><Orders /></ManagerRoute>} />
-                    <Route path="/users" element={<ManagerRoute permission="users"><Users /></ManagerRoute>} />
-                    
-                    <Route path="/settings" element={<SuperAdminRoute><Settings /></SuperAdminRoute>} />
-                    <Route path="/managers" element={<SuperAdminRoute><Managers /></SuperAdminRoute>} />
-                    
-                    <Route path="/unauthorized" element={<Unauthorized />} />
-                  </Routes>
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
-      </LoadingProvider>
-    </AuthProvider>
+    <LoadingProvider>
+      <TopProgressBar />
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/*"
+          element={
+            <ProtectedRoute>
+              <DashboardLayout>
+                <Routes>
+                  <Route path="/" element={<Home />} />
+                  
+                  <Route path="/products" element={<ManagerRoute permission="products"><Products /></ManagerRoute>} />
+                  <Route path="/products/add" element={<ManagerRoute permission="products"><AddProduct /></ManagerRoute>} />
+                  <Route path="/products/edit/:id" element={<ManagerRoute permission="products"><EditProduct /></ManagerRoute>} />
+                  
+                  <Route path="/orders" element={<ManagerRoute permission="orders"><Orders /></ManagerRoute>} />
+                  <Route path="/users" element={<ManagerRoute permission="users"><Users /></ManagerRoute>} />
+                  
+                  <Route path="/settings" element={<SuperAdminRoute><Settings /></SuperAdminRoute>} />
+                  <Route path="/managers" element={<SuperAdminRoute><Managers /></SuperAdminRoute>} />
+                  
+                  <Route path="/unauthorized" element={<Unauthorized />} />
+                </Routes>
+              </DashboardLayout>
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </LoadingProvider>
   );
 }
 

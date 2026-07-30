@@ -1,7 +1,8 @@
 
 import React from 'react';
 import { useLoading } from '../context/LoadingContext';
-import { supabase } from '../supabase/client';
+import { db } from '../firebase/config';
+import { collection, addDoc } from 'firebase/firestore';
 import Swal from 'sweetalert2';
 import ProductForm from '../components/ProductForm';
 import { useNavigate } from 'react-router-dom';
@@ -26,26 +27,23 @@ const AddProduct = () => {
             // Calculate random display ID or leave for DB to handle unique logic
             const displayId = Math.floor(1000 + Math.random() * 9000);
 
-            const { error } = await supabase
-                .from('products')
-                .insert([{
-                    displayId: displayId,
-                    name: formData.name,
-                    price: formData.price,
-                    old_price: formData.old_price || null,
-                    category: formData.category,
-                    style: formData.style,
-                    description: formData.description,
-                    video: formData.video,
-                    imageUrl: formData.imageUrl,
-                    images: formData.images || [],
-                    colors: formData.colors || [],
-                    materials: formData.materials || [],
-                    variants: formData.variants || [],
-                    featured: false // Default
-                }]);
-
-            if (error) throw error;
+            await addDoc(collection(db, 'products'), {
+                displayId: displayId,
+                name: formData.name,
+                price: formData.price,
+                old_price: formData.old_price || null,
+                category: formData.category,
+                style: formData.style,
+                description: formData.description,
+                video: formData.video,
+                imageUrl: formData.imageUrl,
+                images: formData.images || [],
+                colors: formData.colors || [],
+                materials: formData.materials || [],
+                variants: formData.variants || [],
+                featured: false, // Default
+                created_at: new Date().toISOString()
+            });
 
             await Swal.fire({
                 icon: 'success',

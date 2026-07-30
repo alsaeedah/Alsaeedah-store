@@ -7,8 +7,9 @@ import { FavoritesProvider, useFavorites } from './context/FavoritesContext';
 import { VideoProvider } from './context/VideoContext';
 import { LoaderProvider } from './context/LoaderContext';
 import { useTheme } from './context/ThemeContext';
+
+import HeroCarousel from './components/HeroCarousel';
 import Navbar from './components/Navbar';
-import Hero from './components/Hero';
 import Features from './components/Features';
 import BestSellers from './components/BestSellers';
 import LatestProducts from './components/LatestProducts';
@@ -71,7 +72,7 @@ const PageWrapper = ({ children }) => (
 // Home Page Component
 const Home = () => (
   <PageWrapper>
-    <Hero />
+    <HeroCarousel />
     <Features />
     <BestSellers />
     <LatestProducts />

@@ -1,12 +1,14 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import useAuthStore from '../store/useAuthStore';
 import { useEffect } from 'react';
 import { setupFCMNotifications } from '../utils/pushManager';
-import { supabase } from '../supabase/client';
+import { db } from '../firebase/config';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 const ProtectedRoute = ({ children }) => {
-    const { user, loading } = useAuth();
+    const user = useAuthStore(state => state.user);
+    const loading = useAuthStore(state => state.loading);
 
     useEffect(() => {
         if (user) {
@@ -22,7 +24,7 @@ const ProtectedRoute = ({ children }) => {
         if (user && user.role === 'manager') {
             const updatePresence = async () => {
                 try {
-                    await supabase.rpc('update_manager_last_seen', { p_manager_id: user.id });
+                    await updateDoc(doc(db, 'managers', user.id), { last_seen: serverTimestamp() });
                 } catch (err) {
                     console.error('Failed to update manager presence:', err);
                 }
