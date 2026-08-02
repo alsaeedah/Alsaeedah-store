@@ -7,6 +7,7 @@ import { FavoritesProvider, useFavorites } from './context/FavoritesContext';
 import { VideoProvider } from './context/VideoContext';
 import { LoaderProvider } from './context/LoaderContext';
 import { useTheme } from './context/ThemeContext';
+import ErrorBoundary from './components/ErrorBoundary';
 
 import HeroCarousel from './components/HeroCarousel';
 import Navbar from './components/Navbar';
@@ -339,39 +340,41 @@ function App() {
   }, []);
 
   return (
-    <Router>
-        <ScrollToTop />
-        <ThemeProvider>
-          <LoaderProvider>
-            <AuthProvider>
-                <AuthGate>
-                  <FavoritesProvider>
-                    <VideoProvider>
-                      <CartProvider>
-                        <DeepLinkHandler />
-                        <BackButtonHandler />
-                        <ScrollLockManager />
-                        <SEOHelper />
-                        <div className="app-container">
-                          <SystemBarsSync />
-                          <ConditionalNavbar />
-                          <AuthModal />
-                          <LogoutConfirmModal />
-                          <ProfileModal />
-                          <PullToRefreshGate>
-                            <AnimatedRoutes />
-                          </PullToRefreshGate>
-                          <ConditionalFooter />
-                          <ConditionalAppBanner />
-                        </div>
-                      </CartProvider>
-                    </VideoProvider>
-                  </FavoritesProvider>
-                </AuthGate>
-            </AuthProvider>
-          </LoaderProvider>
-        </ThemeProvider>
-    </Router>
+    <ErrorBoundary>
+      <Router>
+          <ScrollToTop />
+          <ThemeProvider>
+            <LoaderProvider>
+              <AuthProvider>
+                  <AuthGate>
+                    <FavoritesProvider>
+                      <VideoProvider>
+                        <CartProvider>
+                          <DeepLinkHandler />
+                          <BackButtonHandler />
+                          <ScrollLockManager />
+                          <SEOHelper />
+                          <div className="app-container">
+                            <SystemBarsSync />
+                            <ConditionalNavbar />
+                            <AuthModal />
+                            <LogoutConfirmModal />
+                            <ProfileModal />
+                            <PullToRefreshGate>
+                              <AnimatedRoutes />
+                            </PullToRefreshGate>
+                            <ConditionalFooter />
+                            <ConditionalAppBanner />
+                          </div>
+                        </CartProvider>
+                      </VideoProvider>
+                    </FavoritesProvider>
+                  </AuthGate>
+              </AuthProvider>
+            </LoaderProvider>
+          </ThemeProvider>
+      </Router>
+    </ErrorBoundary>
   );
 }
 
