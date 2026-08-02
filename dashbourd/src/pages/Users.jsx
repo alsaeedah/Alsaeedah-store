@@ -55,8 +55,6 @@ const AddUserModal = ({ onClose, onSuccess }) => {
                 store_owner_info: formData.store_owner_info.trim() || null,
                 is_active: true,
                 created_at: new Date().toISOString(),
-                is_online: false,
-                last_seen: null,
                 profile_image_url: null
             });
             
@@ -272,36 +270,7 @@ const AddUserModal = ({ onClose, onSuccess }) => {
 };
 
 // ── User Card ─────────────────────────────────────────────────────────────────
-const isUserOnline = (user) => {
-    if (!user.is_online) return false;
-    if (!user.last_seen) return false;
-    
-    // Active within 2 minutes
-    const lastSeenTime = new Date(user.last_seen).getTime();
-    const now = new Date().getTime();
-    return (now - lastSeenTime) < 120000;
-};
-
-const getLastSeenText = (lastSeen) => {
-    if (!lastSeen) return 'غير متصل';
-    const date = new Date(lastSeen);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 1) return 'نشط منذ ثوانٍ';
-    if (diffMins < 60) return `نشط منذ ${diffMins} د`;
-    if (diffHours < 24) return `نشط منذ ${diffHours} س`;
-    if (diffDays === 1) return 'نشط أمس';
-    if (diffDays < 7) return `نشط منذ ${diffDays} يوم`;
-    return `آخر ظهور ${date.toLocaleDateString('ar-EG')}`;
-};
-
-// ── User Card ─────────────────────────────────────────────────────────────────
 const UserCard = ({ user, index, onDelete, lastUserRef, isMobile }) => {
-    const isOnline = isUserOnline(user);
 
     return (
         <motion.div
@@ -349,22 +318,11 @@ const UserCard = ({ user, index, onDelete, lastUserRef, isMobile }) => {
                         <h3 style={{ fontSize: isMobile ? '0.95rem' : '1.15rem', fontWeight: '800', color: '#fff', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {user.name || 'مستخدم مجهول'}
                         </h3>
-                        {/* Glowing Online/Offline Dot */}
-                        <span style={{
-                            width: '9px', height: '9px', borderRadius: '50%',
-                            background: isOnline ? '#10b981' : '#6b7280',
-                            boxShadow: isOnline ? '0 0 10px #10b981' : 'none',
-                            display: 'inline-block',
-                            flexShrink: 0
-                        }} title={isOnline ? 'متصل الآن' : 'غير متصل'} />
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                         <Shield size={10} color="var(--primary)" />
                         <span style={{ fontSize: '0.68rem', color: 'var(--primary)', fontWeight: '800' }}>
                             #{user.id.substring(0, 8).toUpperCase()}
-                        </span>
-                        <span style={{ fontSize: '0.68rem', color: isOnline ? '#10b981' : 'rgba(255,255,255,0.4)', fontWeight: isOnline ? '750' : 'normal' }}>
-                            • {isOnline ? 'متصل الآن' : getLastSeenText(user.last_seen)}
                         </span>
                     </div>
                 </div>

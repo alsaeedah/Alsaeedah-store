@@ -36,6 +36,7 @@ const DashboardLayout = ({ children }) => {
     const location = useLocation();
     const user = useAuthStore(state => state.user);
     const logout = useAuthStore(state => state.logout);
+    const hasPermission = useAuthStore(state => state.hasPermission);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [pendingCount, setPendingCount] = useState(0);
     const notifiedOrdersRef = useRef(new Set());
@@ -73,7 +74,7 @@ const DashboardLayout = ({ children }) => {
 
     // FCM foreground notification listener
     useEffect(() => {
-        const hasOrdersPermission = user?.role === 'super_admin' || user?.permissions?.orders;
+        const hasOrdersPermission = hasPermission('orders');
         if (!hasOrdersPermission) return;
 
         const unsubscribe = listenForForegroundMessages(({ orderId, orderNumber, title, body }) => {
@@ -94,7 +95,7 @@ const DashboardLayout = ({ children }) => {
     };
 
     useEffect(() => {
-        const hasOrdersPermission = user?.role === 'super_admin' || user?.permissions?.orders;
+        const hasOrdersPermission = hasPermission('orders');
         if (!hasOrdersPermission) return;
 
         fetchPendingCount();
@@ -123,24 +124,31 @@ const DashboardLayout = ({ children }) => {
 
     const menuItems = [];
 
+    // Home is typically accessible by everyone who can log in, or we can check a base permission.
+    // However, if we want only super_admin to see the home dashboard (stats), we keep it as super_admin, 
+    // or maybe everyone can see it? The PRD doesn't specify Home restrictions. I'll leave home as is or change to user
+    // Since previous logic was `if (user?.role === 'super_admin')`, I'll keep it as super_admin for home.
     if (user?.role === 'super_admin') {
         menuItems.push({ path: '/', label: 'الرئيسية', icon: LayoutDashboard });
     }
 
-    if (user?.role === 'super_admin' || user?.permissions?.products) {
+    if (hasPermission('products')) {
         menuItems.push({ path: '/products', label: 'المنتجات', icon: ShoppingBag });
     }
 
-    if (user?.role === 'super_admin' || user?.permissions?.orders) {
+    if (hasPermission('orders')) {
         menuItems.push({ path: '/orders', label: 'الطلبات', icon: ShoppingCart, badge: pendingCount > 0 ? pendingCount : null });
     }
 
-    if (user?.role === 'super_admin' || user?.permissions?.users) {
+    if (hasPermission('users')) {
         menuItems.push({ path: '/users', label: 'المستخدمين', icon: Users });
     }
 
-    if (user?.role === 'super_admin') {
+    if (hasPermission('managers')) {
         menuItems.push({ path: '/managers', label: 'المدراء', icon: Shield });
+    }
+    
+    if (hasPermission('settings')) {
         menuItems.push({ path: '/settings', label: 'الإعدادات', icon: SettingsIcon });
     }
 

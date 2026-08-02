@@ -18,34 +18,6 @@ const validatePassword = (pwd) => {
     return null;
 };
 
-// ── Connection Status Helpers ──────────────────────────────────────────────────
-const isManagerOnline = (manager) => {
-    if (manager.role === 'super_admin') return true; // Super admin currently viewing is always online
-    if (!manager.last_seen) return false;
-    
-    // Active within 2 minutes
-    const lastSeenTime = new Date(manager.last_seen).getTime();
-    const now = new Date().getTime();
-    return (now - lastSeenTime) < 120000;
-};
-
-const getLastActiveText = (lastSeen) => {
-    if (!lastSeen) return 'غير متصل';
-    const date = new Date(lastSeen);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 1) return 'نشط منذ ثوانٍ';
-    if (diffMins < 60) return `نشط منذ ${diffMins} د`;
-    if (diffHours < 24) return `نشط منذ ${diffHours} س`;
-    if (diffDays === 1) return 'نشط أمس';
-    if (diffDays < 7) return `نشط منذ ${diffDays} يوم`;
-    return `آخر ظهور ${date.toLocaleDateString('ar-EG')}`;
-};
-
 // ── Add Manager Modal ─────────────────────────────────────────────────────────
 const AddManagerModal = ({ onClose, onSuccess }) => {
     const user = useAuthStore(state => state.user);
@@ -115,9 +87,7 @@ const AddManagerModal = ({ onClose, onSuccess }) => {
                 permissions: formData.permissions,
                 created_by: user.email,
                 is_active: true,
-                created_at: new Date().toISOString(),
-                is_online: false,
-                last_seen: null
+                created_at: new Date().toISOString()
             });
             
             await signOut(secondaryAuth);
@@ -615,7 +585,6 @@ const EditManagerModal = ({ manager, onClose, onSuccess }) => {
 
 // ── Manager Card Component ──────────────────────────────────────────────────
 const ManagerCard = ({ manager, index, isMobile, onEdit, onDelete, onToggleActive }) => {
-    const isOnline = isManagerOnline(manager);
     const isSuper = manager.role === 'super_admin';
 
     // Build perm list
@@ -685,22 +654,11 @@ const ManagerCard = ({ manager, index, isMobile, onEdit, onDelete, onToggleActiv
                         <h3 style={{ fontSize: isMobile ? '0.95rem' : '1.15rem', fontWeight: '800', color: '#fff', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {manager.name}
                         </h3>
-                        {/* Glowing Connection Dot */}
-                        <span style={{
-                            width: '9px', height: '9px', borderRadius: '50%',
-                            background: isOnline ? '#10b981' : '#6b7280',
-                            boxShadow: isOnline ? '0 0 10px #10b981' : 'none',
-                            display: 'inline-block',
-                            flexShrink: 0
-                        }} title={isOnline ? 'متصل الآن' : 'غير متصل'} />
                     </div>
                     
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                         <span style={{ fontSize: '0.68rem', color: isSuper ? '#d4af37' : 'var(--primary)', fontWeight: '800' }}>
                             {isSuper ? 'المالك الأساسي' : `#MNG-${manager.id.substring(0, 5).toUpperCase()}`}
-                        </span>
-                        <span style={{ fontSize: '0.68rem', color: isOnline ? '#10b981' : 'rgba(255,255,255,0.4)', fontWeight: isOnline ? '750' : 'normal' }}>
-                            • {isOnline ? 'متصل الآن' : getLastActiveText(manager.last_seen)}
                         </span>
                     </div>
                 </div>
@@ -906,8 +864,7 @@ const Managers = () => {
         name: 'المدير العام (المالك)',
         email: import.meta.env.VITE_ADMIN_EMAIL || 'alsaeedah8@gmail.com',
         role: 'super_admin',
-        is_active: true,
-        last_seen: new Date().toISOString()
+        is_active: true
     };
 
     const allManagers = [superAdminAccount, ...managersList];

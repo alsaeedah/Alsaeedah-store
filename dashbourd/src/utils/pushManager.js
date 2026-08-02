@@ -41,7 +41,6 @@ async function saveTokenToDatabase(managerId, token) {
       platform:     "web",
       app_version:  import.meta.env.VITE_APP_VERSION || "1.0.0",
       updated_at:   new Date().toISOString(),
-      last_seen_at: new Date().toISOString(),
       active:       true,
     }, { merge: true });
     console.log("[FCM] Token saved/updated in Firestore manager_push_tokens.");

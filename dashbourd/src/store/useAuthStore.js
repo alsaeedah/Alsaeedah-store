@@ -7,7 +7,7 @@ import {
     onIdTokenChanged,
     signOut
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { setupFCMNotifications } from '../utils/pushManager';
 
 const useAuthStore = create(
@@ -102,6 +102,39 @@ const useAuthStore = create(
                 }
             },
             
+            refreshPermissions: async () => {
+                const uid = get().user?.uid;
+                if (!uid) return;
+                
+                try {
+                    const docSnap = await getDoc(doc(db, 'managers', uid));
+                    if (!docSnap.exists() || docSnap.data().is_active === false) {
+                        await get().logout();
+                        return;
+                    }
+                    
+                    const data = docSnap.data();
+                    set((state) => ({
+                        user: {
+                            ...state.user,
+                            email: data.email,
+                            name: data.name,
+                            role: data.role || 'manager',
+                            permissions: data.permissions || {},
+                        }
+                    }));
+                } catch (err) {
+                    console.error('Error refreshing permissions:', err);
+                }
+            },
+            
+            hasPermission: (permission) => {
+                const user = get().user;
+                if (!user) return false;
+                if (user.role === 'super_admin') return true;
+                return !!user.permissions?.[permission];
+            },
+
             // Initialization for listeners
             init: () => {
                 const unsubscribeAuth = onIdTokenChanged(auth, async (firebaseUser) => {
@@ -112,25 +145,24 @@ const useAuthStore = create(
                             const role = tokenResult.claims.role;
                             const permissions = tokenResult.claims.permissions || {};
                             
-                            // Listen to Firestore for metadata (name, active status)
-                            const unsubFirestore = onSnapshot(doc(db, 'managers', uid), async (docSnap) => {
-                                if (!docSnap.exists() || docSnap.data().is_active === false) {
-                                    await get().logout();
-                                    return;
-                                }
-                                
-                                const data = docSnap.data();
-                                set({
-                                    user: {
-                                        id: uid,
-                                        uid: uid,
-                                        email: data.email,
-                                        name: data.name,
-                                        role: role || data.role || 'manager',
-                                        permissions: Object.keys(permissions).length > 0 ? permissions : (data.permissions || {}),
-                                    },
-                                    loading: false
-                                });
+                            // Load permissions once, do not use onSnapshot
+                            const docSnap = await getDoc(doc(db, 'managers', uid));
+                            if (!docSnap.exists() || docSnap.data().is_active === false) {
+                                await get().logout();
+                                return;
+                            }
+                            
+                            const data = docSnap.data();
+                            set({
+                                user: {
+                                    id: uid,
+                                    uid: uid,
+                                    email: data.email,
+                                    name: data.name,
+                                    role: role || data.role || 'manager',
+                                    permissions: Object.keys(permissions).length > 0 ? permissions : (data.permissions || {}),
+                                },
+                                loading: false
                             });
                         } catch (err) {
                             console.error('Error fetching token claims:', err);

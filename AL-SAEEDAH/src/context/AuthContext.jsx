@@ -143,16 +143,7 @@ export const AuthProvider = ({ children, openAuthOnMount = false, onAuthMountHan
 
     const logout = async () => {
         showLoader('جاري تسجيل الخروج...');
-        if (currentUser?.uid) {
-            try {
-                await updateDoc(doc(db, 'users', currentUser.uid), { 
-                    is_online: false, 
-                    last_seen: new Date().toISOString() 
-                });
-            } catch (err) {
-                console.error('Offline update on logout failed:', err);
-            }
-        }
+
         await signOut(auth);
         setCurrentUser(null);
         localStorage.removeItem('time-tick-user');
@@ -212,44 +203,7 @@ export const AuthProvider = ({ children, openAuthOnMount = false, onAuthMountHan
         }
     };
 
-    // ONLINE STATUS TRACKING
-    useEffect(() => {
-        if (!currentUser?.uid) return;
 
-        const updateOnlineStatus = async (online) => {
-            try {
-                await updateDoc(doc(db, 'users', currentUser.uid), {
-                    is_online: online,
-                    last_seen: new Date().toISOString()
-                });
-            } catch (err) {
-                console.error('Failed to update online status:', err);
-            }
-        };
-
-        updateOnlineStatus(true);
-        const heartbeat = setInterval(() => updateOnlineStatus(true), 45000);
-
-        const handleVisibilityChange = () => updateOnlineStatus(document.visibilityState === 'visible');
-        
-        let appStateListener;
-        if (Capacitor.isNativePlatform()) {
-            appStateListener = CapApp.addListener('appStateChange', (state) => {
-                updateOnlineStatus(state.isActive);
-            });
-        }
-
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-
-        return () => {
-            clearInterval(heartbeat);
-            updateOnlineStatus(false);
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-            if (appStateListener) {
-                appStateListener.then(l => l.remove());
-            }
-        };
-    }, [currentUser?.uid]);
 
     const openAuthModal = () => setIsAuthModalOpen(true);
     const closeAuthModal = () => setIsAuthModalOpen(false);
