@@ -41,8 +41,20 @@ export const AuthProvider = ({ children, openAuthOnMount = false, onAuthMountHan
         }
 
         let unsubscribeUserDoc = null;
+        let isAuthResolved = false;
+
+        // Fallback timeout to prevent infinite loading if Firebase hangs
+        const authTimeout = setTimeout(() => {
+            if (!isAuthResolved) {
+                console.warn('[Startup] Authentication timed out after 5s. Forcing app to load.');
+                setLoading(false);
+            }
+        }, 5000);
 
         const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+            isAuthResolved = true;
+            clearTimeout(authTimeout);
+            
             if (user) {
                 const baseUser = {
                     uid: user.uid,
@@ -102,6 +114,7 @@ export const AuthProvider = ({ children, openAuthOnMount = false, onAuthMountHan
         });
 
         return () => {
+            clearTimeout(authTimeout);
             unsubscribeAuth();
             if (unsubscribeUserDoc) unsubscribeUserDoc();
         };
