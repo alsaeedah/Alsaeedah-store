@@ -49,7 +49,7 @@ import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Lenis from 'lenis';
-import { NotificationService } from './notifications';
+import { NotificationService, EVENTS } from './notifications';
 
 // Page transition variants
 const pageVariants = {
@@ -310,7 +310,13 @@ function App() {
       StatusBar.setBackgroundColor({ color: '#00000000' });
 
       // Initialize notification infrastructure (fire-and-forget)
-      NotificationService.initialize();
+      NotificationService.initialize().then(() => {
+        const hasLaunched = localStorage.getItem('app_first_launch_completed');
+        if (!hasLaunched) {
+          localStorage.setItem('app_first_launch_completed', 'true');
+          NotificationService.show(EVENTS.FIRST_LAUNCH);
+        }
+      });
     }
   }, []);
 
