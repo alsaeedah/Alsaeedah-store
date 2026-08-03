@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'dashbourd/**'
+      - 'shared/**'
       - '.github/workflows/dashboard-android-build.yml'
   workflow_dispatch:
 

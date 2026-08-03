@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'AL-SAEEDAH/**'
+      - 'shared/**'
       - '.github/workflows/store-android-build.yml'
   workflow_dispatch:
 
