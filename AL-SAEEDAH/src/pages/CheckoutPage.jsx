@@ -5,6 +5,7 @@ import { useLoader } from '../context/LoaderContext';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShoppingBag, CheckCircle2, ArrowRight, CreditCard, Banknote, ChevronLeft, Package } from 'lucide-react';
+import { NotificationService, EVENTS } from '../notifications';
 import logo from '../assets/logo.png';
 
 const STEPS = [
@@ -44,7 +45,15 @@ export default function CheckoutPage() {
         const result = await prepareWhatsAppCheckout(selectedPayment);
         hideLoader();
         if (result && result.success) {
-            setOrderNumber(result.invoiceId || '');
+            const invoiceId = result.invoiceId || '';
+            setOrderNumber(invoiceId);
+            
+            // Fire order notifications
+            NotificationService.show(EVENTS.ORDER_SUBMITTED);
+            if (invoiceId) {
+                NotificationService.show(EVENTS.ORDER_NUMBER, { orderNumber: invoiceId });
+            }
+            
             clearCart();
             setStep(4);
         }

@@ -12,8 +12,11 @@
  * - Wrapped in try/catch — never throws to the caller
  * - Logged for debugging
  *
- * Future phases plug into this same API:
- * - Phase 2: show(event, data) for instant notifications
+ * Phase 2 activates the first real notifications:
+ * - show(event, data) for instant local notifications
+ * - ensurePermission() auto-requests on first notification attempt
+ *
+ * Future phases:
  * - Phase 3: schedule(event, data, date) for reminders
  * - Phase 4: cancel/update lifecycle management
  * - Phase 5: channels, sounds, deep links
@@ -28,6 +31,7 @@ import * as Storage from './NotificationStorage';
 import * as Logger from './NotificationLogger';
 
 let _initialized = false;
+let _permissionRequested = false;
 
 // ─── Platform Guard ─────────────────────────────────────────────
 
@@ -88,30 +92,63 @@ export function isInitialized() {
   return _initialized;
 }
 
+// ─── Permission Helper ──────────────────────────────────────────
+
+/**
+ * Ensure notification permission is granted.
+ * On first call, requests permission from the user.
+ * On subsequent calls, uses cached result to avoid spamming dialogs.
+ *
+ * @returns {Promise<boolean>} true if permission is granted.
+ */
+export async function ensurePermission() {
+  if (!isNative()) return true;
+
+  try {
+    // Check current status first
+    const currentStatus = await Permissions.checkPermission();
+    if (currentStatus === 'granted') return true;
+
+    // Only request once per app session to avoid spamming
+    if (_permissionRequested) {
+      Logger.log('Permission', 'Already requested this session — skipping');
+      return false;
+    }
+
+    _permissionRequested = true;
+    const result = await Permissions.requestPermission();
+    return result === 'granted';
+  } catch (err) {
+    Logger.error('EnsurePermission', err);
+    return false;
+  }
+}
+
 // ─── Notifications ──────────────────────────────────────────────
 
 /**
  * Show a notification immediately.
+ * Automatically requests permission on first use.
  *
  * @param {Object} event - An event definition from NotificationEvents.
  * @param {Object} [data] - Template replacement data (e.g. { name: 'أحمد' }).
  * @returns {Promise<boolean>} true if successful.
  *
  * @example
- * import { NotificationService } from './notifications';
- * import { LOGIN_SUCCESS } from './notifications/NotificationEvents';
+ * import { NotificationService, LOGIN_SUCCESS } from './notifications';
  * await NotificationService.show(LOGIN_SUCCESS, { name: user.displayName });
  */
 export async function show(event, data = {}) {
   if (!isNative()) return false;
 
   try {
-    const granted = await Permissions.isPermissionGranted();
+    const granted = await ensurePermission();
     if (!granted) {
       Logger.warn('Show', 'Permission not granted — notification skipped');
       return false;
     }
 
+    await Storage.setLastNotificationTimestamp(Date.now());
     return await Scheduler.scheduleImmediate(event, data);
   } catch (err) {
     Logger.error('Show', err);
@@ -131,7 +168,7 @@ export async function schedule(event, data = {}, date) {
   if (!isNative()) return false;
 
   try {
-    const granted = await Permissions.isPermissionGranted();
+    const granted = await ensurePermission();
     if (!granted) {
       Logger.warn('Schedule', 'Permission not granted — schedule skipped');
       return false;
@@ -209,9 +246,8 @@ export async function checkPermission() {
 
 /**
  * Request notification permission from the user.
- * Should only be called when the app actually needs to show a notification.
- *
- * NOTE: Not used in Phase 1. Will be called in Phase 2.
+ * Prefer using ensurePermission() which handles caching.
+ * This method always prompts regardless of prior requests.
  *
  * @returns {Promise<string>} 'granted' | 'denied'
  */

@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import OnboardingFlow from './OnboardingFlow';
+import { NotificationService, EVENTS } from '../notifications';
 
 /**
  * OnboardingGate
@@ -30,6 +31,7 @@ export default function OnboardingGate({ children, onLogin }) {
   const handleComplete = useCallback((openLogin = false) => {
     try {
       localStorage.setItem('onboardingCompleted', 'true');
+      NotificationService.show(EVENTS.FIRST_LAUNCH);
     } catch {
       // ignore if localStorage unavailable
     }

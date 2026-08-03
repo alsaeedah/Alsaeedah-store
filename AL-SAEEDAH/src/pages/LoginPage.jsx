@@ -6,6 +6,7 @@ import {
   Phone, Lock, Eye, EyeOff, LogIn, MessageCircle,
   ShieldCheck, Zap, Star, Sun, Moon, X, CheckCircle2
 } from 'lucide-react';
+import { NotificationService, EVENTS } from '../notifications';
 import './LoginPage.css';
 
 // ─── CONFIG ────────────────────────────────────────────────────────────────
@@ -204,6 +205,8 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       await login(phone, password);
+      // Fire login success notification
+      NotificationService.show(EVENTS.LOGIN_SUCCESS, { name: phone });
     } catch (err) {
       setError(err.message || 'حدث خطأ أثناء تسجيل الدخول');
       triggerShake();

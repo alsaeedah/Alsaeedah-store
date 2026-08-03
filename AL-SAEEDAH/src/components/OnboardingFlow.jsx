@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, LogIn, UserCircle2 } from 'lucide-react';
+import { NotificationService, EVENTS } from '../notifications';
 import logo from '../assets/logo.png';
 import onboardingSlides from '../data/onboardingData';
 import './Onboarding.css';
@@ -79,6 +80,7 @@ export default function OnboardingFlow({ onComplete, onLogin }) {
   /* ── Mark onboarding completed ── */
   const complete = useCallback((openLogin = false) => {
     localStorage.setItem('onboardingCompleted', 'true');
+    NotificationService.show(EVENTS.FIRST_LAUNCH);
     if (openLogin) {
       onLogin?.();  // Trigger the AuthModal via parent
     }
