@@ -1,6 +1,6 @@
 let Preferences = null;
 
-const getPreferences = async () => {
+const ensurePreferences = async () => {
   if (!Preferences) {
     try {
       const module = await import('@capacitor/preferences');
@@ -10,14 +10,13 @@ const getPreferences = async () => {
       throw e;
     }
   }
-  return Preferences;
 };
 
 export const capacitorStorage = {
   get: async ({ key }) => {
     try {
-      const prefs = await getPreferences();
-      return await prefs.get({ key });
+      await ensurePreferences();
+      return await Preferences.get({ key });
     } catch (e) {
       console.error('[CapacitorStorage] Get failed:', e);
       return { value: null };
@@ -25,24 +24,24 @@ export const capacitorStorage = {
   },
   set: async ({ key, value }) => {
     try {
-      const prefs = await getPreferences();
-      await prefs.set({ key, value });
+      await ensurePreferences();
+      await Preferences.set({ key, value });
     } catch (e) {
       console.error('[CapacitorStorage] Set failed:', e);
     }
   },
   remove: async ({ key }) => {
     try {
-      const prefs = await getPreferences();
-      await prefs.remove({ key });
+      await ensurePreferences();
+      await Preferences.remove({ key });
     } catch (e) {
       console.error('[CapacitorStorage] Remove failed:', e);
     }
   },
   clear: async () => {
     try {
-      const prefs = await getPreferences();
-      await prefs.clear();
+      await ensurePreferences();
+      await Preferences.clear();
     } catch (e) {
       console.error('[CapacitorStorage] Clear failed:', e);
     }
