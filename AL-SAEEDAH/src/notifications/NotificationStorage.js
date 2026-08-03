@@ -96,3 +96,23 @@ export async function getScheduledReminders() {
 export async function setScheduledReminders(reminders) {
   return set(STORAGE_KEYS.SCHEDULED_REMINDERS, reminders);
 }
+
+/** @returns {Promise<number|null>} Unix timestamp */
+export async function getLastActivity() {
+  return get(STORAGE_KEYS.LAST_ACTIVITY);
+}
+
+/** @param {number} timestamp */
+export async function setLastActivity(timestamp) {
+  return set(STORAGE_KEYS.LAST_ACTIVITY, timestamp);
+}
+
+/** @returns {Promise<string|null>} */
+export async function getReminderStatus() {
+  return get(STORAGE_KEYS.REMINDER_STATUS);
+}
+
+/** @param {string} status */
+export async function setReminderStatus(status) {
+  return set(STORAGE_KEYS.REMINDER_STATUS, status);
+}

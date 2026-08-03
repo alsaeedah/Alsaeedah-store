@@ -168,9 +168,9 @@ export async function schedule(event, data = {}, date) {
   if (!isNative()) return false;
 
   try {
-    const granted = await ensurePermission();
-    if (!granted) {
-      Logger.warn('Schedule', 'Permission not granted — schedule skipped');
+    const status = await checkPermission();
+    if (status !== 'granted') {
+      Logger.warn('Schedule', 'Permission not granted — schedule skipped silently');
       return false;
     }
 

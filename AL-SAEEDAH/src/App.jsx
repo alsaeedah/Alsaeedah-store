@@ -49,7 +49,7 @@ import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Lenis from 'lenis';
-import { NotificationService, EVENTS } from './notifications';
+import { NotificationService, EVENTS, ActivityTracker, ReminderManager } from './notifications';
 
 // Page transition variants
 const pageVariants = {
@@ -295,6 +295,14 @@ function AuthGate({ children }) {
   const { currentUser } = useAuth();
   const location = useLocation();
   
+  useEffect(() => {
+    if (currentUser && Capacitor.isNativePlatform()) {
+      ActivityTracker.recordActivity().then(() => {
+        ReminderManager.resetReminderSchedule();
+      });
+    }
+  }, [currentUser]);
+
   const publicPaths = ['/download', '/reset-password'];
   if (!currentUser && !publicPaths.includes(location.pathname)) {
     return <LoginPage />;

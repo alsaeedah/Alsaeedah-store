@@ -71,6 +71,8 @@ export const STORAGE_KEYS = {
   LAST_NOTIFICATION_TIMESTAMP: 'notification_last_timestamp',
   SCHEDULED_REMINDERS: 'notification_scheduled_reminders',
   INITIALIZED: 'notification_initialized',
+  LAST_ACTIVITY: 'notification_last_activity',
+  REMINDER_STATUS: 'notification_reminder_status',
 };
 
 // ─── Default Timing (milliseconds) ─────────────────────────────

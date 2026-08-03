@@ -26,3 +26,8 @@ export {
 
 // Constants (for advanced usage)
 export { CHANNELS, ID_RANGES, STORAGE_KEYS, TIMING } from './NotificationConstants';
+export { REMINDERS } from './ReminderConstants';
+
+// Phase 3 Modules
+export * as ActivityTracker from './ActivityTracker';
+export * as ReminderManager from './ReminderManager';
