@@ -49,6 +49,7 @@ import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Lenis from 'lenis';
+import { NotificationService } from './notifications';
 
 // Page transition variants
 const pageVariants = {
@@ -307,6 +308,9 @@ function App() {
     if (Capacitor.isNativePlatform()) {
       StatusBar.setOverlaysWebView({ overlay: true });
       StatusBar.setBackgroundColor({ color: '#00000000' });
+
+      // Initialize notification infrastructure (fire-and-forget)
+      NotificationService.initialize();
     }
   }, []);
 

@@ -21,8 +21,4 @@ try {
   throw error;
 }
 
-// Delay hiding the native splash screen so the onboarding welcome screen
-// has time to paint its first frame — preventing any black screen flash.
-if (Capacitor.isNativePlatform()) {
-  setTimeout(() => SplashScreen.hide(), 300);
-}
+

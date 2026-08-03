@@ -18,6 +18,11 @@
       "style": "LIGHT",
       "backgroundColor": "#00000000",
       "overlaysWebView": true
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_icon_config_sample",
+      "iconColor": "#d4af37",
+      "sound": "default"
     }
   }
 }

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
 import { auth, db } from '../firebase/config';
+import { cacheSession, clearCachedSession } from '@shared/startup/cache';
 import { 
     signInWithEmailAndPassword, 
     createUserWithEmailAndPassword, 
@@ -11,9 +11,8 @@ import { doc, getDoc, setDoc, onSnapshot, updateDoc, serverTimestamp } from 'fir
 import { setupFCMNotifications } from '../utils/pushManager';
 
 const useAuthStore = create(
-    persist(
-        (set, get) => ({
-            user: null,
+    (set, get) => ({
+        user: null,
             loading: true,
 
             // Auth Actions
@@ -64,13 +63,34 @@ const useAuthStore = create(
 
                     const uid = userCredential.user.uid;
                     
-                    // Let the onIdTokenChanged listener handle setting the user state based on claims
-                    // But we can eagerly check if they are active in firestore
+                    // Fetch profile to resolve role and permissions immediately
                     const docSnap = await getDoc(doc(db, 'managers', uid));
-                    if (!docSnap.exists() || !docSnap.data().is_active) {
+                    if (!docSnap.exists()) {
                         await signOut(auth);
-                        throw new Error('الحساب غير موجود أو معطل');
+                        throw new Error('هذا الحساب غير موجود');
                     }
+                    const data = docSnap.data();
+                    if (!data.is_active) {
+                        await signOut(auth);
+                        throw new Error('هذا الحساب معطل');
+                    }
+
+                    const tokenResult = await userCredential.user.getIdTokenResult(true);
+
+                    const sessionData = {
+                        uid: userCredential.user.uid,
+                        email: userCredential.user.email || data.email,
+                        name: data.name || userCredential.user.displayName || 'مستخدم',
+                        image: data.profile_image_url || userCredential.user.photoURL || '',
+                        role: tokenResult.claims.role || data.role || 'manager',
+                        permissions: Object.keys(tokenResult.claims.permissions || {}).length > 0 
+                                       ? tokenResult.claims.permissions 
+                                       : (data.permissions || {})
+                    };
+
+                    // Unified cache update and UI sync
+                    await cacheSession(sessionData);
+                    get().setSession(sessionData);
 
                     setupFCMNotifications(uid).catch(err => console.warn('[FCM] registration failed:', err));
                     return true;
@@ -82,6 +102,7 @@ const useAuthStore = create(
 
             logout: async () => {
                 await signOut(auth);
+                await clearCachedSession();
                 set({ user: null });
             },
 
@@ -135,55 +156,12 @@ const useAuthStore = create(
                 return !!user.permissions?.[permission];
             },
 
-            // Initialization for listeners
-            init: () => {
-                const unsubscribeAuth = onIdTokenChanged(auth, async (firebaseUser) => {
-                    if (firebaseUser) {
-                        try {
-                            const tokenResult = await firebaseUser.getIdTokenResult();
-                            const uid = firebaseUser.uid;
-                            const role = tokenResult.claims.role;
-                            const permissions = tokenResult.claims.permissions || {};
-                            
-                            // Load permissions once, do not use onSnapshot
-                            const docSnap = await getDoc(doc(db, 'managers', uid));
-                            if (!docSnap.exists() || docSnap.data().is_active === false) {
-                                await get().logout();
-                                return;
-                            }
-                            
-                            const data = docSnap.data();
-                            set({
-                                user: {
-                                    id: uid,
-                                    uid: uid,
-                                    email: data.email,
-                                    name: data.name,
-                                    role: role || data.role || 'manager',
-                                    permissions: Object.keys(permissions).length > 0 ? permissions : (data.permissions || {}),
-                                },
-                                loading: false
-                            });
-                        } catch (err) {
-                            console.error('Error fetching token claims:', err);
-                            set({ loading: false });
-                        }
-                    } else {
-                        set({ user: null, loading: false });
-                    }
-                });
-                return unsubscribeAuth;
-            }
-        }),
-        {
-            name: 'dash-auth-storage',
-            storage: createJSONStorage(() => localStorage),
-            partialize: (state) => ({ user: state.user }),
-        }
-    )
+            // State updates are handled by StartupEngine now
+            setSession: (session) => {
+                set({ user: session, loading: false });
+            },
+            setLoading: (isLoading) => set({ loading: isLoading })
+    })
 );
-
-// Start listening immediately
-useAuthStore.getState().init();
 
 export default useAuthStore;

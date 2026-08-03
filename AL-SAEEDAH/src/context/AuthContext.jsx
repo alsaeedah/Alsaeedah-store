@@ -2,10 +2,10 @@ import { createContext, useState, useContext, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase/config';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, updatePassword as updateFirebasePassword } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { useLoader } from './LoaderContext';
-import { App as CapApp } from '@capacitor/app';
-import { Capacitor } from '@capacitor/core';
+import { StartupProvider } from '@shared/startup/StartupProvider';
+import { clearCachedSession } from '@shared/startup/cache';
 
 const AuthContext = createContext();
 
@@ -35,89 +35,8 @@ export const AuthProvider = ({ children, openAuthOnMount = false, onAuthMountHan
     }, [openAuthOnMount, onAuthMountHandled]);
 
     useEffect(() => {
-        const savedUser = localStorage.getItem('time-tick-user');
-        if (savedUser) {
-            setCurrentUser(JSON.parse(savedUser));
-        }
-
-        let unsubscribeUserDoc = null;
-        let isAuthResolved = false;
-
-        // Fallback timeout to prevent infinite loading if Firebase hangs
-        const authTimeout = setTimeout(() => {
-            if (!isAuthResolved) {
-                console.warn('[Startup] Authentication timed out after 5s. Forcing app to load.');
-                setLoading(false);
-            }
-        }, 5000);
-
-        const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-            isAuthResolved = true;
-            clearTimeout(authTimeout);
-            
-            if (user) {
-                const baseUser = {
-                    uid: user.uid,
-                    name: user.displayName || 'مستخدم',
-                    image: user.photoURL || '',
-                    email: user.email
-                };
-
-                // Real-time listener for user document in Firestore
-                unsubscribeUserDoc = onSnapshot(doc(db, 'users', user.uid), async (docSnap) => {
-                    if (docSnap.exists()) {
-                        const userData = docSnap.data();
-                        
-                        if (userData.is_active === false) {
-                            alert('تم تعطيل حسابك. تواصل مع الإدارة.');
-                            await signOut(auth);
-                            setCurrentUser(null);
-                            localStorage.removeItem('time-tick-user');
-                            return;
-                        }
-
-                        const hydratedUser = {
-                            ...baseUser,
-                            name: userData.name || baseUser.name,
-                            phone: userData.phone || '',
-                            image: userData.profile_image_url || baseUser.image,
-                            whatsapp: userData.whatsapp || '',
-                            governorate: userData.governorate || '',
-                            district: userData.district || '',
-                            neighborhood: userData.neighborhood || '',
-                        };
-                        
-                        localStorage.setItem('time-tick-user', JSON.stringify(hydratedUser));
-                        setCurrentUser(hydratedUser);
-                    } else {
-                        // Document deleted by admin
-                        alert('تم حذف حسابك بواسطة الإدارة.');
-                        await signOut(auth);
-                        setCurrentUser(null);
-                        localStorage.removeItem('time-tick-user');
-                        window.location.href = '/';
-                    }
-                }, (error) => {
-                    console.error("User doc listener error:", error);
-                });
-
-                setIsAuthModalOpen(false);
-            } else {
-                setCurrentUser(null);
-                localStorage.removeItem('time-tick-user');
-                if (unsubscribeUserDoc) {
-                    unsubscribeUserDoc();
-                    unsubscribeUserDoc = null;
-                }
-            }
-            setLoading(false);
-        });
-
-        return () => {
-            clearTimeout(authTimeout);
-            unsubscribeAuth();
-            if (unsubscribeUserDoc) unsubscribeUserDoc();
-        };
+        // Any auth context specific initialization if needed
+        // (StartupProvider handles auth state resolution now)
     }, []);
 
     // Helper to extract phone from virtual email
@@ -158,6 +77,7 @@ export const AuthProvider = ({ children, openAuthOnMount = false, onAuthMountHan
         showLoader('جاري تسجيل الخروج...');
 
         await signOut(auth);
+        await clearCachedSession();
         setCurrentUser(null);
         localStorage.removeItem('time-tick-user');
         setIsLogoutConfirmOpen(false);
@@ -249,7 +169,31 @@ export const AuthProvider = ({ children, openAuthOnMount = false, onAuthMountHan
             closeProfileModal,
             openProfilePage
         }}>
-            {!loading && children}
+            <StartupProvider
+                auth={auth}
+                db={db}
+                appName="store"
+                onSessionResolved={(session) => {
+                    setCurrentUser(session);
+                    if (session) {
+                        localStorage.setItem('time-tick-user', JSON.stringify(session));
+                        setIsAuthModalOpen(false);
+                    }
+                    setLoading(false);
+                }}
+                onSessionUpdated={(session) => {
+                    setCurrentUser(session);
+                    if (session) {
+                        localStorage.setItem('time-tick-user', JSON.stringify(session));
+                    }
+                }}
+                onForceLogout={() => {
+                    setCurrentUser(null);
+                    localStorage.removeItem('time-tick-user');
+                }}
+            >
+                {!loading && children}
+            </StartupProvider>
         </AuthContext.Provider>
     );
 };
