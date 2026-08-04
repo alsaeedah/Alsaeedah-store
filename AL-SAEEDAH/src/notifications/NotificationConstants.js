@@ -28,7 +28,7 @@ export const CHANNELS = {
     id: 'reminders',
     name: 'التذكيرات',
     description: 'تذكيرات المتجر',
-    importance: 3,
+    importance: 4, // HIGH
   },
   PROMOTIONS: {
     id: 'promotions',
@@ -40,13 +40,13 @@ export const CHANNELS = {
     id: 'account',
     name: 'الحساب',
     description: 'إشعارات الحساب وتسجيل الدخول',
-    importance: 3,
+    importance: 4, // HIGH
   },
   SYSTEM: {
     id: 'system',
     name: 'النظام',
     description: 'إشعارات النظام',
-    importance: 4,
+    importance: 2, // LOW
   },
 };
 

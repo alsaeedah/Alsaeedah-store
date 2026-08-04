@@ -20,8 +20,8 @@
       "overlaysWebView": true
     },
     "LocalNotifications": {
-      "smallIcon": "ic_stat_icon_config_sample",
-      "iconColor": "#d4af37",
+      "smallIcon": "ic_stat_logo",
+      "iconColor": "#D4AF37",
       "sound": "default"
     }
   }

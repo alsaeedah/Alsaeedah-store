@@ -32,3 +32,6 @@ export { REMINDERS } from './ReminderConstants';
 export * as ActivityTracker from './ActivityTracker';
 export * as ReminderManager from './ReminderManager';
 export * as NotificationLifecycleManager from './NotificationLifecycleManager';
+
+// Phase 5 Modules
+export { default as NotificationNavigation } from './NotificationNavigation';

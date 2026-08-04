@@ -40,6 +40,7 @@ export async function scheduleImmediate(event, data = {}) {
       title: applyTemplate(event.title, data),
       body: applyTemplate(event.body, data),
       channelId: event.channel || CHANNELS.GENERAL.id,
+      extra: data,
     };
 
     await LocalNotifications.schedule({ notifications: [notification] });
@@ -66,6 +67,7 @@ export async function scheduleAt(event, data = {}, date) {
       body: applyTemplate(event.body, data),
       channelId: event.channel || CHANNELS.GENERAL.id,
       schedule: { at: date },
+      extra: data,
     };
 
     await LocalNotifications.schedule({ notifications: [notification] });

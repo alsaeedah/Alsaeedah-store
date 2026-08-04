@@ -86,9 +86,17 @@ export default function CheckoutPage() {
                 setOrderNumber(invoiceId);
                 
                 // Fire order notifications
-                NotificationService.show(EVENTS.ORDER_SUBMITTED);
+                NotificationService.show(EVENTS.ORDER_SUBMITTED, {
+                    type: "ORDER_CREATED",
+                    target: "order_history",
+                    orderNumber: invoiceId || ''
+                });
                 if (invoiceId) {
-                    NotificationService.show(EVENTS.ORDER_NUMBER, { orderNumber: invoiceId });
+                    NotificationService.show(EVENTS.ORDER_NUMBER, { 
+                        type: "ORDER_CREATED",
+                        target: "order_history",
+                        orderNumber: invoiceId 
+                    });
                 }
                 
                 setOrderStatus('clearing_cart');

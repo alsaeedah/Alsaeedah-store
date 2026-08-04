@@ -49,7 +49,7 @@ import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Lenis from 'lenis';
-import { NotificationService, EVENTS, ActivityTracker, ReminderManager } from './notifications';
+import { NotificationService, EVENTS, ActivityTracker, ReminderManager, NotificationNavigation } from './notifications';
 
 // Page transition variants
 const pageVariants = {
@@ -367,10 +367,11 @@ function App() {
                   <AuthGate>
                     <FavoritesProvider>
                       <VideoProvider>
-                        <CartProvider>
-                          <DeepLinkHandler />
-                          <BackButtonHandler />
-                          <ScrollLockManager />
+                          <CartProvider>
+                            <NotificationNavigation />
+                            <DeepLinkHandler />
+                            <BackButtonHandler />
+                            <ScrollLockManager />
                           <SEOHelper />
                           <div className="app-container">
                             <SystemBarsSync />
