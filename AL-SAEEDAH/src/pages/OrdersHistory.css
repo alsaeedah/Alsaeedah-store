@@ -1,0 +1,45 @@
+.orders-history-page {
+  font-family: var(--font-main);
+}
+
+.error-card {
+  text-align: center;
+  padding: 40px 20px;
+  background: rgba(239, 68, 68, 0.05);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.error-card h3 {
+  margin: 0;
+  color: #ef4444;
+  font-size: 1.2rem;
+  font-family: var(--font-heading);
+}
+
+.error-card p {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 0.95rem;
+}
+
+.load-more-btn {
+  transition: all 0.3s ease;
+}
+
+.load-more-btn:hover:not(:disabled) {
+  background: var(--bg-hover) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* Shimmer animation for skeletons */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%) skewX(-20deg);
+  }
+}

@@ -29,6 +29,8 @@ import * as Permissions from './NotificationPermissions';
 import * as Scheduler from './NotificationScheduler';
 import * as Storage from './NotificationStorage';
 import * as Logger from './NotificationLogger';
+import * as LifecycleManager from './NotificationLifecycleManager';
+import { STATUS } from './NotificationConstants';
 
 let _initialized = false;
 let _permissionRequested = false;
@@ -74,6 +76,9 @@ export async function initialize() {
 
     // Check current permission status (read-only, no dialog)
     const permissionStatus = await Permissions.checkPermission();
+
+    // Run cleanup async without blocking
+    LifecycleManager.cleanup().catch(err => Logger.error('Init.cleanup', err));
 
     _initialized = true;
     Logger.log('Init', `Initialized successfully. Permission: ${permissionStatus}`);
@@ -148,8 +153,19 @@ export async function show(event, data = {}) {
       return false;
     }
 
+    const registered = await LifecycleManager.register(event, data, STATUS.PENDING);
+    if (!registered) return false;
+
     await Storage.setLastNotificationTimestamp(Date.now());
-    return await Scheduler.scheduleImmediate(event, data);
+    const success = await Scheduler.scheduleImmediate(event, data);
+    
+    if (success) {
+      await LifecycleManager.updateStatus(event.id, STATUS.DELIVERED);
+    } else {
+      await LifecycleManager.updateStatus(event.id, STATUS.FAILED);
+    }
+    
+    return success;
   } catch (err) {
     Logger.error('Show', err);
     return false;
@@ -174,7 +190,18 @@ export async function schedule(event, data = {}, date) {
       return false;
     }
 
-    return await Scheduler.scheduleAt(event, data, date);
+    const registered = await LifecycleManager.register(event, data, STATUS.PENDING, date);
+    if (!registered) return false;
+
+    const success = await Scheduler.scheduleAt(event, data, date);
+    
+    if (success) {
+      await LifecycleManager.updateStatus(event.id, STATUS.SCHEDULED);
+    } else {
+      await LifecycleManager.updateStatus(event.id, STATUS.FAILED);
+    }
+
+    return success;
   } catch (err) {
     Logger.error('Schedule', err);
     return false;
@@ -190,7 +217,11 @@ export async function cancel(notificationId) {
   if (!isNative()) return false;
 
   try {
-    return await Scheduler.cancel(notificationId);
+    const success = await Scheduler.cancel(notificationId);
+    if (success) {
+      await LifecycleManager.cancel(notificationId);
+    }
+    return success;
   } catch (err) {
     Logger.error('Cancel', err);
     return false;
@@ -205,7 +236,11 @@ export async function cancelAll() {
   if (!isNative()) return false;
 
   try {
-    return await Scheduler.cancelAll();
+    const success = await Scheduler.cancelAll();
+    if (success) {
+      await LifecycleManager.cancelAll();
+    }
+    return success;
   } catch (err) {
     Logger.error('CancelAll', err);
     return false;

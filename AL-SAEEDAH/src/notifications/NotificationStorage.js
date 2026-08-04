@@ -116,3 +116,85 @@ export async function getReminderStatus() {
 export async function setReminderStatus(status) {
   return set(STORAGE_KEYS.REMINDER_STATUS, status);
 }
+
+// ─── Notification Lifecycle Storage ─────────────────────────────
+
+/** @returns {Promise<Array>} */
+export async function getNotifications() {
+  const data = await get(STORAGE_KEYS.NOTIFICATIONS);
+  return Array.isArray(data) ? data : [];
+}
+
+/** @param {Array} notifications */
+async function _setNotifications(notifications) {
+  return set(STORAGE_KEYS.NOTIFICATIONS, notifications);
+}
+
+/** 
+ * Save a new notification record.
+ * Enforces LIFECYCLE_CONFIG.MAX_STORED_RECORDS by shifting old records.
+ * @param {Object} notification 
+ */
+export async function saveNotification(notification) {
+  try {
+    const list = await getNotifications();
+    list.push(notification);
+    
+    // Enforce max records
+    const { LIFECYCLE_CONFIG } = await import('./NotificationConstants');
+    if (list.length > LIFECYCLE_CONFIG.MAX_STORED_RECORDS) {
+      list.splice(0, list.length - LIFECYCLE_CONFIG.MAX_STORED_RECORDS);
+    }
+    
+    await _setNotifications(list);
+  } catch (err) {
+    Logger.error('Storage.saveNotification', err);
+  }
+}
+
+/** 
+ * Get a specific notification record by ID.
+ * @param {number|string} id 
+ * @returns {Promise<Object|null>}
+ */
+export async function getNotification(id) {
+  try {
+    const list = await getNotifications();
+    return list.find(n => String(n.id) === String(id)) || null;
+  } catch (err) {
+    Logger.error('Storage.getNotification', err);
+    return null;
+  }
+}
+
+/**
+ * Update an existing notification record.
+ * @param {number|string} id 
+ * @param {Object} data - Partial data to merge
+ */
+export async function updateNotification(id, data) {
+  try {
+    const list = await getNotifications();
+    const index = list.findIndex(n => String(n.id) === String(id));
+    if (index !== -1) {
+      list[index] = { ...list[index], ...data };
+      await _setNotifications(list);
+    }
+  } catch (err) {
+    Logger.error('Storage.updateNotification', err);
+  }
+}
+
+/**
+ * Remove a specific notification record.
+ * @param {number|string} id 
+ */
+export async function removeNotification(id) {
+  try {
+    const list = await getNotifications();
+    const filtered = list.filter(n => String(n.id) !== String(id));
+    await _setNotifications(filtered);
+  } catch (err) {
+    Logger.error('Storage.removeNotification', err);
+  }
+}

@@ -73,6 +73,22 @@ export const STORAGE_KEYS = {
   INITIALIZED: 'notification_initialized',
   LAST_ACTIVITY: 'notification_last_activity',
   REMINDER_STATUS: 'notification_reminder_status',
+  NOTIFICATIONS: 'notification_history',
+};
+
+// ─── Lifecycle States ───────────────────────────────────────────
+
+export const STATUS = {
+  PENDING: 'PENDING',
+  SCHEDULED: 'SCHEDULED',
+  DELIVERED: 'DELIVERED',
+  CANCELLED: 'CANCELLED',
+  FAILED: 'FAILED',
+  EXPIRED: 'EXPIRED',
+};
+
+export const LIFECYCLE_CONFIG = {
+  MAX_STORED_RECORDS: 100,
 };
 
 // ─── Default Timing (milliseconds) ─────────────────────────────

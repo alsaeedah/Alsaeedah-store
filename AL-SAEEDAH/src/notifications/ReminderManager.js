@@ -12,6 +12,8 @@ import * as Storage from './NotificationStorage';
 import * as Logger from './NotificationLogger';
 import * as ActivityTracker from './ActivityTracker';
 
+import * as LifecycleManager from './NotificationLifecycleManager';
+
 let _initialized = false;
 
 /**
@@ -31,14 +33,18 @@ export async function initialize() {
  */
 export async function cancelAllReminders() {
   try {
-    const scheduled = await Storage.getScheduledReminders() || [];
+    // Rely on LifecycleManager for accurate state
+    const all = await LifecycleManager.getAll();
+    const activeReminders = all.filter(n => 
+      n.category === 'REMINDERS' && 
+      (n.status === 'PENDING' || n.status === 'SCHEDULED')
+    );
     
-    // We iterate backwards to safely process
-    for (const reminder of scheduled) {
+    for (const reminder of activeReminders) {
       await NotificationService.cancel(reminder.id);
     }
     
-    // Clear from storage
+    // Clear legacy Phase 3 storage just in case
     await Storage.setScheduledReminders([]);
     await Storage.setReminderStatus('CLEARED');
     

@@ -18,6 +18,11 @@ export default function CartSidebar() {
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [whatsappUrl, setWhatsappUrl] = useState('');
     const [showProfileWarning, setShowProfileWarning] = useState(false);
+    
+    // Order State
+    const [orderStatus, setOrderStatus] = useState('idle');
+    const [errorMessage, setErrorMessage] = useState('');
+    const requestRef = useRef(crypto.randomUUID());
 
     // Close when clicking outside
     useEffect(() => {
@@ -56,16 +61,41 @@ export default function CartSidebar() {
     const handleConfirmCheckout = async (paymentMethod) => {
         setIsPaymentModalOpen(false); // Close payment modal first
         
-        showLoader('جاري تأكيد الطلب وإتمام العملية...');
+        if (orderStatus === 'creating_order' || orderStatus === 'order_created' || orderStatus === 'clearing_cart') return;
+        
+        setOrderStatus('creating_order');
+        setErrorMessage('');
+        showLoader('جاري إرسال الطلب...');
 
-        const result = await prepareWhatsAppCheckout(paymentMethod);
+        try {
+            const result = await prepareWhatsAppCheckout(paymentMethod, requestRef.current);
 
-        if (result && result.success) {
-            setWhatsappUrl(result.url);
-            setIsSuccessModalOpen(true);
-            clearCart();
+            if (result && result.success) {
+                setOrderStatus('order_created');
+                setWhatsappUrl(result.url || '');
+                setIsSuccessModalOpen(true);
+                
+                setOrderStatus('clearing_cart');
+                try {
+                    clearCart();
+                } catch(e) {
+                    console.error("Failed to clear cart, continuing...", e);
+                }
+                
+                setOrderStatus('completed');
+                hideLoader();
+                requestRef.current = crypto.randomUUID();
+            } else {
+                setOrderStatus('failed');
+                hideLoader();
+                setErrorMessage(result?.message || 'فشل في إرسال الطلب. يرجى المحاولة مرة أخرى.');
+            }
+        } catch (error) {
+            console.error("Unexpected checkout error:", error);
+            setOrderStatus('failed');
+            hideLoader();
+            setErrorMessage('حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.');
         }
-        hideLoader();
     };
 
     const handleProceedToWhatsApp = () => {
@@ -242,12 +272,41 @@ export default function CartSidebar() {
                             )}
                         </AnimatePresence>
 
+                        {/* Error Message */}
+                        <AnimatePresence>
+                            {orderStatus === 'failed' && errorMessage && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    style={{
+                                        overflow: 'hidden',
+                                        marginBottom: '12px',
+                                        background: 'rgba(239, 68, 68, 0.08)',
+                                        border: '1px solid rgba(239, 68, 68, 0.35)',
+                                        borderRadius: '12px',
+                                        padding: '12px 14px',
+                                        textAlign: 'right'
+                                    }}
+                                >
+                                    <p style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: '700', marginBottom: '4px' }}>حدث خطأ</p>
+                                    <p style={{ color: 'var(--text-main)', fontSize: '0.75rem' }}>{errorMessage}</p>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
                         <button
                             className="btn-primary"
                             onClick={handleCheckoutClick}
-                            style={{ width: '100%', justifyContent: 'center' }}
+                            disabled={['creating_order', 'order_created', 'clearing_cart'].includes(orderStatus)}
+                            style={{ 
+                                width: '100%', 
+                                justifyContent: 'center',
+                                opacity: ['creating_order', 'order_created', 'clearing_cart'].includes(orderStatus) ? 0.6 : 1,
+                                cursor: ['creating_order', 'order_created', 'clearing_cart'].includes(orderStatus) ? 'not-allowed' : 'pointer'
+                            }}
                         >
-                            إتمام الطلب
+                            {['creating_order', 'order_created', 'clearing_cart'].includes(orderStatus) ? 'جاري الإرسال...' : 'إتمام الطلب'}
                         </button>
                     </div>
                 )}

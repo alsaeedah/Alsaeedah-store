@@ -5,6 +5,7 @@ import html2canvas from 'html2canvas';
 import { useAuth } from './AuthContext';
 import { db } from '../firebase/config';
 import { collection, doc, onSnapshot, getDocs, setDoc, query, where, documentId, runTransaction } from 'firebase/firestore';
+import { createOrder } from '../services/orderService';
 
 import logo from '../assets/logo.png';
 
@@ -321,7 +322,7 @@ export const CartProvider = ({ children }) => {
         }
     };
 
-    const prepareWhatsAppCheckout = async (paymentMethod = '') => {
+    const prepareWhatsAppCheckout = async (paymentMethod = '', requestId = '') => {
         if (!currentUser) {
             openAuthModal();
             return { success: false, reason: 'login' };
@@ -329,51 +330,26 @@ export const CartProvider = ({ children }) => {
 
         if (cart.length === 0) return { success: false, reason: 'empty' };
 
-        // Save order to Firestore with an auto-incrementing order number using a transaction
-        let orderNumber = 0;
-        let newOrderId = doc(collection(db, 'orders')).id;
-
-        try {
-            const counterRef = doc(db, 'counters', 'orders');
-            await runTransaction(db, async (transaction) => {
-                const counterDoc = await transaction.get(counterRef);
-                if (!counterDoc.exists()) {
-                    orderNumber = 1000;
-                    transaction.set(counterRef, { current: 1000 });
-                } else {
-                    orderNumber = counterDoc.data().current + 1;
-                    transaction.update(counterRef, { current: orderNumber });
-                }
-                
-                const orderRef = doc(db, 'orders', newOrderId);
-                transaction.set(orderRef, {
-                    user_id: currentUser.uid || currentUser.id,
-                    order_number: orderNumber,
-                    customer_name: currentUser.name,
-                    customer_phone: currentUser.whatsapp,
-                    customer_address: {
-                        governorate: currentUser.governorate,
-                        district: currentUser.district,
-                        neighborhood: currentUser.neighborhood
-                    },
-                    items: cart,
-                    total_amount: total,
-                    status: 'pending',
-                    payment_method: paymentMethod,
-                    created_at: new Date().toISOString()
-                });
-            });
-
-            const finalOrderId = `ORD${orderNumber}`;
-            
-            // Note: Cloud Functions for push notifications (Phase 4) will be triggered via Firestore onCreate trigger later.
-            console.log("Order saved to Firestore successfully:", finalOrderId);
-
-            return { success: true, url: '', invoiceId: finalOrderId };
-        } catch (error) {
-            console.error("Firestore order save error:", error);
-            return { success: false, reason: 'error' };
+        if (!requestId) {
+            requestId = crypto.randomUUID();
         }
+
+        const orderData = {
+            user_id: currentUser.uid || currentUser.id,
+            customer_name: currentUser.name,
+            customer_phone: currentUser.whatsapp,
+            customer_address: {
+                governorate: currentUser.governorate,
+                district: currentUser.district,
+                neighborhood: currentUser.neighborhood
+            },
+            items: cart,
+            total_amount: total,
+            status: 'pending',
+            payment_method: paymentMethod
+        };
+
+        return await createOrder(orderData, requestId);
     };
 
     return (

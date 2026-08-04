@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useLoader } from '../context/LoaderContext';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, CheckCircle2, ArrowRight, CreditCard, Banknote, ChevronLeft, Package } from 'lucide-react';
+import { ShoppingBag, CheckCircle2, ArrowRight, CreditCard, Banknote, ChevronLeft, Package, Landmark, Check } from 'lucide-react';
 import { NotificationService, EVENTS } from '../notifications';
 import logo from '../assets/logo.png';
 
@@ -20,6 +20,23 @@ const PAYMENT_METHODS = [
     { id: 'transfer', label: 'تحويل بنكي', icon: <CreditCard size={24} />, description: 'تحويل عبر البنك أو المحفظة الإلكترونية' },
 ];
 
+const BANKS = [
+    {
+        id: 'binDowal',
+        name: 'شركة بن دول',
+        icon: <Landmark size={20} />,
+        account: '3171354667',
+        accountName: 'أحمد عبدالكريم عتيق عبدالله الرياشي'
+    },
+    {
+        id: 'alomqi',
+        name: 'صرافة العمقي',
+        icon: <Banknote size={20} />,
+        account: '254154242',
+        accountName: 'أحمد عبدالكريم عتيق عبدالله الرياشي'
+    }
+];
+
 export default function CheckoutPage() {
     const { cart, total, prepareWhatsAppCheckout, clearCart } = useCart();
     const { currentUser } = useAuth();
@@ -28,7 +45,11 @@ export default function CheckoutPage() {
 
     const [step, setStep] = useState(1);
     const [selectedPayment, setSelectedPayment] = useState('');
+    const [selectedBank, setSelectedBank] = useState(null);
     const [orderNumber, setOrderNumber] = useState('');
+    const [orderStatus, setOrderStatus] = useState('idle'); // idle, creating_order, order_created, clearing_cart, completed, failed
+    const [errorMessage, setErrorMessage] = useState('');
+    const requestRef = useRef(crypto.randomUUID());
 
     const handleProceedFromCart = () => {
         if (cart.length === 0) return;
@@ -41,21 +62,57 @@ export default function CheckoutPage() {
 
     const handleConfirmOrder = async () => {
         if (!selectedPayment) return;
-        showLoader('جاري تأكيد الطلب...');
-        const result = await prepareWhatsAppCheckout(selectedPayment);
-        hideLoader();
-        if (result && result.success) {
-            const invoiceId = result.invoiceId || '';
-            setOrderNumber(invoiceId);
+        if (selectedPayment === 'transfer' && !selectedBank) return;
+        if (orderStatus === 'creating_order' || orderStatus === 'order_created' || orderStatus === 'clearing_cart') return;
+
+        let finalPaymentMethod = '';
+        if (selectedPayment === 'cash') {
+            finalPaymentMethod = 'الدفع عند الاستلام';
+        } else if (selectedPayment === 'transfer') {
+            const bank = BANKS.find(b => b.id === selectedBank);
+            finalPaymentMethod = `تحويل بنكي - ${bank?.name}`;
+        }
+
+        setOrderStatus('creating_order');
+        setErrorMessage('');
+        showLoader('جاري إرسال الطلب...');
+        
+        try {
+            const result = await prepareWhatsAppCheckout(finalPaymentMethod, requestRef.current);
             
-            // Fire order notifications
-            NotificationService.show(EVENTS.ORDER_SUBMITTED);
-            if (invoiceId) {
-                NotificationService.show(EVENTS.ORDER_NUMBER, { orderNumber: invoiceId });
+            if (result && result.success) {
+                setOrderStatus('order_created');
+                const invoiceId = result.invoiceId || '';
+                setOrderNumber(invoiceId);
+                
+                // Fire order notifications
+                NotificationService.show(EVENTS.ORDER_SUBMITTED);
+                if (invoiceId) {
+                    NotificationService.show(EVENTS.ORDER_NUMBER, { orderNumber: invoiceId });
+                }
+                
+                setOrderStatus('clearing_cart');
+                try {
+                    clearCart();
+                } catch(e) {
+                    console.error("Failed to clear cart, continuing...", e);
+                }
+                
+                setOrderStatus('completed');
+                hideLoader();
+                // Regenerate requestId for next time
+                requestRef.current = crypto.randomUUID();
+                setStep(4);
+            } else {
+                setOrderStatus('failed');
+                hideLoader();
+                setErrorMessage(result?.message || 'فشل في إرسال الطلب. يرجى المحاولة مرة أخرى.');
             }
-            
-            clearCart();
-            setStep(4);
+        } catch (error) {
+            console.error("Unexpected checkout error:", error);
+            setOrderStatus('failed');
+            hideLoader();
+            setErrorMessage('حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.');
         }
     };
 
@@ -185,23 +242,72 @@ export default function CheckoutPage() {
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
                                     {PAYMENT_METHODS.map(method => (
-                                        <button
-                                            key={method.id}
-                                            onClick={() => setSelectedPayment(method.id)}
-                                            style={{
-                                                background: selectedPayment === method.id ? 'rgba(212,175,55,0.1)' : 'var(--bg-card)',
-                                                border: `2px solid ${selectedPayment === method.id ? 'var(--primary)' : 'var(--border-color)'}`,
-                                                borderRadius: '14px', padding: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '16px',
-                                                textAlign: 'right', transition: 'all 0.2s', width: '100%'
-                                            }}
-                                        >
-                                            <span style={{ color: selectedPayment === method.id ? 'var(--primary)' : 'var(--text-dim)', flexShrink: 0 }}>{method.icon}</span>
-                                            <div style={{ flex: 1 }}>
-                                                <p style={{ fontFamily: 'var(--font-main)', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 4px', fontSize: '1rem' }}>{method.label}</p>
-                                                <p style={{ fontFamily: 'var(--font-main)', color: 'var(--text-dim)', margin: 0, fontSize: '0.82rem' }}>{method.description}</p>
-                                            </div>
-                                            <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: `2px solid ${selectedPayment === method.id ? 'var(--primary)' : 'var(--border-color)'}`, background: selectedPayment === method.id ? 'var(--primary)' : 'transparent', flexShrink: 0, transition: 'all 0.2s' }} />
-                                        </button>
+                                        <div key={method.id}>
+                                            <button
+                                                onClick={() => {
+                                                    setSelectedPayment(method.id);
+                                                    if (method.id !== 'transfer') setSelectedBank(null);
+                                                }}
+                                                style={{
+                                                    background: selectedPayment === method.id ? 'rgba(212,175,55,0.1)' : 'var(--bg-card)',
+                                                    border: `2px solid ${selectedPayment === method.id ? 'var(--primary)' : 'var(--border-color)'}`,
+                                                    borderRadius: '14px', padding: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '16px',
+                                                    textAlign: 'right', transition: 'all 0.2s', width: '100%'
+                                                }}
+                                            >
+                                                <span style={{ color: selectedPayment === method.id ? 'var(--primary)' : 'var(--text-dim)', flexShrink: 0 }}>{method.icon}</span>
+                                                <div style={{ flex: 1 }}>
+                                                    <p style={{ fontFamily: 'var(--font-main)', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 4px', fontSize: '1rem' }}>{method.label}</p>
+                                                    <p style={{ fontFamily: 'var(--font-main)', color: 'var(--text-dim)', margin: 0, fontSize: '0.82rem' }}>{method.description}</p>
+                                                </div>
+                                                <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: `2px solid ${selectedPayment === method.id ? 'var(--primary)' : 'var(--border-color)'}`, background: selectedPayment === method.id ? 'var(--primary)' : 'transparent', flexShrink: 0, transition: 'all 0.2s' }} />
+                                            </button>
+
+                                            {/* Expandable Banks List */}
+                                            <AnimatePresence>
+                                                {method.id === 'transfer' && selectedPayment === 'transfer' && (
+                                                    <motion.div
+                                                        initial={{ height: 0, opacity: 0 }}
+                                                        animate={{ height: 'auto', opacity: 1 }}
+                                                        exit={{ height: 0, opacity: 0 }}
+                                                        style={{ overflow: 'hidden' }}
+                                                    >
+                                                        <div style={{ paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                            {BANKS.map((bank) => (
+                                                                <div
+                                                                    key={bank.id}
+                                                                    onClick={() => setSelectedBank(bank.id)}
+                                                                    style={{
+                                                                        padding: '16px',
+                                                                        background: selectedBank === bank.id ? 'rgba(212, 175, 55, 0.15)' : 'var(--bg-card)',
+                                                                        borderRadius: '12px',
+                                                                        border: '1px solid',
+                                                                        borderColor: selectedBank === bank.id ? 'var(--primary)' : 'var(--border-color)',
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'space-between',
+                                                                        cursor: 'pointer',
+                                                                        transition: 'all 0.2s'
+                                                                    }}
+                                                                >
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                                        <div style={{ color: selectedBank === bank.id ? 'var(--primary)' : 'var(--text-dim)' }}>
+                                                                            {bank.icon}
+                                                                        </div>
+                                                                        <div>
+                                                                            <p style={{ fontFamily: 'var(--font-main)', color: 'var(--text-main)', fontSize: '0.95rem', fontWeight: 700, margin: '0 0 4px' }}>{bank.name}</p>
+                                                                            <p style={{ fontFamily: 'var(--font-main)', color: 'var(--text-dim)', fontSize: '0.8rem', margin: '0 0 2px' }}>الاسم: {bank.accountName}</p>
+                                                                            <p style={{ fontFamily: 'var(--font-body)', color: 'var(--primary)', fontSize: '0.9rem', margin: 0, direction: 'ltr', textAlign: 'right', fontWeight: 600 }}>{bank.account}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                    {selectedBank === bank.id && <Check size={18} color="var(--primary)" />}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
                                     ))}
                                 </div>
 
@@ -211,13 +317,51 @@ export default function CheckoutPage() {
                                     <span style={{ fontFamily: 'var(--font-body)', fontSize: '1.3rem', fontWeight: 700, color: 'var(--primary)' }}>{total.toLocaleString()} ر.س</span>
                                 </div>
 
+                                {/* Error Message Display */}
+                                <AnimatePresence>
+                                    {orderStatus === 'failed' && errorMessage && (
+                                        <motion.div
+                                            initial={{ opacity: 0, height: 0 }}
+                                            animate={{ opacity: 1, height: 'auto' }}
+                                            exit={{ opacity: 0, height: 0 }}
+                                            style={{
+                                                overflow: 'hidden',
+                                                marginBottom: '20px',
+                                                background: 'rgba(239, 68, 68, 0.08)',
+                                                border: '1px solid rgba(239, 68, 68, 0.35)',
+                                                borderRadius: '12px',
+                                                padding: '14px 18px',
+                                                textAlign: 'right'
+                                            }}
+                                        >
+                                            <p style={{ color: '#ef4444', fontSize: '0.9rem', fontWeight: '600', margin: '0 0 8px 0' }}>خطأ في إرسال الطلب</p>
+                                            <p style={{ color: 'var(--text-main)', fontSize: '0.85rem', margin: '0 0 12px 0' }}>{errorMessage}</p>
+                                            <button 
+                                                onClick={() => setOrderStatus('idle')}
+                                                style={{
+                                                    background: 'rgba(239, 68, 68, 0.15)',
+                                                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                                                    color: '#ef4444',
+                                                    padding: '8px 16px',
+                                                    borderRadius: '8px',
+                                                    fontSize: '0.8rem',
+                                                    fontWeight: '700',
+                                                    cursor: 'pointer',
+                                                }}
+                                            >
+                                                إعادة المحاولة (Retry)
+                                            </button>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+
                                 <button
                                     onClick={handleConfirmOrder}
-                                    disabled={!selectedPayment}
+                                    disabled={!selectedPayment || (selectedPayment === 'transfer' && !selectedBank) || ['creating_order', 'order_created', 'clearing_cart'].includes(orderStatus)}
                                     className="btn-primary"
-                                    style={{ width: '100%', justifyContent: 'center', fontSize: '1rem', padding: '15px', borderRadius: '14px', opacity: !selectedPayment ? 0.5 : 1, cursor: !selectedPayment ? 'not-allowed' : 'pointer' }}
+                                    style={{ width: '100%', justifyContent: 'center', fontSize: '1rem', padding: '15px', borderRadius: '14px', opacity: (!selectedPayment || (selectedPayment === 'transfer' && !selectedBank) || ['creating_order', 'order_created', 'clearing_cart'].includes(orderStatus)) ? 0.5 : 1, cursor: (!selectedPayment || (selectedPayment === 'transfer' && !selectedBank) || ['creating_order', 'order_created', 'clearing_cart'].includes(orderStatus)) ? 'not-allowed' : 'pointer' }}
                                 >
-                                    تأكيد الطلب
+                                    {['creating_order', 'order_created', 'clearing_cart'].includes(orderStatus) ? 'جاري الإرسال...' : 'تأكيد الطلب'}
                                 </button>
                             </motion.div>
                         )}

@@ -13,13 +13,15 @@ export default function PaymentMethodsModal({ isOpen, onClose, onConfirm }) {
             id: 'binDowal',
             name: 'شركة بن دول',
             icon: <Landmark size={20} />,
-            account: '3171354667'
+            account: '3171354667',
+            accountName: 'أحمد عبدالكريم عتيق عبدالله الرياشي'
         },
         {
             id: 'alomqi',
             name: 'صرافة العمقي',
             icon: <Banknote size={20} />,
-            account: '254154242'
+            account: '254154242',
+            accountName: 'أحمد عبدالكريم عتيق عبدالله الرياشي'
         }
     ];
 
@@ -140,8 +142,9 @@ export default function PaymentMethodsModal({ isOpen, onClose, onConfirm }) {
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                                     {bank.icon}
                                                     <div>
-                                                        <p style={{ color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 'bold' }}>{bank.name}</p>
-                                                        <p style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>{bank.account}</p>
+                                                        <p style={{ color: 'var(--text-main)', fontSize: '0.95rem', fontWeight: 'bold', margin: '0 0 4px' }}>{bank.name}</p>
+                                                        <p style={{ fontFamily: 'var(--font-main)', color: 'var(--text-dim)', fontSize: '0.8rem', margin: '0 0 2px' }}>الاسم: {bank.accountName}</p>
+                                                        <p style={{ fontFamily: 'var(--font-body)', color: 'var(--primary)', fontSize: '0.9rem', margin: 0, direction: 'ltr', textAlign: 'right', fontWeight: 'bold' }}>{bank.account}</p>
                                                     </div>
                                                 </div>
                                                 {selectedBank === bank.id && <Check size={18} color="var(--primary)" />}

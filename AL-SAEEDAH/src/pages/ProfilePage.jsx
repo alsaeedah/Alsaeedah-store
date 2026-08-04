@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import OrdersHistory from './OrdersHistory';
 import { db } from '../firebase/config';
 import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -44,10 +45,7 @@ export default function ProfilePage({ initialTab = 'profile' }) {
     const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
     const [isCropping, setIsCropping] = useState(false);
 
-    // Orders
-    const [orders, setOrders] = useState([]);
-    const [ordersLoading, setOrdersLoading] = useState(false);
-    const [expandedOrder, setExpandedOrder] = useState(null);
+
 
     useEffect(() => {
         if (currentUser) {
@@ -62,26 +60,7 @@ export default function ProfilePage({ initialTab = 'profile' }) {
         }
     }, [currentUser]);
 
-    useEffect(() => {
-        if (activeSection === 'orders' && currentUser) {
-            fetchOrders();
-        }
-    }, [activeSection, currentUser]);
 
-    const fetchOrders = async () => {
-        setOrdersLoading(true);
-        try {
-            const q = query(
-                collection(db, 'orders'),
-                where('user_id', '==', currentUser.uid || currentUser.id),
-                orderBy('created_at', 'desc')
-            );
-            const snapshot = await getDocs(q);
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setOrders(data);
-        } catch (e) { console.error(e); }
-        finally { setOrdersLoading(false); }
-    };
 
     const handleImageUpload = async (e) => {
         if (Capacitor.isNativePlatform()) {
@@ -140,14 +119,7 @@ export default function ProfilePage({ initialTab = 'profile' }) {
         } finally { setPwLoading(false); }
     };
 
-    const getStatusStyle = (status) => {
-        switch (status?.toLowerCase()) {
-            case 'completed': return { color: '#22c55e', bg: 'rgba(34,197,94,0.1)', label: 'مكتمل', icon: <CheckCircle2 size={14} /> };
-            case 'pending':   return { color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', label: 'قيد المعالجة', icon: <Clock size={14} /> };
-            case 'cancelled': return { color: '#ef4444', bg: 'rgba(239,68,68,0.1)', label: 'ملغي', icon: <XCircle size={14} /> };
-            default:          return { color: 'var(--text-dim)', bg: 'rgba(255,255,255,0.05)', label: status || 'جديد', icon: <Package size={14} /> };
-        }
-    };
+
 
     const inputStyle = (disabled = false) => ({
         width: '100%', background: disabled ? 'transparent' : 'var(--bg-main)',
@@ -306,61 +278,7 @@ export default function ProfilePage({ initialTab = 'profile' }) {
                             <motion.div key="orders" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
                                 <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '20px', padding: '28px' }}>
                                     <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.3rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '24px' }}>سجل الطلبات</h2>
-                                    {ordersLoading ? (
-                                        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)', fontFamily: 'var(--font-main)' }}>جاري التحميل...</div>
-                                    ) : orders.length === 0 ? (
-                                        <div style={{ textAlign: 'center', padding: '60px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-                                            <Package size={48} color="var(--text-dim)" strokeWidth={1} />
-                                            <p style={{ fontFamily: 'var(--font-main)', color: 'var(--text-dim)' }}>لا توجد طلبات بعد</p>
-                                        </div>
-                                    ) : (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                            {orders.map((order, i) => {
-                                                const st = getStatusStyle(order.status);
-                                                const isExpanded = expandedOrder === order.id;
-                                                return (
-                                                    <motion.div key={order.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-                                                        style={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: '14px', overflow: 'hidden' }}
-                                                    >
-                                                        <div onClick={() => setExpandedOrder(isExpanded ? null : order.id)} style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                                                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'var(--bg-card)', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                                    <Package size={18} color="var(--primary)" />
-                                                                </div>
-                                                                <div>
-                                                                    <p style={{ fontFamily: 'var(--font-body)', fontWeight: 700, color: 'var(--text-main)', fontSize: '0.95rem', margin: 0 }}>طلب #{order.order_number || order.id?.toString().slice(-6)}</p>
-                                                                    <p style={{ fontFamily: 'var(--font-body)', color: 'var(--text-dim)', fontSize: '0.78rem', margin: '2px 0 0' }}>{new Date(order.created_at).toLocaleDateString('ar-SA')}</p>
-                                                                </div>
-                                                            </div>
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                                                <span style={{ display: 'flex', alignItems: 'center', gap: '5px', background: st.bg, color: st.color, padding: '4px 10px', borderRadius: '8px', fontFamily: 'var(--font-body)', fontSize: '0.78rem', fontWeight: 600 }}>
-                                                                    {st.icon} {st.label}
-                                                                </span>
-                                                                <span style={{ color: 'var(--primary)', fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: '0.95rem' }}>{order.total_amount?.toLocaleString()} ر.س</span>
-                                                                {isExpanded ? <ChevronUp size={18} color="var(--text-dim)" /> : <ChevronDown size={18} color="var(--text-dim)" />}
-                                                            </div>
-                                                        </div>
-                                                        <AnimatePresence>
-                                                            {isExpanded && (
-                                                                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25 }} style={{ overflow: 'hidden' }}>
-                                                                    <div style={{ padding: '0 20px 20px', borderTop: '1px solid var(--border-color)' }}>
-                                                                        <div style={{ paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                                            {(order.items || []).map((item, idx) => (
-                                                                                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: 'var(--font-main)', fontSize: '0.88rem' }}>
-                                                                                    <span style={{ color: 'var(--text-secondary)' }}>{item.name} × {item.dp_qty}</span>
-                                                                                    <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{(item.price * item.dp_qty).toLocaleString()} ر.س</span>
-                                                                                </div>
-                                                                            ))}
-                                                                        </div>
-                                                                    </div>
-                                                                </motion.div>
-                                                            )}
-                                                        </AnimatePresence>
-                                                    </motion.div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
+                                    <OrdersHistory />
                                 </div>
                             </motion.div>
                         )}
