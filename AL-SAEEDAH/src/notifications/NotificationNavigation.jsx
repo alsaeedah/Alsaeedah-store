@@ -23,25 +23,32 @@ export default function NotificationNavigation() {
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
-    const listener = LocalNotifications.addListener('localNotificationActionPerformed', (payload) => {
-      const notification = payload.notification;
-      
-      // Prevent duplicate processing from capacitor queue anomalies
-      if (handledIds.current.has(notification.id)) return;
-      handledIds.current.add(notification.id);
+    let listenerPromise = null;
+    try {
+      listenerPromise = LocalNotifications.addListener('localNotificationActionPerformed', (payload) => {
+        const notification = payload.notification;
+        
+        // Prevent duplicate processing from capacitor queue anomalies
+        if (handledIds.current.has(notification.id)) return;
+        handledIds.current.add(notification.id);
 
-      // Capacitor maps our 'data' to 'extra' internally
-      const data = notification.extra || notification.data || {};
-      
-      Logger.log('NotificationNavigation', 'Action performed', data);
+        // Capacitor maps our 'data' to 'extra' internally
+        const data = notification.extra || notification.data || {};
+        
+        Logger.log('NotificationNavigation', 'Action performed', data);
 
-      if (data.target) {
-        setPendingTarget(data);
-      }
-    });
+        if (data.target) {
+          setPendingTarget(data);
+        }
+      });
+    } catch (err) {
+      Logger.error('NotificationNavigation', 'Failed to attach listener', err);
+    }
 
     return () => {
-      listener.then(l => l.remove());
+      if (listenerPromise) {
+        listenerPromise.then(l => l.remove()).catch(e => Logger.error('NotificationNavigation', e));
+      }
     };
   }, []);
 

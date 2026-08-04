@@ -130,26 +130,39 @@ async function _setNotifications(notifications) {
   return set(STORAGE_KEYS.NOTIFICATIONS, notifications);
 }
 
+// ─── Concurrency Lock ─────────────────────────────────────────────
+// Prevents async race conditions when saving multiple notifications rapidly.
+let _writeLock = Promise.resolve();
+
+function withLock(task) {
+  _writeLock = _writeLock.then(() => task().catch(err => {
+    Logger.error('Storage.lock', err);
+  }));
+  return _writeLock;
+}
+
 /** 
  * Save a new notification record.
  * Enforces LIFECYCLE_CONFIG.MAX_STORED_RECORDS by shifting old records.
  * @param {Object} notification 
  */
 export async function saveNotification(notification) {
-  try {
-    const list = await getNotifications();
-    list.push(notification);
-    
-    // Enforce max records
-    const { LIFECYCLE_CONFIG } = await import('./NotificationConstants');
-    if (list.length > LIFECYCLE_CONFIG.MAX_STORED_RECORDS) {
-      list.splice(0, list.length - LIFECYCLE_CONFIG.MAX_STORED_RECORDS);
+  return withLock(async () => {
+    try {
+      const list = await getNotifications();
+      list.push(notification);
+      
+      // Enforce max records
+      const { LIFECYCLE_CONFIG } = await import('./NotificationConstants');
+      if (list.length > LIFECYCLE_CONFIG.MAX_STORED_RECORDS) {
+        list.splice(0, list.length - LIFECYCLE_CONFIG.MAX_STORED_RECORDS);
+      }
+      
+      await _setNotifications(list);
+    } catch (err) {
+      Logger.error('Storage.saveNotification', err);
     }
-    
-    await _setNotifications(list);
-  } catch (err) {
-    Logger.error('Storage.saveNotification', err);
-  }
+  });
 }
 
 /** 
@@ -173,16 +186,18 @@ export async function getNotification(id) {
  * @param {Object} data - Partial data to merge
  */
 export async function updateNotification(id, data) {
-  try {
-    const list = await getNotifications();
-    const index = list.findIndex(n => String(n.id) === String(id));
-    if (index !== -1) {
-      list[index] = { ...list[index], ...data };
-      await _setNotifications(list);
+  return withLock(async () => {
+    try {
+      const list = await getNotifications();
+      const index = list.findIndex(n => String(n.id) === String(id));
+      if (index !== -1) {
+        list[index] = { ...list[index], ...data };
+        await _setNotifications(list);
+      }
+    } catch (err) {
+      Logger.error('Storage.updateNotification', err);
     }
-  } catch (err) {
-    Logger.error('Storage.updateNotification', err);
-  }
+  });
 }
 
 /**
@@ -190,11 +205,13 @@ export async function updateNotification(id, data) {
  * @param {number|string} id 
  */
 export async function removeNotification(id) {
-  try {
-    const list = await getNotifications();
-    const filtered = list.filter(n => String(n.id) !== String(id));
-    await _setNotifications(filtered);
-  } catch (err) {
-    Logger.error('Storage.removeNotification', err);
-  }
+  return withLock(async () => {
+    try {
+      const list = await getNotifications();
+      const filtered = list.filter(n => String(n.id) !== String(id));
+      await _setNotifications(filtered);
+    } catch (err) {
+      Logger.error('Storage.removeNotification', err);
+    }
+  });
 }

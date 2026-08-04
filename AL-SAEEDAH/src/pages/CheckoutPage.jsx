@@ -85,14 +85,17 @@ export default function CheckoutPage() {
                 const invoiceId = result.invoiceId || '';
                 setOrderNumber(invoiceId);
                 
-                // Fire order notifications
-                NotificationService.show(EVENTS.ORDER_SUBMITTED, {
+                // Fire order notifications sequentially to prevent Android OS dropping them
+                await NotificationService.show(EVENTS.ORDER_SUBMITTED, {
                     type: "ORDER_CREATED",
                     target: "order_history",
                     orderNumber: invoiceId || ''
                 });
+                
                 if (invoiceId) {
-                    NotificationService.show(EVENTS.ORDER_NUMBER, { 
+                    // Small delay to ensure the OS has completely rendered the first notification
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    await NotificationService.show(EVENTS.ORDER_NUMBER, { 
                         type: "ORDER_CREATED",
                         target: "order_history",
                         orderNumber: invoiceId 
