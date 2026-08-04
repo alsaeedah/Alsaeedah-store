@@ -36,7 +36,7 @@ export default function OrderCard({ order, isMobile }) {
   
   const copyOrderNumber = (e) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(`ORD-${order.order_number}`);
+    navigator.clipboard.writeText(`ORD${order.order_number}`);
     setToastMessage({ message: 'تم نسخ رقم الطلب', type: 'success' });
   };
 
@@ -138,7 +138,7 @@ export default function OrderCard({ order, isMobile }) {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
                 <h3 style={{ fontSize: isMobile ? '0.85rem' : '0.95rem', fontWeight: 'bold', margin: 0, fontFamily: 'var(--font-main)' }}>
-                  #ORD-{order.order_number}
+                  ORD{order.order_number}
                 </h3>
                 <button 
                   onClick={copyOrderNumber}

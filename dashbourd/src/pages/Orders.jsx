@@ -80,11 +80,14 @@ const Orders = () => {
             let q = collection(db, 'orders');
             let constraints = [];
 
-            if (searchQuery) {
-                const isNumericSearch = /^\\d+$/.test(searchQuery.replace(/^ord/i, ''));
+            const rawQuery = searchQuery.trim().toLowerCase();
+            const numericPart = rawQuery.replace(/^ord/, '').trim();
+
+            if (rawQuery) {
+                const isNumericSearch = /^\\d+$/.test(numericPart);
                 if (isNumericSearch) {
-                    const orderNum = parseInt(searchQuery.replace(/^ord/i, ''));
-                    constraints.push(where('order_number', '==', orderNum));
+                    const orderNumInt = parseInt(numericPart, 10);
+                    constraints.push(where('order_number', 'in', [numericPart, orderNumInt]));
                 }
             }
 
@@ -105,12 +108,22 @@ const Orders = () => {
 
             let newOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            // Client side filtering for text search if not numeric
-            if (searchQuery && !/^\\d+$/.test(searchQuery.replace(/^ord/i, ''))) {
-                newOrders = newOrders.filter(o => 
-                    (o.customer_name && o.customer_name.includes(searchQuery)) ||
-                    (o.customer_phone && o.customer_phone.includes(searchQuery))
-                );
+            // Client-side fallback for partial matches and text searches
+            // Note: Exact order IDs are matched server-side across the entire collection.
+            // Partial searches (e.g., '362') only match within the currently fetched page limit.
+            if (rawQuery) {
+                newOrders = newOrders.filter(o => {
+                    const oNum = o.order_number ? String(o.order_number).toLowerCase() : '';
+                    const oName = o.customer_name ? String(o.customer_name).toLowerCase() : '';
+                    const oPhone = o.customer_phone ? String(o.customer_phone).toLowerCase() : '';
+                    
+                    return (
+                        oNum.includes(numericPart) || 
+                        `ord${oNum}`.includes(rawQuery) ||
+                        oName.includes(rawQuery) ||
+                        oPhone.includes(rawQuery)
+                    );
+                });
             }
 
             if (snapshot.docs.length > 0) {

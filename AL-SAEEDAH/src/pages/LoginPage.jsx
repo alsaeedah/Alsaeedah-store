@@ -210,7 +210,6 @@ export default function LoginPage() {
     } catch (err) {
       setError(err.message || 'حدث خطأ أثناء تسجيل الدخول');
       triggerShake();
-    } finally {
       setIsSubmitting(false);
     }
   };

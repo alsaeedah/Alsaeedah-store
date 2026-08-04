@@ -6,6 +6,7 @@ import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { useLoader } from './LoaderContext';
 import { StartupProvider } from '@shared/startup/StartupProvider';
 import { clearCachedSession } from '@shared/startup/cache';
+import { startBackgroundValidation } from '@shared/startup/authSync';
 
 const AuthContext = createContext();
 
@@ -55,22 +56,65 @@ export const AuthProvider = ({ children, openAuthOnMount = false, onAuthMountHan
         const emailDashboardFormat = `${cleanPhone}@alsaeedah.store`;
         const emailLegacyFormat = `phone_${cleanPhone}@alsaeedah.store`;
         
+        console.log('[Auth] Login started...');
+        let userCredential;
+
         try {
             // 1. Try logging in with the format created by the Dashboard
-            await signInWithEmailAndPassword(auth, emailDashboardFormat, password);
-            return true;
+            userCredential = await signInWithEmailAndPassword(auth, emailDashboardFormat, password);
         } catch (error) {
             if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
                 try {
                     // 2. Fallback: try logging in with the old auto-registration format
-                    await signInWithEmailAndPassword(auth, emailLegacyFormat, password);
-                    return true;
+                    userCredential = await signInWithEmailAndPassword(auth, emailLegacyFormat, password);
                 } catch (fallbackError) {
                     throw new Error('الحساب غير موجود أو كلمة المرور غير صحيحة');
                 }
+            } else {
+                throw error;
             }
-            throw error;
         }
+
+        console.log('[Auth] Firebase authentication succeeded.');
+        const firebaseUser = userCredential.user;
+
+        // 3. Immediate State Update
+        // Provide a base session to AuthGate so it instantly unmounts the LoginPage
+        const baseSession = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            name: firebaseUser.displayName || 'مستخدم',
+            image: firebaseUser.photoURL || '',
+            role: 'user', // Default safe value
+            permissions: {},
+            phone: cleanPhone
+        };
+
+        setCurrentUser(baseSession);
+        console.log('[Auth] AuthContext updated immediately.');
+        
+        localStorage.setItem('time-tick-user', JSON.stringify(baseSession));
+        console.log('[Auth] Session/cache updated.');
+
+        // 4. Dispatch Background Validation
+        console.log('[Auth] Background validation started...');
+        startBackgroundValidation(
+            auth, 
+            db, 
+            'store', 
+            (enrichedSession) => {
+                setCurrentUser(enrichedSession);
+                localStorage.setItem('time-tick-user', JSON.stringify(enrichedSession));
+                console.log('[Auth] Background validation completed, session enriched.');
+            },
+            () => {
+                setCurrentUser(null);
+                localStorage.removeItem('time-tick-user');
+                console.log('[Auth] Background validation failed, user logged out.');
+            }
+        );
+
+        return true;
     };
 
     const logout = async () => {
