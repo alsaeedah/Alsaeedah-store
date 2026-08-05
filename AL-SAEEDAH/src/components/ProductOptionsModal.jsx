@@ -1,8 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Minus, Plus, ShoppingCart, Check } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { useScrollLock } from '../hooks/useScrollLock';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 export default function ProductOptionsModal({ isOpen, onClose, product, onConfirm }) {
     const { setIsOptionsModalOpen } = useCart();
@@ -10,6 +12,10 @@ export default function ProductOptionsModal({ isOpen, onClose, product, onConfir
     const [selectedVariant, setSelectedVariant] = useState(null);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const containerRef = useRef(null);
+
+    useScrollLock(isOpen);
+    useFocusTrap(isOpen, containerRef);
 
     const getCurrentPrice = () => {
         if (selectedVariant) return selectedVariant.price;
@@ -101,8 +107,9 @@ export default function ProductOptionsModal({ isOpen, onClose, product, onConfir
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 className="custom-modal-overlay"
+                data-lenis-prevent="true"
             >
-                <div className="custom-modal-container">
+                <div className="custom-modal-container" ref={containerRef}>
                     {/* Header */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
                         <div>

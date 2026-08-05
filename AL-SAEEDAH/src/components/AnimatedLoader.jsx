@@ -11,11 +11,8 @@ export default function AnimatedLoader({ isOpen, message }) {
                 exit={{ opacity: 0 }}
                 style={{
                     position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                    inset: 0,
+                    backgroundColor: 'var(--bg-main)',
                     backdropFilter: 'blur(10px)',
                     zIndex: 99999,
                     display: 'flex',

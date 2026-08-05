@@ -98,3 +98,24 @@ export const TIMING = {
   REMINDER_7_DAYS:  7 * 24 * 60 * 60 * 1000,
   REMINDER_14_DAYS: 14 * 24 * 60 * 60 * 1000,
 };
+
+// ─── Notification Engine Configuration ─────────────────────────
+// All timing values are in milliseconds. Change here only — never
+// hardcode timing values in NotificationService or other modules.
+
+export const NOTIFICATION_CONFIG = {
+  /** Gap between sequential notifications in the queue */
+  QUEUE_DELAY_MS: 250,
+
+  /** Window in which duplicate events are suppressed */
+  DEDUP_WINDOW_MS: 500,
+
+  /** Wait time before retrying a failed notification */
+  RETRY_DELAY_MS: 200,
+
+  /** Maximum retry attempts before giving up */
+  MAX_RETRIES: 1,
+
+  /** Interval for periodic self-healing health checks (60 seconds) */
+  HEALTH_CHECK_INTERVAL_MS: 60_000,
+};

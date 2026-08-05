@@ -3,6 +3,9 @@
  *
  * Responsible for managing the inactivity reminder lifecycle.
  * Schedules, cancels, and resets reminder cycles.
+ *
+ * ActivityTracker has been removed. Reminders are now based on
+ * the current timestamp (Date.now()) when the user is active.
  */
 
 import { REMINDERS } from './ReminderConstants';
@@ -10,8 +13,6 @@ import { EVENTS } from './NotificationEvents';
 import * as NotificationService from './NotificationService';
 import * as Storage from './NotificationStorage';
 import * as Logger from './NotificationLogger';
-import * as ActivityTracker from './ActivityTracker';
-
 import * as LifecycleManager from './NotificationLifecycleManager';
 
 let _initialized = false;
@@ -33,7 +34,6 @@ export async function initialize() {
  */
 export async function cancelAllReminders() {
   try {
-    // Rely on LifecycleManager for accurate state
     const all = await LifecycleManager.getAll();
     const activeReminders = all.filter(n => 
       n.category === 'REMINDERS' && 
@@ -44,7 +44,6 @@ export async function cancelAllReminders() {
       await NotificationService.cancel(reminder.id);
     }
     
-    // Clear legacy Phase 3 storage just in case
     await Storage.setScheduledReminders([]);
     await Storage.setReminderStatus('CLEARED');
     
@@ -59,7 +58,7 @@ export async function cancelAllReminders() {
 /**
  * Schedule a new cycle of inactivity reminders.
  *
- * @param {number} baseTimestamp - The time from which delays are calculated (usually Date.now())
+ * @param {number} baseTimestamp - The time from which delays are calculated
  * @returns {Promise<boolean>}
  */
 export async function scheduleAllReminders(baseTimestamp) {
@@ -98,20 +97,20 @@ export async function scheduleAllReminders(baseTimestamp) {
 
 /**
  * Reset the reminder schedule cycle.
- * This is meant to be called whenever the application is opened
- * by an authenticated user, pushing the inactivity timers forward.
+ * Called whenever the application is opened by an authenticated user,
+ * pushing the inactivity timers forward from the current time.
  *
  * @returns {Promise<boolean>}
  */
 export async function resetReminderSchedule() {
   try {
-    const lastActivity = await ActivityTracker.getLastActivity();
-    const baseTimestamp = lastActivity || Date.now();
+    // Use current time as the base (ActivityTracker removed)
+    const baseTimestamp = Date.now();
     
     // 1. Cancel existing reminders
     await cancelAllReminders();
     
-    // 2. Schedule new reminders based on the latest activity timestamp
+    // 2. Schedule new reminders based on current time
     await scheduleAllReminders(baseTimestamp);
     
     return true;

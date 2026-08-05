@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { X, Phone, Lock, Eye, EyeOff, LogIn } from 'lucide-react';
+import { useScrollLock } from '../hooks/useScrollLock';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 export default function AuthModal() {
     const { isAuthModalOpen, closeAuthModal, login } = useAuth();
@@ -9,6 +11,10 @@ export default function AuthModal() {
     const [showPassword, setShowPassword] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
+    const containerRef = useRef(null);
+
+    useScrollLock(isAuthModalOpen);
+    useFocusTrap(isAuthModalOpen, containerRef);
 
     if (!isAuthModalOpen) return null;
 
@@ -58,15 +64,15 @@ export default function AuthModal() {
             left: 0,
             width: '100%',
             height: '100%',
-            backgroundColor: 'rgba(0,0,0,0.88)',
+            backgroundColor: 'var(--overlay-dim)',
             backdropFilter: 'blur(10px)',
             zIndex: 2000,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             padding: '20px'
-        }}>
-            <div className="glass-panel" style={{
+        }} data-lenis-prevent="true">
+            <div className="glass-panel" ref={containerRef} style={{
                 width: '100%',
                 maxWidth: '420px',
                 padding: '44px 40px',
@@ -82,8 +88,8 @@ export default function AuthModal() {
                         position: 'absolute',
                         top: '18px',
                         left: '18px',
-                        background: 'rgba(255,255,255,0.06)',
-                        border: '1px solid rgba(255,255,255,0.1)',
+                        background: 'var(--skeleton-bg)',
+                        border: '1px solid var(--border-color)',
                         color: 'var(--text-main)',
                         cursor: 'pointer',
                         width: '36px',
@@ -116,18 +122,18 @@ export default function AuthModal() {
                         justifyContent: 'center',
                         boxShadow: '0 12px 32px rgba(212,175,55,0.35)',
                     }}>
-                        <LogIn size={30} color="#000" strokeWidth={2.5} />
+                        <LogIn size={30} color="var(--btn-text)" strokeWidth={2.5} />
                     </div>
                     <div style={{ textAlign: 'center' }}>
                         <h2 style={{
                             fontSize: '1.6rem',
                             fontWeight: '900',
-                            color: '#fff',
+                            color: 'var(--text-main)',
                             margin: 0,
                             letterSpacing: '-0.5px',
                         }}>تسجيل الدخول</h2>
                         <p style={{
-                            color: 'rgba(255,255,255,0.45)',
+                            color: 'var(--text-secondary)',
                             fontSize: '0.88rem',
                             marginTop: '6px',
                         }}>أدخل رقم هاتفك وكلمة المرور</p>
@@ -187,7 +193,7 @@ export default function AuthModal() {
                             style={{
                                 background: 'transparent',
                                 border: 'none',
-                                color: 'rgba(255,255,255,0.4)',
+                                color: 'var(--text-dim)',
                                 cursor: 'pointer',
                                 padding: '0',
                                 display: 'flex',
@@ -213,7 +219,7 @@ export default function AuthModal() {
                             background: isSubmitting
                                 ? 'rgba(212,175,55,0.4)'
                                 : 'linear-gradient(135deg, var(--primary) 0%, #b8860b 100%)',
-                            color: '#000',
+                            color: 'var(--btn-text)',
                             fontWeight: '900',
                             fontSize: '1rem',
                             cursor: isSubmitting ? 'not-allowed' : 'pointer',
@@ -244,7 +250,7 @@ export default function AuthModal() {
                 <p style={{
                     textAlign: 'center',
                     marginTop: '24px',
-                    color: 'rgba(255,255,255,0.25)',
+                    color: 'var(--text-dim)',
                     fontSize: '0.78rem',
                     lineHeight: '1.6',
                 }}>
@@ -265,10 +271,10 @@ export default function AuthModal() {
                     display: flex;
                     align-items: center;
                     gap: 12px;
-                    background: rgba(255,255,255,0.04);
+                    background: var(--skeleton-bg);
                     padding: 14px 16px;
                     border-radius: 14px;
-                    border: 1px solid rgba(255,255,255,0.08);
+                    border: 1px solid var(--border-color);
                     transition: all 0.25s ease;
                 }
                 .auth-input-group:focus-within {
@@ -279,14 +285,14 @@ export default function AuthModal() {
                 .auth-input-group input {
                     background: transparent;
                     border: none;
-                    color: #fff;
+                    color: var(--text-main);
                     width: 100%;
                     outline: none;
                     font-size: 1rem;
                     font-family: var(--font-main);
                 }
                 .auth-input-group input::placeholder {
-                    color: rgba(255,255,255,0.3);
+                    color: var(--text-dim);
                 }
             `}</style>
         </div>

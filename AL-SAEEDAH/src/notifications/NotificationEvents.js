@@ -1,23 +1,29 @@
 /**
  * Notification Events
  *
- * Pre-defined event definitions for all planned notification phases.
- * Each event declares its metadata so future phases only need to call
- * NotificationService.show(event, data) without touching infrastructure.
+ * Pre-defined event definitions for all notification types.
+ * Each event declares its metadata so callers only need:
+ *   NotificationService.show(event, data)
  *
- * Events are NOT triggered in Phase 1 — they exist to stabilize
- * the API surface and keep it consistent across future phases.
+ * IMPORTANT — ID Strategy:
+ * ─────────────────────────
+ * • Immediate notifications (FIRST_LAUNCH, LOGIN_SUCCESS, ORDER_*)
+ *   do NOT have static IDs. The NotificationIdGenerator creates a
+ *   unique ID for every individual notification.
  *
- * Template strings use {{placeholder}} syntax. The NotificationService
- * will replace these with actual values when the event is triggered.
+ * • Scheduled reminders (REMINDER_*) keep fixed IDs because they
+ *   are singleton-per-type — Android should replace the old reminder
+ *   when rescheduling.
+ *
+ * Template strings use {{placeholder}} syntax. The NotificationScheduler
+ * replaces these with actual values when the event is triggered.
  */
 
 import { CHANNELS, ID_RANGES } from './NotificationConstants';
 
-// ─── Phase 2: Instant Local Notifications ───────────────────────
+// ─── Immediate Notifications (unique IDs generated at send time) ─
 
 export const FIRST_LAUNCH = {
-  id: ID_RANGES.GENERAL.min,        // 1000
   channel: CHANNELS.GENERAL.id,
   title: 'مرحباً بك في السعيدة! 🎉',
   body: 'اكتشف أحدث الساعات والعروض الحصرية.',
@@ -25,7 +31,6 @@ export const FIRST_LAUNCH = {
 };
 
 export const LOGIN_SUCCESS = {
-  id: ID_RANGES.ACCOUNT.min,        // 4000
   channel: CHANNELS.ACCOUNT.id,
   title: 'تم تسجيل الدخول بنجاح ✅',
   body: 'مرحباً {{name}}، أهلاً بعودتك!',
@@ -33,7 +38,6 @@ export const LOGIN_SUCCESS = {
 };
 
 export const ORDER_SUBMITTED = {
-  id: ID_RANGES.ORDERS.min,         // 2000
   channel: CHANNELS.ORDERS.id,
   title: 'تم تأكيد طلبك! 🛒',
   body: 'شكراً لطلبك. سنقوم بمعالجته في أقرب وقت.',
@@ -41,14 +45,13 @@ export const ORDER_SUBMITTED = {
 };
 
 export const ORDER_NUMBER = {
-  id: ID_RANGES.ORDERS.min + 1,     // 2001
   channel: CHANNELS.ORDERS.id,
   title: 'رقم طلبك: {{orderNumber}}',
   body: 'يمكنك متابعة حالة طلبك من صفحة الطلبات.',
   category: 'ORDERS',
 };
 
-// ─── Phase 3: Reminder Notifications ────────────────────────────
+// ─── Scheduled Reminders (fixed IDs — singleton per type) ───────
 
 export const REMINDER_3_DAY = {
   id: ID_RANGES.REMINDERS.min,      // 3000
@@ -77,7 +80,6 @@ export const REMINDER_14_DAY = {
 // ─── Future: System / Promotions ────────────────────────────────
 
 export const WELCOME_BACK = {
-  id: ID_RANGES.GENERAL.min + 1,    // 1001
   channel: CHANNELS.GENERAL.id,
   title: 'أهلاً بعودتك! 😊',
   body: 'تفضل بتصفح أحدث المنتجات.',
@@ -85,7 +87,6 @@ export const WELCOME_BACK = {
 };
 
 export const SYSTEM_UPDATE = {
-  id: ID_RANGES.SYSTEM.min,         // 5000
   channel: CHANNELS.SYSTEM.id,
   title: 'تحديث النظام',
   body: '{{message}}',

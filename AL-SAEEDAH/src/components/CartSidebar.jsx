@@ -130,7 +130,7 @@ export default function CartSidebar() {
                 left: 0,
                 width: '100%',
                 height: '100%',
-                background: 'rgba(0,0,0,0.7)',
+                background: 'var(--overlay-dim)',
                 zIndex: 2000,
                 opacity: isCartOpen ? 1 : 0,
                 pointerEvents: isCartOpen ? 'auto' : 'none',
@@ -201,12 +201,12 @@ export default function CartSidebar() {
                                 <div style={{ flex: 1 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                         <h4 style={{ fontSize: '0.9rem', marginBottom: '5px' }}>{item.name}</h4>
-                                        <span style={{ fontSize: '0.75rem', background: 'var(--primary)', color: '#000', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>#{item.displayId || '---'}</span>
+                                        <span style={{ fontSize: '0.75rem', background: 'var(--primary)', color: 'var(--btn-text)', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>#{item.displayId || '---'}</span>
                                     </div>
                                     <p style={{ color: 'var(--primary)', fontSize: '0.8rem' }}>{item.price.toLocaleString()} ر.س</p>
 
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '5px' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '6px', padding: '2px 5px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--skeleton-bg)', borderRadius: '6px', padding: '2px 5px' }}>
                                             <button onClick={() => updateQuantity(item.variantId || item.id, -1)} style={{ background: 'transparent', border: 'none', color: 'var(--text-main)', padding: '4px 10px', fontSize: '1.2rem', cursor: 'pointer' }}>-</button>
                                             <span style={{ fontSize: '1.1rem', fontWeight: 'bold', minWidth: '20px', textAlign: 'center' }}>{item.dp_qty}</span>
                                             <button onClick={() => updateQuantity(item.variantId || item.id, 1)} style={{ background: 'transparent', border: 'none', color: 'var(--text-main)', padding: '4px 10px', fontSize: '1.2rem', cursor: 'pointer' }}>+</button>

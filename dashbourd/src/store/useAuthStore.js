@@ -113,13 +113,16 @@ const useAuthStore = create(
                     const role = tokenResult.claims.role || 'manager'; // default to manager
                     const permissions = tokenResult.claims.permissions || {};
                     
-                    set((state) => ({
-                        user: {
-                            ...state.user,
-                            role,
-                            permissions
-                        }
-                    }));
+                    set((state) => {
+                        if (!state.user) return state; // Ensure we don't create a partial user object
+                        return {
+                            user: {
+                                ...state.user,
+                                role,
+                                permissions
+                            }
+                        };
+                    });
                 }
             },
             
@@ -135,15 +138,18 @@ const useAuthStore = create(
                     }
                     
                     const data = docSnap.data();
-                    set((state) => ({
-                        user: {
-                            ...state.user,
-                            email: data.email,
-                            name: data.name,
-                            role: data.role || 'manager',
-                            permissions: data.permissions || {},
-                        }
-                    }));
+                    set((state) => {
+                        if (!state.user) return state; // Ensure we don't create a partial user object
+                        return {
+                            user: {
+                                ...state.user,
+                                email: data.email,
+                                name: data.name,
+                                role: data.role || 'manager',
+                                permissions: data.permissions || {},
+                            }
+                        };
+                    });
                 } catch (err) {
                     console.error('Error refreshing permissions:', err);
                 }

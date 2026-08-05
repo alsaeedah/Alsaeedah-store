@@ -141,7 +141,7 @@ const ProductCard = forwardRef(({ product }, ref) => {
                     whileTap={{ scale: 0.8 }}
                     onClick={(e) => { e.stopPropagation(); toggleFavorite(product); }}
                     className="wishlist-btn"
-                    style={{ color: isFav ? 'var(--primary)' : '#fff' }}
+                    style={{ color: isFav ? 'var(--primary)' : 'var(--hero-text-color)' }}
                 >
                     <Heart size={20} fill={isFav ? "currentColor" : "none"} />
                 </motion.button>

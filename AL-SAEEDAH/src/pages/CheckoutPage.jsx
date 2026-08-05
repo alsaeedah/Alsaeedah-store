@@ -85,23 +85,6 @@ export default function CheckoutPage() {
                 const invoiceId = result.invoiceId || '';
                 setOrderNumber(invoiceId);
                 
-                // Fire order notifications sequentially to prevent Android OS dropping them
-                await NotificationService.show(EVENTS.ORDER_SUBMITTED, {
-                    type: "ORDER_CREATED",
-                    target: "order_history",
-                    orderNumber: invoiceId || ''
-                });
-                
-                if (invoiceId) {
-                    // Small delay to ensure the OS has completely rendered the first notification
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                    await NotificationService.show(EVENTS.ORDER_NUMBER, { 
-                        type: "ORDER_CREATED",
-                        target: "order_history",
-                        orderNumber: invoiceId 
-                    });
-                }
-                
                 setOrderStatus('clearing_cart');
                 try {
                     clearCart();
@@ -114,6 +97,22 @@ export default function CheckoutPage() {
                 // Regenerate requestId for next time
                 requestRef.current = crypto.randomUUID();
                 setStep(4);
+
+                // Fire notifications AFTER all business logic succeeds
+                // Queue handles sequential delivery — no manual delay needed
+                NotificationService.show(EVENTS.ORDER_SUBMITTED, {
+                    type: "ORDER_CREATED",
+                    target: "order_history",
+                    orderNumber: invoiceId || ''
+                });
+                
+                if (invoiceId) {
+                    NotificationService.show(EVENTS.ORDER_NUMBER, { 
+                        type: "ORDER_CREATED",
+                        target: "order_history",
+                        orderNumber: invoiceId 
+                    });
+                }
             } else {
                 setOrderStatus('failed');
                 hideLoader();

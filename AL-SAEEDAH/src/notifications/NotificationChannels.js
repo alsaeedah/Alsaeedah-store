@@ -31,15 +31,51 @@ export async function registerAll() {
       vibration: true,
     }));
 
-    await LocalNotifications.createChannel({ ...channelList[0] });
-
-    // Register remaining channels (Android handles duplicates gracefully)
-    for (let i = 1; i < channelList.length; i++) {
-      await LocalNotifications.createChannel({ ...channelList[i] });
+    for (const channel of channelList) {
+      await LocalNotifications.createChannel({ ...channel });
     }
 
-    Logger.log('Channels', `Registered ${channelList.length} channels`);
+    Logger.log('CHANNELS_REGISTERED', `${channelList.length} channels`);
   } catch (err) {
-    Logger.error('Channels', err);
+    Logger.error('Channels.registerAll', err);
+  }
+}
+
+/**
+ * Verify that all required channels exist and create any missing ones.
+ * Used by the self-healing health check on app resume.
+ *
+ * @returns {Promise<{verified: boolean, created: string[]}>}
+ */
+export async function verifyChannels() {
+  try {
+    const existing = await LocalNotifications.listChannels();
+    const existingIds = new Set((existing.channels || []).map(c => c.id));
+    const required = Object.values(CHANNELS);
+    const created = [];
+
+    for (const ch of required) {
+      if (!existingIds.has(ch.id)) {
+        await LocalNotifications.createChannel({
+          id: ch.id,
+          name: ch.name,
+          description: ch.description,
+          importance: ch.importance,
+          visibility: 1,
+          vibration: true,
+        });
+        created.push(ch.id);
+        Logger.log('CHANNEL_CREATED', `Missing channel recreated: ${ch.id}`);
+      }
+    }
+
+    if (created.length > 0) {
+      Logger.log('CHANNELS_REPAIRED', `Created ${created.length} missing channels`, created);
+    }
+
+    return { verified: true, created };
+  } catch (err) {
+    Logger.error('Channels.verifyChannels', err);
+    return { verified: false, created: [] };
   }
 }

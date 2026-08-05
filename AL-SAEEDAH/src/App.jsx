@@ -49,7 +49,8 @@ import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Lenis from 'lenis';
-import { NotificationService, EVENTS, ActivityTracker, ReminderManager, NotificationNavigation } from './notifications';
+import { lenisService } from './services/lenisService';
+import { NotificationService, EVENTS, ReminderManager } from './notifications';
 
 // Page transition variants
 const pageVariants = {
@@ -195,47 +196,6 @@ const DeepLinkHandler = () => {
   return null;
 };
 
-// Global Scroll Lock Manager — only modal-type overlays lock scroll now
-const ScrollLockManager = () => {
-  const { isAuthModalOpen, isLogoutConfirmOpen, isProfileModalOpen } = useAuth();
-
-  useEffect(() => {
-    const isAnyOpen = isAuthModalOpen || isLogoutConfirmOpen || isProfileModalOpen;
-    
-    if (isAnyOpen) {
-      const scrollY = window.scrollY;
-      document.body.style.top = `-${scrollY}px`;
-      document.body.style.position = 'fixed';
-      document.body.style.width = '100%';
-      document.body.classList.add('no-scroll');
-      document.body.dataset.scrollY = scrollY.toString();
-    } else {
-      const scrollY = document.body.dataset.scrollY;
-      
-      document.body.style.position = '';
-      document.body.style.top = '';
-      document.body.style.width = '';
-      document.body.classList.remove('no-scroll');
-      
-      if (scrollY) {
-        const originalScrollBehavior = document.documentElement.style.scrollBehavior;
-        document.documentElement.style.scrollBehavior = 'auto';
-        window.scrollTo(0, parseInt(scrollY));
-        document.documentElement.style.scrollBehavior = originalScrollBehavior;
-        delete document.body.dataset.scrollY;
-      }
-    }
-    
-    return () => {
-      document.body.style.position = '';
-      document.body.style.top = '';
-      document.body.style.width = '';
-      document.body.classList.remove('no-scroll');
-    };
-  }, [isAuthModalOpen, isLogoutConfirmOpen, isProfileModalOpen]);
-
-  return null;
-};
 
 // Pull-to-Refresh Gate
 function PullToRefreshGate({ children }) {
@@ -297,9 +257,7 @@ function AuthGate({ children }) {
   
   useEffect(() => {
     if (currentUser && Capacitor.isNativePlatform()) {
-      ActivityTracker.recordActivity().then(() => {
-        ReminderManager.resetReminderSchedule();
-      });
+      ReminderManager.resetReminderSchedule();
     }
   }, [currentUser]);
 
@@ -311,20 +269,40 @@ function AuthGate({ children }) {
   return children;
 }
 
+// Notification Setup: initializes NotificationService inside Router for useNavigate access
+function NotificationSetup() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    NotificationService.initialize({
+      onNotificationTap: (data) => {
+        if (data?.target === 'order_history') {
+          setTimeout(() => navigate('/orders'), 100);
+        }
+      }
+    }).then(() => {
+      const hasLaunched = localStorage.getItem('app_first_launch_completed');
+      if (!hasLaunched) {
+        localStorage.setItem('app_first_launch_completed', 'true');
+        NotificationService.show(EVENTS.FIRST_LAUNCH);
+      }
+    });
+
+    return () => {
+      NotificationService.destroy();
+    };
+  }, [navigate]);
+
+  return null;
+}
+
 function App() {
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
       StatusBar.setOverlaysWebView({ overlay: true });
       StatusBar.setBackgroundColor({ color: '#00000000' });
-
-      // Initialize notification infrastructure (fire-and-forget)
-      NotificationService.initialize().then(() => {
-        const hasLaunched = localStorage.getItem('app_first_launch_completed');
-        if (!hasLaunched) {
-          localStorage.setItem('app_first_launch_completed', 'true');
-          NotificationService.show(EVENTS.FIRST_LAUNCH);
-        }
-      });
     }
   }, []);
 
@@ -334,7 +312,7 @@ function App() {
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     
     if (!prefersReducedMotion && !Capacitor.isNativePlatform()) {
-      const lenis = new Lenis({
+      lenisService.init({
         duration: 1.2,
         easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
         direction: 'vertical',
@@ -344,15 +322,8 @@ function App() {
         touchMultiplier: 2,
       });
 
-      function raf(time) {
-        lenis.raf(time);
-        requestAnimationFrame(raf);
-      }
-
-      requestAnimationFrame(raf);
-
       return () => {
-        lenis.destroy();
+        lenisService.destroy();
       };
     }
   }, []);
@@ -368,10 +339,10 @@ function App() {
                     <FavoritesProvider>
                       <VideoProvider>
                           <CartProvider>
-                            <NotificationNavigation />
+                            <NotificationSetup />
                             <DeepLinkHandler />
                             <BackButtonHandler />
-                            <ScrollLockManager />
+
                           <SEOHelper />
                           <div className="app-container">
                             <SystemBarsSync />

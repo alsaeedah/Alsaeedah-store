@@ -84,7 +84,7 @@ const FAB = ({ isMobile }) => {
                         : '0 0 10px rgba(212,175,55,0.3), inset 0 0 5px rgba(212,175,55,0.1)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     cursor: 'pointer',
-                    color: isOpen ? '#000' : 'var(--primary)',
+                    color: isOpen ? 'var(--btn-text)' : 'var(--primary)',
                     zIndex: 2,
                     backdropFilter: 'blur(8px)',
                     transition: 'all 0.3s ease'
@@ -215,10 +215,10 @@ export default function Navbar() {
                             animate={{ scale: 1 }}
                             style={{
                                 position: 'absolute', top: '-2px', right: '-2px',
-                                background: 'var(--primary)', color: '#000', borderRadius: '50%',
+                                background: 'var(--primary)', color: 'var(--btn-text)', borderRadius: '50%',
                                 width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 fontSize: '11px', fontWeight: '800', fontFamily: 'var(--font-body)',
-                                border: `2px solid ${theme === 'dark' ? '#121212' : '#ffffff'}`,
+                                border: `2px solid var(--bg-main)`,
                                 boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
                             }}
                         >

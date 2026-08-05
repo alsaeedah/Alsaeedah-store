@@ -53,9 +53,9 @@ export default function AppDownloadBanner() {
                         right: 0,
                         zIndex: 10000, // Above everything
                         padding: '16px 20px',
-                        background: 'rgba(10, 10, 10, 0.9)',
+                        background: 'var(--bg-card)',
                         backdropFilter: 'blur(20px)',
-                        borderTop: '1px solid rgba(212, 175, 55, 0.4)',
+                        borderTop: '1px solid var(--border-color)',
                         borderTopLeftRadius: '28px',
                         borderTopRightRadius: '28px',
                         boxShadow: '0 -15px 40px rgba(0,0,0,0.6)',
@@ -87,13 +87,13 @@ export default function AppDownloadBanner() {
                                 flexShrink: 0,
                                 overflow: 'hidden'
                             }}>
-                                <Smartphone size={26} color="#000" />
+                                <Smartphone size={26} color="var(--btn-text)" />
                             </div>
                         </div>
                         
                         <div style={{ flex: 1 }}>
-                            <h4 style={{ color: '#fff', fontSize: '1rem', fontWeight: '900', marginBottom: '2px' }}>متجر السعيدة للأندرويد</h4>
-                            <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem', lineHeight: '1.3', fontWeight: '500' }}>
+                            <h4 style={{ color: 'var(--text-main)', fontSize: '1rem', fontWeight: '900', marginBottom: '2px' }}>متجر السعيدة للأندرويد</h4>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: '1.3', fontWeight: '500' }}>
                                 تجربة تسوق متكاملة، أسرع وبدون انقطاع
                             </p>
                         </div>
@@ -104,7 +104,7 @@ export default function AppDownloadBanner() {
                                 onClick={handleDownload}
                                 style={{
                                     background: 'var(--primary)',
-                                    color: '#000',
+                                    color: 'var(--btn-text)',
                                     border: 'none',
                                     padding: '10px 20px',
                                     borderRadius: '14px',
@@ -124,8 +124,8 @@ export default function AppDownloadBanner() {
                             <button 
                                 onClick={handleClose}
                                 style={{
-                                    background: 'rgba(255,255,255,0.08)',
-                                    color: 'rgba(255,255,255,0.6)',
+                                    background: 'var(--skeleton-bg)',
+                                    color: 'var(--text-secondary)',
                                     border: 'none',
                                     width: '38px',
                                     height: '38px',

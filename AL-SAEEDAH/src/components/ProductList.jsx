@@ -152,14 +152,14 @@ export default function ProductList({
             >
                 <h2 style={{
                     fontSize: window.innerWidth < 480 ? '2rem' : '3rem',
-                    color: '#fff',
+                    color: 'var(--text-main)',
                     marginBottom: '15px',
                     fontWeight: '800',
                     textShadow: '0 4px 20px rgba(212, 175, 55, 0.2)'
                 }}>
                     {title} <span style={{ color: 'var(--primary)', textShadow: '0 0 30px rgba(212, 175, 55, 0.4)' }}>{subtitle}</span>
                 </h2>
-                <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '1.25rem', fontWeight: '500', maxWidth: '600px', margin: '0 auto' }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '1.25rem', fontWeight: '500', maxWidth: '600px', margin: '0 auto' }}>
                     {description}
                 </p>
             </motion.div>
@@ -179,10 +179,10 @@ export default function ProductList({
                     alignItems: 'center',
                     justifyContent: 'center',
                     maxWidth: '100%',
-                    background: 'linear-gradient(145deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))',
+                    background: 'var(--bg-card)',
                     borderRadius: '24px',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+                    border: '1px solid var(--border-color)',
+                    boxShadow: 'var(--shadow)',
                     backdropFilter: 'blur(20px)'
                 }}
             >
@@ -199,8 +199,8 @@ export default function ProductList({
                         style={{
                             width: '100%',
                             padding: '12px 45px 12px 15px',
-                            background: 'rgba(255, 255, 255, 0.05)',
-                            border: '1px solid rgba(255,255,255,0.15)',
+                            background: 'var(--skeleton-bg)',
+                            border: '1px solid var(--border-color)',
                             borderRadius: '16px',
                             color: 'var(--text-main)',
                             fontSize: '0.95rem',
@@ -208,8 +208,8 @@ export default function ProductList({
                             transition: 'all 0.3s ease',
                             fontFamily: 'cairo'
                         }}
-                        onFocus={(e) => { e.target.style.borderColor = 'var(--primary)'; e.target.style.boxShadow = '0 0 20px rgba(212, 175, 55, 0.2)'; e.target.style.background = 'rgba(255, 255, 255, 0.08)'; }}
-                        onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.15)'; e.target.style.boxShadow = 'none'; e.target.style.background = 'rgba(255, 255, 255, 0.05)'; }}
+                        onFocus={(e) => { e.target.style.borderColor = 'var(--primary)'; e.target.style.boxShadow = '0 0 20px rgba(212, 175, 55, 0.2)'; e.target.style.background = 'var(--bg-main)'; }}
+                        onBlur={(e) => { e.target.style.borderColor = 'var(--border-color)'; e.target.style.boxShadow = 'none'; e.target.style.background = 'var(--skeleton-bg)'; }}
                     />
                     {searchQuery && (
                         <button 
@@ -239,9 +239,9 @@ export default function ProductList({
                                 style={{
                                     padding: '8px 20px',
                                     borderRadius: '20px',
-                                    border: filterType === type.value ? '1px solid var(--primary)' : '1px solid rgba(255,255,255,0.1)',
-                                    background: filterType === type.value ? 'var(--primary)' : 'rgba(255,255,255,0.03)',
-                                    color: filterType === type.value ? '#000' : 'rgba(255,255,255,0.8)',
+                                    border: filterType === type.value ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                                    background: filterType === type.value ? 'var(--primary)' : 'var(--skeleton-bg)',
+                                    color: filterType === type.value ? 'var(--btn-text)' : 'var(--text-main)',
                                     cursor: 'pointer',
                                     transition: 'all 0.3s ease',
                                     fontFamily: 'cairo',
@@ -265,8 +265,8 @@ export default function ProductList({
                         style={{
                             padding: '10px 18px',
                             borderRadius: '12px',
-                            background: 'rgba(255,255,255,0.05)',
-                            border: '1px solid rgba(255,255,255,0.15)',
+                            background: 'var(--skeleton-bg)',
+                            border: '1px solid var(--border-color)',
                             color: 'var(--text-main)',
                             fontFamily: 'var(--font-main)',
                             outline: 'none',
@@ -301,8 +301,8 @@ export default function ProductList({
                                 width: '90px',
                                 padding: '10px',
                                 borderRadius: '12px',
-                                background: 'rgba(255,255,255,0.05)',
-                                border: '1px solid rgba(255,255,255,0.15)',
+                                background: 'var(--skeleton-bg)',
+                                border: '1px solid var(--border-color)',
                                 color: 'var(--text-main)',
                                 fontFamily: 'var(--font-main)',
                                 outline: 'none',
@@ -323,8 +323,8 @@ export default function ProductList({
                                 width: '90px',
                                 padding: '10px',
                                 borderRadius: '12px',
-                                background: 'rgba(255,255,255,0.05)',
-                                border: '1px solid rgba(255,255,255,0.15)',
+                                background: 'var(--skeleton-bg)',
+                                border: '1px solid var(--border-color)',
                                 color: 'var(--text-main)',
                                 fontFamily: 'var(--font-main)',
                                 outline: 'none',
@@ -343,8 +343,8 @@ export default function ProductList({
                         style={{
                             padding: '10px 18px',
                             borderRadius: '12px',
-                            background: 'rgba(255,255,255,0.05)',
-                            border: '1px solid rgba(255,255,255,0.15)',
+                            background: 'var(--skeleton-bg)',
+                            border: '1px solid var(--border-color)',
                             color: 'var(--text-main)',
                             fontFamily: 'var(--font-main)',
                             outline: 'none',

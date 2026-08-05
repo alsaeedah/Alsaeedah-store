@@ -132,7 +132,7 @@ export default function HeroCarousel() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background: '#050505',
+                background: 'var(--bg-main)',
                 touchAction: 'pan-y',
                 overscrollBehaviorX: 'none'
             }}
@@ -146,7 +146,7 @@ export default function HeroCarousel() {
                         left: 0,
                         width: '100%',
                         height: '100%',
-                        background: '#050505',
+                        background: 'var(--bg-main)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -269,7 +269,7 @@ export default function HeroCarousel() {
                                             left: 0,
                                             width: '100%',
                                             height: '100%',
-                                            background: 'linear-gradient(to top, #050505 0%, transparent 40%, rgba(0,0,0,0.3) 100%)',
+                                            background: `linear-gradient(to top, var(--bg-main) 0%, transparent 40%, var(--hero-overlay) 100%)`,
                                             zIndex: 4
                                         }} />
                                     </div>
@@ -278,7 +278,7 @@ export default function HeroCarousel() {
                                     <div className="container" style={{
                                         position: 'relative',
                                         zIndex: 10,
-                                        color: '#fff',
+                                        color: 'var(--hero-text-color)',
                                         display: 'flex',
                                         flexDirection: 'column',
                                         justifyContent: 'center',
@@ -345,8 +345,8 @@ export default function HeroCarousel() {
                                                         document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
                                                     }}
                                                     style={{
-                                                        background: 'linear-gradient(135deg, var(--primary) 0%, #b8860b 100%)',
-                                                        color: '#000',
+                                                    background: 'linear-gradient(135deg, var(--primary) 0%, #b8860b 100%)',
+                                                        color: 'var(--btn-text)',
                                                         border: 'none',
                                                         padding: '16px 40px',
                                                         fontSize: '1.1rem',
@@ -398,9 +398,9 @@ export default function HeroCarousel() {
                                     left: '20px',
                                     top: '50%',
                                     transform: 'translateY(-50%)',
-                                    background: 'rgba(255,255,255,0.1)',
-                                    border: '1px solid rgba(255,255,255,0.2)',
-                                    color: '#fff',
+                                    background: 'var(--glass-hover)',
+                                    border: '1px solid var(--border-color)',
+                                    color: 'var(--hero-text-color)',
                                     width: '50px',
                                     height: '50px',
                                     borderRadius: '50%',
@@ -414,13 +414,13 @@ export default function HeroCarousel() {
                                 }}
                                 onMouseEnter={(e) => {
                                     e.currentTarget.style.background = 'var(--primary)';
-                                    e.currentTarget.style.color = '#000';
+                                    e.currentTarget.style.color = 'var(--btn-text)';
                                     e.currentTarget.style.borderColor = 'var(--primary)';
                                 }}
                                 onMouseLeave={(e) => {
-                                    e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                                    e.currentTarget.style.color = '#fff';
-                                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
+                                    e.currentTarget.style.background = 'var(--glass-hover)';
+                                    e.currentTarget.style.color = 'var(--hero-text-color)';
+                                    e.currentTarget.style.borderColor = 'var(--border-color)';
                                 }}
                             >
                                 <ChevronLeft size={24} />
@@ -433,9 +433,9 @@ export default function HeroCarousel() {
                                     right: '20px',
                                     top: '50%',
                                     transform: 'translateY(-50%)',
-                                    background: 'rgba(255,255,255,0.1)',
-                                    border: '1px solid rgba(255,255,255,0.2)',
-                                    color: '#fff',
+                                    background: 'var(--glass-hover)',
+                                    border: '1px solid var(--border-color)',
+                                    color: 'var(--hero-text-color)',
                                     width: '50px',
                                     height: '50px',
                                     borderRadius: '50%',
@@ -449,13 +449,13 @@ export default function HeroCarousel() {
                                 }}
                                 onMouseEnter={(e) => {
                                     e.currentTarget.style.background = 'var(--primary)';
-                                    e.currentTarget.style.color = '#000';
+                                    e.currentTarget.style.color = 'var(--btn-text)';
                                     e.currentTarget.style.borderColor = 'var(--primary)';
                                 }}
                                 onMouseLeave={(e) => {
-                                    e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                                    e.currentTarget.style.color = '#fff';
-                                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
+                                    e.currentTarget.style.background = 'var(--glass-hover)';
+                                    e.currentTarget.style.color = 'var(--hero-text-color)';
+                                    e.currentTarget.style.borderColor = 'var(--border-color)';
                                 }}
                             >
                                 <ChevronRight size={24} />
@@ -478,11 +478,11 @@ export default function HeroCarousel() {
                             <div style={{
                                 display: 'flex',
                                 gap: '12px',
-                                background: 'rgba(10, 10, 10, 0.6)',
+                                background: 'var(--overlay-dim)',
                                 padding: '12px 24px',
                                 borderRadius: '30px',
                                 backdropFilter: 'blur(10px)',
-                                border: '1px solid rgba(255,255,255,0.1)'
+                                border: '1px solid var(--border-color)'
                             }}>
                                 {slides.map((_, index) => (
                                     <div

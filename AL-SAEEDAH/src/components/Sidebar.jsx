@@ -108,7 +108,7 @@ export default function Sidebar() {
                             <span style={{ color: isActive ? 'var(--primary)' : 'var(--text-dim)', transition: 'color 0.2s' }}>{link.icon}</span>
                             {link.label}
                             {link.path === '/cart' && itemCount > 0 && (
-                                <span style={{ marginRight: 'auto', background: 'var(--primary)', color: '#000', borderRadius: '12px', padding: '2px 8px', fontSize: '0.75rem', fontWeight: 700, fontFamily: 'var(--font-body)' }}>{itemCount}</span>
+                                <span style={{ marginRight: 'auto', background: 'var(--primary)', color: 'var(--btn-text)', borderRadius: '12px', padding: '2px 8px', fontSize: '0.75rem', fontWeight: 700, fontFamily: 'var(--font-body)' }}>{itemCount}</span>
                             )}
                             {link.path === '/wishlist' && favorites.length > 0 && (
                                 <span style={{ marginRight: 'auto', background: 'rgba(212,175,55,0.15)', color: 'var(--primary)', borderRadius: '12px', padding: '2px 8px', fontSize: '0.75rem', fontWeight: 700, fontFamily: 'var(--font-body)' }}>{favorites.length}</span>
@@ -153,7 +153,7 @@ export default function Sidebar() {
             {badge > 0 && (
                 <span style={{
                     position: 'absolute', top: '4px', right: '4px',
-                    background: 'var(--primary)', color: 'black', borderRadius: '50%',
+                    background: 'var(--primary)', color: 'var(--btn-text)', borderRadius: '50%',
                     width: '17px', height: '17px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: '10px', fontWeight: 'bold', fontFamily: 'var(--font-body)',
                     border: '2px solid var(--bg-main)'
@@ -233,7 +233,7 @@ export default function Sidebar() {
                                 exit={{ opacity: 0 }}
                                 transition={{ duration: 0.25 }}
                                 onClick={() => setIsMenuOpen(false)}
-                                style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 1998 }}
+                                style={{ position: 'fixed', inset: 0, background: 'var(--overlay-dim)', backdropFilter: 'blur(4px)', zIndex: 1998 }}
                             />
                             <motion.div
                                 initial={{ x: '100%' }}

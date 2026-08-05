@@ -25,13 +25,12 @@ export {
 } from './NotificationEvents';
 
 // Constants (for advanced usage)
-export { CHANNELS, ID_RANGES, STORAGE_KEYS, TIMING, STATUS } from './NotificationConstants';
+export { CHANNELS, ID_RANGES, STORAGE_KEYS, TIMING, STATUS, NOTIFICATION_CONFIG } from './NotificationConstants';
 export { REMINDERS } from './ReminderConstants';
 
-// Phase 3 & 4 Modules
-export * as ActivityTracker from './ActivityTracker';
+// Reminder system
 export * as ReminderManager from './ReminderManager';
 export * as NotificationLifecycleManager from './NotificationLifecycleManager';
 
-// Phase 5 Modules
-export { default as NotificationNavigation } from './NotificationNavigation';
+// ID Generator (for diagnostics)
+export { generateId, getCurrentCounter } from './NotificationIdGenerator';

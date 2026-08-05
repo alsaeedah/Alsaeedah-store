@@ -41,7 +41,7 @@ export default function EmptyOrders({ isMobile }) {
           color: 'var(--text-main)',
           marginBottom: '8px'
         }}>
-          No orders yet
+          لا يوجد طلبات بعد
         </h2>
         <p style={{ 
           color: 'var(--text-dim)', 
@@ -50,7 +50,7 @@ export default function EmptyOrders({ isMobile }) {
           margin: '0 auto',
           lineHeight: '1.5'
         }}>
-          Your future orders will appear here once you place your first order.
+          مستقبلا سترى جميع طلباتكف ي هذه الخانه
         </p>
       </div>
 
@@ -66,7 +66,7 @@ export default function EmptyOrders({ isMobile }) {
           fontWeight: '600'
         }}
       >
-        Start Shopping
+        أبدأ التسوق
       </Link>
     </motion.div>
   );

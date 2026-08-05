@@ -269,7 +269,7 @@ const Orders = () => {
         }
     };
 
-    const generateInvoice = async (order) => {
+    const generateInvoice = async (order, paymentType) => {
         startLoading('جاري إنشاء الفاتورة وتحميل البيانات...');
         const invoiceId = `ORD${order.order_number}`;
         const dateStr = new Date(order.created_at).toLocaleDateString('ar-SA');
@@ -290,16 +290,16 @@ const Orders = () => {
 
         const items = Array.isArray(order.items) ? order.items : [];
         const addressData = order.customer_address;
-        const addressHtml = addressData && typeof addressData === 'object'
-            ? `
-                <p style="margin: 5px 0;"><strong> المحافظة : </strong> ${addressData.governorate || 'غير محدد'}</p>
-                <p style="margin: 5px 0;"><strong>المديرية : </strong> ${addressData.district || 'غير محدد'}</p>
-                <p style="margin: 5px 0;"><strong>الحي : </strong> ${addressData.neighborhood || 'غير محدد'}</p>
-            `
-            : `<p style="margin: 5px 0;"><strong> العنوان : </strong> ${addressData || 'غير محدد'}</p>`;
+        const addressText = addressData && typeof addressData === 'object'
+            ? `${addressData.governorate || ''} - ${addressData.district || ''}`.replace(/^ - | - $/g, '') || 'غير محدد'
+            : (addressData || 'غير محدد');
+
+
+        const cashSelected = paymentType === 'cash';
+        const creditSelected = paymentType === 'credit';
 
         invoiceDiv.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #d4af37; padding-bottom: 20px; margin-bottom: 30px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #d4af37; padding-bottom: 20px; margin-bottom: 20px;">
                 <div style="flex: 1; text-align: right;">
                     <h1 style="color: #d4af37; font-size: 28px; margin: 0 0 10px 0; font-weight: 700;">متجر السعيدة</h1>
                     <div style="font-size: 13px; color: #444; line-height: 1.8;">
@@ -323,15 +323,47 @@ const Orders = () => {
                 </div>
             </div>
 
-            <div data-segment="customer-info" style="display: flex; gap: 40px; margin-bottom: 30px; padding: 20px; background: #f9f9f9; border-radius: 8px; border: 1px solid #eee;">
-                <div style="flex: 1;">
-                    <h3 style="color: #d4af37; margin-bottom: 10px; font-size: 16px;">بيانات العميل</h3>
-                    <p style="margin: 5px 0;"><strong> الاسم : </strong> ${order.customer_name || customerUser.name || 'غير معروف'}</p>
-                    <p style="margin: 5px 0;"><strong> هاتف : </strong> ${order.customer_phone || customerUser.phone || 'غير متوفر'}</p>
+            <!-- ═══ PAYMENT TYPE SELECTOR ═══ -->
+            <div data-segment="payment-type" style="display: flex; justify-content: center; margin-bottom: 14px;">
+                <div style="display: inline-flex; align-items: center; border: 1.5px solid #e0d5b5; border-radius: 10px; padding: 8px 28px; gap: 0; background: #fff;">
+                    <!-- نوع الدفع label -->
+                    <span style="font-size: 14px; font-weight: 700; color: #333; padding-inline-end: 16px;">نوع الدفع:</span>
+                    <!-- نقد option -->
+                    <div style="display: flex; align-items: center; gap: 8px; padding-inline-end: 18px;">
+                        <div style="width: 18px; height: 18px; border-radius: 50%; border: 2px solid #d4af37; display: flex; align-items: center; justify-content: center; background: #fff;">
+                            ${cashSelected ? '<div style="width: 10px; height: 10px; border-radius: 50%; background: #d4af37;"></div>' : ''}
+                        </div>
+                        <span style="font-size: 14px; font-weight: 600; color: #333;">نقد</span>
+                    </div>
+                    <!-- Divider -->
+                    <div style="width: 1px; height: 20px; background: #e0d5b5;"></div>
+                    <!-- أجل option -->
+                    <div style="display: flex; align-items: center; gap: 8px; padding-inline-start: 18px;">
+                        <div style="width: 18px; height: 18px; border-radius: 50%; border: 2px solid #d4af37; display: flex; align-items: center; justify-content: center; background: #fff;">
+                            ${creditSelected ? '<div style="width: 10px; height: 10px; border-radius: 50%; background: #d4af37;"></div>' : ''}
+                        </div>
+                        <span style="font-size: 14px; font-weight: 600; color: #333;">أجل</span>
+                    </div>
                 </div>
-                <div style="flex: 1;">
-                    <h3 style="color: #d4af37; margin-bottom: 10px; font-size: 16px;">عنوان التوصيل</h3>
-                    ${addressHtml}
+            </div>
+
+            <!-- ═══ CUSTOMER INFO (Compact) ═══ -->
+            <div data-segment="customer-info" style="margin-bottom: 10px; font-size: 14px; color: #333;">
+                <!-- Row 1: Customer Name -->
+                <div style="display: flex; align-items: baseline; gap: 8px; padding: 8px 0; border-bottom: 1px solid #eee;">
+                    <strong style="color: #555; white-space: nowrap;">الاسم:</strong>
+                    <span style="font-weight: 600;">${order.customer_name || customerUser.name || 'غير معروف'}</span>
+                </div>
+                <!-- Row 2: Address + Phone -->
+                <div style="display: flex; justify-content: space-between; align-items: baseline; padding: 8px 0;">
+                    <div style="display: flex; align-items: baseline; gap: 8px;">
+                        <strong style="color: #555; white-space: nowrap;">العنوان:</strong>
+                        <span>${addressText}</span>
+                    </div>
+                    <div style="display: flex; align-items: baseline; gap: 8px;">
+                        <strong style="color: #555; white-space: nowrap;">رقم الجوال:</strong>
+                        <span style="direction: ltr; display: inline-block;">${order.customer_phone || customerUser.phone || 'غير متوفر'}</span>
+                    </div>
                 </div>
             </div>
 
@@ -612,6 +644,7 @@ const ImagePreviewModal = ({ imageUrl, onClose }) => {
 
 const OrderCard = ({ order, index, lastOrderRef, onUpdateStatus, onDelete, onInvoice, onImageClick, isHighlighted, setRef }) => {
     const [isExpanded, setIsExpanded] = useState(false);
+    const [invoiceType, setInvoiceType] = useState('cash');
     const isMobile = window.innerWidth < 768;
     const items = Array.isArray(order.items) ? order.items : [];
     const visibleItems = isExpanded ? items : items.slice(0, 2);
@@ -748,15 +781,32 @@ const OrderCard = ({ order, index, lastOrderRef, onUpdateStatus, onDelete, onInv
                         <p style={{ fontSize: isMobile ? '1.1rem' : '1.6rem', fontWeight: '900', color: 'var(--primary)' }}>{Number(order.total_amount).toLocaleString()} <span style={{ fontSize: '0.75rem' }}>ر.س</span></p>
                     </div>
                 </div>
-                <div style={{ display: 'flex', gap: isMobile ? '6px' : '10px', flexDirection: 'row', width: isMobile ? '100%' : 'auto', flexWrap: 'nowrap' }}>
-                    <motion.button 
-                        whileHover={{ scale: 1.02 }} 
-                        whileTap={{ scale: 0.98 }} 
-                        onClick={() => onInvoice(order)} 
-                        style={{ flex: 1, padding: isMobile ? '0 6px' : '0 15px', height: isMobile ? '38px' : '44px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid var(--border-color)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isMobile ? '4px' : '8px', fontSize: isMobile ? '0.7rem' : '0.85rem', fontWeight: '700', whiteSpace: 'nowrap' }}>
-                        <Download size={isMobile ? 14 : 16} /> فاتورة
-                    </motion.button>
+                <div style={{ display: 'flex', gap: isMobile ? '6px' : '10px', flexDirection: isMobile ? 'column' : 'row', width: isMobile ? '100%' : 'auto' }}>
+                    <div style={{ display: 'flex', gap: '6px', flexDirection: isMobile ? 'column' : 'row', flex: isMobile ? 1 : 'none' }}>
+                        <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', padding: '4px', gap: '4px', height: isMobile ? '38px' : '44px' }}>
+                            <button
+                                onClick={() => setInvoiceType('cash')}
+                                style={{ flex: 1, border: 'none', borderRadius: '8px', background: invoiceType === 'cash' ? 'var(--primary)' : 'transparent', color: invoiceType === 'cash' ? '#000' : 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: isMobile ? '0.7rem' : '0.85rem', fontWeight: invoiceType === 'cash' ? '800' : '600', transition: 'all 0.2s', padding: isMobile ? '0 10px' : '0 16px' }}
+                            >
+                                نقد
+                            </button>
+                            <button
+                                onClick={() => setInvoiceType('credit')}
+                                style={{ flex: 1, border: 'none', borderRadius: '8px', background: invoiceType === 'credit' ? 'var(--primary)' : 'transparent', color: invoiceType === 'credit' ? '#000' : 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: isMobile ? '0.7rem' : '0.85rem', fontWeight: invoiceType === 'credit' ? '800' : '600', transition: 'all 0.2s', padding: isMobile ? '0 10px' : '0 16px' }}
+                            >
+                                أجل
+                            </button>
+                        </div>
+                        <motion.button 
+                            whileHover={{ scale: 1.02 }} 
+                            whileTap={{ scale: 0.98 }} 
+                            onClick={() => onInvoice(order, invoiceType)} 
+                            style={{ flex: 1, padding: isMobile ? '0 6px' : '0 15px', height: isMobile ? '38px' : '44px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid var(--border-color)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isMobile ? '4px' : '8px', fontSize: isMobile ? '0.7rem' : '0.85rem', fontWeight: '700', whiteSpace: 'nowrap' }}>
+                            <Download size={isMobile ? 14 : 16} /> فاتورة
+                        </motion.button>
+                    </div>
                     
+                    <div style={{ display: 'flex', gap: isMobile ? '6px' : '10px', flexDirection: 'row', width: isMobile ? '100%' : 'auto', flexWrap: 'nowrap', flex: isMobile ? 1 : 'none' }}>
                     {order.status === 'pending' ? (
                         <>
                             <motion.button 
@@ -795,6 +845,7 @@ const OrderCard = ({ order, index, lastOrderRef, onUpdateStatus, onDelete, onInv
                     </motion.button>
                 </div>
             </div>
+        </div>
         </motion.div>
     );
 };

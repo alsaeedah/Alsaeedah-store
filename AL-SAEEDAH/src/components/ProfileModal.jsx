@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, User, Save, Edit2, Camera as CameraIcon, ZoomIn, ZoomOut, Check, Phone, Lock, Eye, EyeOff, MapPin, MessageCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLoader } from '../context/LoaderContext';
@@ -8,10 +8,16 @@ import { getCroppedImg } from '../utils/cropImage';
 import { uploadToCloudinary } from '../utils/cloudinary';
 import { Camera, CameraResultType } from '@capacitor/camera';
 import { Capacitor } from '@capacitor/core';
+import { useScrollLock } from '../hooks/useScrollLock';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 export default function ProfileModal() {
     const { isProfileModalOpen, closeProfileModal, currentUser, updateUser, updatePassword } = useAuth();
     const { showLoader, hideLoader } = useLoader();
+
+    const containerRef = useRef(null);
+    useScrollLock(isProfileModalOpen);
+    useFocusTrap(isProfileModalOpen, containerRef);
 
     // Form & UI State
     const [isEditing, setIsEditing] = useState(false);
@@ -237,12 +243,12 @@ export default function ProfileModal() {
             zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center',
             opacity: isProfileModalOpen ? 1 : 0,
             pointerEvents: isProfileModalOpen ? 'auto' : 'none', transition: 'opacity 0.3s ease'
-        }}>
+        }} data-lenis-prevent="true">
             {toastMessage && (
                 <ToastNotification message={toastMessage} onClose={() => setToastMessage(null)} />
             )}
 
-            <div className="glass-panel" style={{
+            <div className="glass-panel" ref={containerRef} style={{
                 width: '90%', maxWidth: '500px', padding: '40px',
                 position: 'relative', maxHeight: '90vh', overflowY: 'auto',
                 borderRadius: '20px', border: '1px solid rgba(212,175,55,0.2)'

@@ -1,17 +1,19 @@
 /**
  * Notification Scheduler
  *
- * Minimal scheduling infrastructure. Wraps @capacitor/local-notifications
- * scheduling API with a clean interface.
+ * Wraps @capacitor/local-notifications scheduling API.
  *
- * Phase 1: API surface is defined but no schedules are created.
- * Phase 2: scheduleImmediate() will be used for instant notifications.
- * Phase 3: scheduleAt() will be used for reminder notifications.
- * Phase 4: cancel/update logic will be extended.
+ * For immediate notifications (show):
+ *   Uses NotificationIdGenerator to produce unique IDs.
+ *   Returns { id, success } so the caller can track the generated ID.
+ *
+ * For scheduled notifications (reminders):
+ *   Uses the event's fixed ID (intentional — reminders are singleton-per-type).
  */
 
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { CHANNELS } from './NotificationConstants';
+import { generateId } from './NotificationIdGenerator';
 import * as Logger from './NotificationLogger';
 
 /**
@@ -28,15 +30,18 @@ function applyTemplate(template, data) {
 }
 
 /**
- * Show a notification immediately.
+ * Show a notification immediately with a unique generated ID.
+ *
  * @param {Object} event - An event definition from NotificationEvents.
- * @param {Object} [data] - Template replacement data (e.g. { name: 'أحمد' }).
- * @returns {Promise<boolean>} true if scheduled successfully.
+ * @param {Object} [data] - Template replacement data.
+ * @returns {Promise<{id: number, success: boolean}>}
  */
 export async function scheduleImmediate(event, data = {}) {
   try {
+    const id = await generateId();
+
     const notification = {
-      id: event.id,
+      id,
       title: applyTemplate(event.title, data),
       body: applyTemplate(event.body, data),
       channelId: event.channel || CHANNELS.GENERAL.id,
@@ -44,16 +49,18 @@ export async function scheduleImmediate(event, data = {}) {
     };
 
     await LocalNotifications.schedule({ notifications: [notification] });
-    Logger.log('Scheduler.immediate', `ID: ${notification.id}`, notification.title);
-    return true;
+    Logger.log('Scheduler.IMMEDIATE', `ID: ${id}`, notification.title);
+    return { id, success: true };
   } catch (err) {
     Logger.error('Scheduler.immediate', err);
-    return false;
+    return { id: null, success: false };
   }
 }
 
 /**
  * Schedule a notification for a specific date/time.
+ * Uses the event's fixed ID (reminders are singleton-per-type).
+ *
  * @param {Object} event - Event definition from NotificationEvents.
  * @param {Object} [data] - Template replacement data.
  * @param {Date}   date  - When to fire.
@@ -71,7 +78,7 @@ export async function scheduleAt(event, data = {}, date) {
     };
 
     await LocalNotifications.schedule({ notifications: [notification] });
-    Logger.log('Scheduler.at', `ID: ${notification.id}, Date: ${date.toISOString()}`);
+    Logger.log('Scheduler.AT', `ID: ${notification.id}, Date: ${date.toISOString()}`);
     return true;
   } catch (err) {
     Logger.error('Scheduler.at', err);
@@ -87,7 +94,7 @@ export async function scheduleAt(event, data = {}, date) {
 export async function cancel(notificationId) {
   try {
     await LocalNotifications.cancel({ notifications: [{ id: notificationId }] });
-    Logger.log('Scheduler.cancel', `ID: ${notificationId}`);
+    Logger.log('Scheduler.CANCEL', `ID: ${notificationId}`);
     return true;
   } catch (err) {
     Logger.error('Scheduler.cancel', err);
@@ -105,7 +112,7 @@ export async function cancelAll() {
     if (pending.notifications.length > 0) {
       await LocalNotifications.cancel({ notifications: pending.notifications });
     }
-    Logger.log('Scheduler.cancelAll', `Cancelled ${pending.notifications.length} notifications`);
+    Logger.log('Scheduler.CANCEL_ALL', `Cancelled ${pending.notifications.length} notifications`);
     return true;
   } catch (err) {
     Logger.error('Scheduler.cancelAll', err);

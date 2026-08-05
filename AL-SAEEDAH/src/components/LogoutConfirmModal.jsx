@@ -1,8 +1,15 @@
+import { useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { LogOut, X } from 'lucide-react';
+import { useScrollLock } from '../hooks/useScrollLock';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 export default function LogoutConfirmModal() {
     const { isLogoutConfirmOpen, closeLogoutConfirm, logout } = useAuth();
+    const containerRef = useRef(null);
+
+    useScrollLock(isLogoutConfirmOpen);
+    useFocusTrap(isLogoutConfirmOpen, containerRef);
 
     if (!isLogoutConfirmOpen) return null;
 
@@ -20,8 +27,8 @@ export default function LogoutConfirmModal() {
             alignItems: 'center',
             justifyContent: 'center',
             padding: '20px'
-        }}>
-            <div className="glass-panel" style={{
+        }} data-lenis-prevent="true">
+            <div className="glass-panel" ref={containerRef} style={{
                 width: '100%',
                 maxWidth: '400px',
                 padding: '40px',
