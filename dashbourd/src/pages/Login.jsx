@@ -6,6 +6,41 @@ import { Lock, Mail, ArrowLeft } from 'lucide-react';
 
 const logo = '/logo.png';
 
+const getLoginErrorMessage = (error) => {
+    const msg = error.message || '';
+    const code = error.code || '';
+
+    // AuthStore specific codes (Claims-First Architecture)
+    if (code === 'NOT_AUTHORIZED') {
+        return 'هذا الحساب لا يملك صلاحيات لوحة التحكم';
+    }
+    if (code === 'CLAIMS_MISSING') {
+        return 'هذا الحساب لا يملك صلاحيات إدارية';
+    }
+    if (code === 'PROFILE_MISSING') {
+        return 'لم يتم العثور على ملف المدير المنشط. يرجى التواصل مع الدعم.';
+    }
+    if (code === 'ACCOUNT_DISABLED') {
+        return 'هذا الحساب موقوف. تواصل مع المدير.';
+    }
+    if (code === 'FIRESTORE_DENIED') {
+        return 'حدث خطأ في الصلاحيات، يرجى المحاولة لاحقاً';
+    }
+
+    // Standard Firebase Auth codes
+    if (code === 'AUTH_FAILED' || code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
+        return 'البريد الإلكتروني أو كلمة المرور غير صحيحة';
+    }
+    if (code === 'auth/too-many-requests') {
+        return 'تم تجاوز الحد الأقصى للمحاولات. انتظر قليلاً ثم حاول مجدداً.';
+    }
+    if (code === 'auth/network-request-failed') {
+        return 'تعذر الاتصال بالخادم. تحقق من اتصالك بالإنترنت.';
+    }
+    
+    return msg || 'حدث خطأ غير متوقع. حاول مرة أخرى.';
+};
+
 const Login = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -30,10 +65,12 @@ const Login = () => {
             });
             setTimeout(() => navigate('/'), 1500);
         } catch (error) {
+            const friendlyMessage = getLoginErrorMessage(error);
+            const isPermissionError = ['NOT_AUTHORIZED', 'CLAIMS_MISSING', 'FIRESTORE_DENIED'].includes(error.code);
             Swal.fire({
                 icon: 'error',
-                title: 'خطأ في الدخول',
-                text: error.message || 'تأكد من البريد الإلكتروني وكلمة المرور',
+                title: isPermissionError ? 'غير مصرح بالدخول' : 'خطأ في الدخول',
+                text: friendlyMessage,
                 background: '#141414',
                 color: '#fff',
                 confirmButtonColor: 'var(--primary)'

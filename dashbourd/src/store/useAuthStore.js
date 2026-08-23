@@ -3,170 +3,195 @@ import { auth, db } from '../firebase/config';
 import { cacheSession, clearCachedSession } from '@shared/startup/cache';
 import { 
     signInWithEmailAndPassword, 
-    createUserWithEmailAndPassword, 
-    onIdTokenChanged,
     signOut
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { setupFCMNotifications } from '../utils/pushManager';
+
+// Error mapping class
+class AuthError extends Error {
+    constructor(code, message) {
+        super(message);
+        this.code = code;
+    }
+}
 
 const useAuthStore = create(
     (set, get) => ({
         user: null,
-            loading: true,
+        loading: true,
+        isAuthenticated: false,
+        isAuthorized: false,
+        error: null,
 
-            // Auth Actions
-            login: async (email, password) => {
-                const adminEmail = import.meta.env.VITE_ADMIN_EMAIL;
-                const adminPassword = import.meta.env.VITE_ADMIN_PASSWORD;
-                const normalizedEmail = email.trim();
+        // Auth Actions
+        login: async (email, password) => {
+            const normalizedEmail = email.trim();
+            set({ loading: true, error: null });
 
+            try {
+                // 1. Authenticate (Stage 1)
+                let userCredential;
                 try {
-                    // Try Firebase Auth Login
-                    let userCredential;
-                    try {
-                        userCredential = await signInWithEmailAndPassword(auth, normalizedEmail, password);
-                    } catch (authError) {
-                        // Auto-provision Super Admin if account doesn't exist and credentials match env vars
-                        if (normalizedEmail === adminEmail && password === adminPassword && 
-                            (authError.code === 'auth/user-not-found' || authError.code === 'auth/invalid-credential')) {
-                            console.log('Auto-provisioning Super Admin account in Firebase...');
-                            userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
-                            
-                            // Initialize Super Admin claims via API
-                            try {
-                                const token = await userCredential.user.getIdToken();
-                                await fetch('/api/admin/init-super-admin', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Authorization': `Bearer ${token}`,
-                                        'x-init-secret': import.meta.env.VITE_SUPER_ADMIN_INIT_SECRET || ''
-                                    }
-                                });
-                            } catch (err) {
-                                console.error('Failed to init super admin claims', err);
-                            }
+                    userCredential = await signInWithEmailAndPassword(auth, normalizedEmail, password);
+                } catch (authError) {
+                    throw new AuthError('AUTH_FAILED', authError.message);
+                }
 
-                            // Create role document in Firestore for UI metadata
-                            const roleRef = doc(db, 'managers', userCredential.user.uid);
-                            await setDoc(roleRef, {
-                                email: normalizedEmail,
-                                name: 'المدير العام',
-                                role: 'super_admin',
-                                permissions: { products: true, orders: true, users: true, managers: true },
-                                is_active: true
-                            });
-                        } else {
-                            throw new Error('بيانات الدخول غير صحيحة أو الحساب معطّل');
-                        }
-                    }
+                const firebaseUser = userCredential.user;
 
-                    const uid = userCredential.user.uid;
-                    
-                    // Fetch profile to resolve role and permissions immediately
+                // 2. Get ID Token and Claims (Stage 2)
+                let tokenResult = await firebaseUser.getIdTokenResult();
+                
+                // If role claim is missing, maybe it's stale? Force refresh once.
+                if (!tokenResult.claims.role) {
+                    tokenResult = await firebaseUser.getIdTokenResult(true);
+                }
+
+                const claims = tokenResult.claims;
+
+                if (!claims || !claims.role) {
+                    await signOut(auth);
+                    throw new AuthError('CLAIMS_MISSING', 'This account does not have administrative permissions.');
+                }
+
+                // 3. Authorize (Stage 3)
+                if (claims.role !== 'super_admin' && claims.role !== 'manager') {
+                    await signOut(auth);
+                    throw new AuthError('NOT_AUTHORIZED', 'You do not have permission to access the Dashboard.');
+                }
+
+                const uid = firebaseUser.uid;
+
+                // 4. Load Manager Profile (Stage 4) - Safe to read Firestore now
+                let managerData;
+                try {
                     const docSnap = await getDoc(doc(db, 'managers', uid));
                     if (!docSnap.exists()) {
                         await signOut(auth);
-                        throw new Error('هذا الحساب غير موجود');
+                        throw new AuthError('PROFILE_MISSING', 'The authenticated administrator profile could not be found.');
                     }
-                    const data = docSnap.data();
-                    if (!data.is_active) {
+                    managerData = docSnap.data();
+                    if (!managerData.is_active) {
                         await signOut(auth);
-                        throw new Error('هذا الحساب معطل');
+                        throw new AuthError('ACCOUNT_DISABLED', 'Account is disabled.');
                     }
-
-                    const tokenResult = await userCredential.user.getIdTokenResult(true);
-
-                    const sessionData = {
-                        uid: userCredential.user.uid,
-                        email: userCredential.user.email || data.email,
-                        name: data.name || userCredential.user.displayName || 'مستخدم',
-                        image: data.profile_image_url || userCredential.user.photoURL || '',
-                        role: tokenResult.claims.role || data.role || 'manager',
-                        permissions: Object.keys(tokenResult.claims.permissions || {}).length > 0 
-                                       ? tokenResult.claims.permissions 
-                                       : (data.permissions || {})
-                    };
-
-                    // Unified cache update and UI sync
-                    await cacheSession(sessionData);
-                    get().setSession(sessionData);
-
-                    setupFCMNotifications(uid).catch(err => console.warn('[FCM] registration failed:', err));
-                    return true;
-                } catch (err) {
-                    console.error('Login error:', err);
-                    throw err;
-                }
-            },
-
-            logout: async () => {
-                await signOut(auth);
-                await clearCachedSession();
-                set({ user: null });
-            },
-
-            refreshClaims: async () => {
-                const currentUser = auth.currentUser;
-                if (currentUser) {
-                    const tokenResult = await currentUser.getIdTokenResult(true);
-                    const role = tokenResult.claims.role || 'manager'; // default to manager
-                    const permissions = tokenResult.claims.permissions || {};
+                } catch (firestoreError) {
+                    if (firestoreError instanceof AuthError) throw firestoreError;
                     
-                    set((state) => {
-                        if (!state.user) return state; // Ensure we don't create a partial user object
-                        return {
-                            user: {
-                                ...state.user,
-                                role,
-                                permissions
-                            }
-                        };
-                    });
+                    // Case G: Firestore Permission Failure
+                    console.error('[AuthStore] Firestore read failed:', firestoreError);
+                    if (firestoreError.code === 'permission-denied') {
+                        await signOut(auth);
+                        throw new AuthError('FIRESTORE_DENIED', 'Access to requested data was denied.');
+                    }
+                    throw firestoreError;
                 }
-            },
-            
-            refreshPermissions: async () => {
-                const uid = get().user?.uid;
-                if (!uid) return;
+
+                // 5. Build Session and Initialize
+                const permissions = Array.isArray(claims.permissions) ? claims.permissions : [];
                 
-                try {
-                    const docSnap = await getDoc(doc(db, 'managers', uid));
-                    if (!docSnap.exists() || docSnap.data().is_active === false) {
-                        await get().logout();
-                        return;
-                    }
-                    
-                    const data = docSnap.data();
-                    set((state) => {
-                        if (!state.user) return state; // Ensure we don't create a partial user object
-                        return {
-                            user: {
-                                ...state.user,
-                                email: data.email,
-                                name: data.name,
-                                role: data.role || 'manager',
-                                permissions: data.permissions || {},
-                            }
-                        };
-                    });
-                } catch (err) {
-                    console.error('Error refreshing permissions:', err);
-                }
-            },
-            
-            hasPermission: (permission) => {
-                const user = get().user;
-                if (!user) return false;
-                if (user.role === 'super_admin') return true;
-                return !!user.permissions?.[permission];
-            },
+                const sessionData = {
+                    uid,
+                    email: firebaseUser.email || managerData.email,
+                    name: managerData.name || firebaseUser.displayName || 'مستخدم',
+                    image: managerData.profile_image_url || firebaseUser.photoURL || '',
+                    role: claims.role,
+                    permissions: permissions
+                };
 
-            // State updates are handled by StartupEngine now
-            setSession: (session) => {
-                set({ user: session, loading: false });
-            },
-            setLoading: (isLoading) => set({ loading: isLoading })
+                await cacheSession(sessionData);
+                get().setSession(sessionData);
+                
+                set({ isAuthenticated: true, isAuthorized: true, error: null });
+
+                setupFCMNotifications(uid).catch(err => console.warn('[FCM] registration failed:', err));
+                return true;
+
+            } catch (err) {
+                console.error('Login error:', err);
+                const code = err.code || 'UNKNOWN_ERROR';
+                set({ 
+                    isAuthenticated: (code !== 'AUTH_FAILED'), 
+                    isAuthorized: false, 
+                    error: err,
+                    loading: false 
+                });
+                throw err;
+            }
+        },
+
+        logout: async () => {
+            await signOut(auth);
+            await clearCachedSession();
+            set({ user: null, isAuthenticated: false, isAuthorized: false, error: null });
+        },
+
+        refreshClaims: async () => {
+            const currentUser = auth.currentUser;
+            if (currentUser) {
+                const tokenResult = await currentUser.getIdTokenResult(true);
+                const role = tokenResult.claims.role || 'manager';
+                const permissions = Array.isArray(tokenResult.claims.permissions) ? tokenResult.claims.permissions : [];
+                
+                set((state) => {
+                    if (!state.user) return state;
+                    return {
+                        user: {
+                            ...state.user,
+                            role,
+                            permissions
+                        }
+                    };
+                });
+            }
+        },
+        
+        refreshPermissions: async () => {
+            const uid = get().user?.uid;
+            if (!uid) return;
+            
+            try {
+                const docSnap = await getDoc(doc(db, 'managers', uid));
+                if (!docSnap.exists() || docSnap.data().is_active === false) {
+                    await get().logout();
+                    return;
+                }
+                
+                const data = docSnap.data();
+                set((state) => {
+                    if (!state.user) return state;
+                    return {
+                        user: {
+                            ...state.user,
+                            email: data.email,
+                            name: data.name,
+                            role: data.role || 'manager',
+                            permissions: Array.isArray(data.permissions) ? data.permissions : [],
+                        }
+                    };
+                });
+            } catch (err) {
+                console.error('Error refreshing permissions:', err);
+            }
+        },
+        
+        hasPermission: (permission) => {
+            const user = get().user;
+            if (!user) return false;
+            if (user.role === 'super_admin') return true;
+            
+            if (Array.isArray(user.permissions)) {
+                return user.permissions.includes('all') || user.permissions.includes(permission);
+            }
+            return false;
+        },
+
+        setSession: (session) => {
+            set({ user: session, loading: false, isAuthenticated: true, isAuthorized: true });
+        },
+        
+        setLoading: (isLoading) => set({ loading: isLoading })
     })
 );
 
