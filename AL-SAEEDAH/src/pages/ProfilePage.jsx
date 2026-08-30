@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import OrdersHistory from './OrdersHistory';
-import { db } from '../firebase/config';
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     User, Package, ArrowRight, Edit2, Save, X, Phone, MapPin, MessageCircle,
@@ -100,7 +99,7 @@ export default function ProfilePage({ initialTab = 'profile' }) {
             setIsEditing(false);
             setToastMessage({ message: 'تم حفظ التغييرات بنجاح ✓', type: 'success' });
         } catch (err) {
-            setToastMessage({ message: 'حدث خطأ أثناء الحفظ', type: 'error' });
+            setToastMessage({ message: err.name === 'OfflineError' ? err.message : 'حدث خطأ أثناء الحفظ', type: 'error' });
         } finally { hideLoader(); }
     };
 

@@ -15,5 +15,8 @@
     "@capacitor/preferences": "^8.0.1",
     "@capacitor/splash-screen": "^8.0.2",
     "@emotion/is-prop-valid": "^1.4.0"
+  },
+  "peerDependencies": {
+    "zustand": "^5.0.14"
   }
 }

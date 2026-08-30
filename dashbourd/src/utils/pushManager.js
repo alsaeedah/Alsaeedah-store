@@ -13,6 +13,7 @@
 import { getMessaging, getToken, onMessage, deleteToken } from "firebase/messaging";
 import { app, db, firebaseConfig } from "../firebase/config";
 import { doc, setDoc } from "firebase/firestore";
+import { Capacitor } from '@capacitor/core';
 
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 
@@ -34,6 +35,9 @@ function getDeviceName() {
 // ── Save or update FCM token in Firestore ──────────────────────────────────
 async function saveTokenToDatabase(managerId, token) {
   try {
+    const { ConnectivityService } = await import('../../../shared/connectivity/ConnectivityService.js');
+    await ConnectivityService.getInstance().requireOnline();
+
     await setDoc(doc(db, "manager_push_tokens", token), {
       manager_id:   managerId,
       fcm_token:    token,
@@ -51,6 +55,12 @@ async function saveTokenToDatabase(managerId, token) {
 
 // ── Main setup function — call after successful manager login ──────────────
 export const setupFCMNotifications = async (managerId) => {
+  // Prevent running Web Push APIs inside an Android/iOS webview
+  if (Capacitor.isNativePlatform()) {
+    console.log("[FCM] Native platform detected. Web FCM is disabled.");
+    return null;
+  }
+
   // Guard: browser support check
   if (!("serviceWorker" in navigator) || !("Notification" in window)) {
     console.warn("[FCM] Push notifications not supported in this browser.");
@@ -110,6 +120,8 @@ export const setupFCMNotifications = async (managerId) => {
 // ── Foreground message handler — call once after app mounts ───────────────
 // Returns an unsubscribe function
 export const listenForForegroundMessages = (onNewOrder) => {
+  if (Capacitor.isNativePlatform()) return () => {};
+
   try {
     const messaging = getFirebaseMessaging();
     const unsubscribe = onMessage(messaging, (payload) => {
@@ -133,6 +145,8 @@ export const listenForForegroundMessages = (onNewOrder) => {
 // ── Token refresh: call on app load for already-logged-in managers ─────────
 export const refreshFCMToken = async (managerId) => {
   if (!managerId) return;
+  if (Capacitor.isNativePlatform()) return;
+  
   try {
     const messaging = getFirebaseMessaging();
     const registration = await navigator.serviceWorker.getRegistration("/");

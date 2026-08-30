@@ -4,10 +4,42 @@ import { compressImage } from '../utils/imageCompressor';
 import Swal from 'sweetalert2';
 import { Plus, X, Save, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useStore } from 'zustand';
+import { taxonomyStore, TAXONOMY_TYPES, GENDERS } from 'shared/taxonomy';
+import { detectProductStructure, PRODUCT_STRUCTURE_TYPES, mapLegacyCategoryToId, mapLegacyStyleToId, mapIdToLegacyCategory, mapIdToLegacyStyle } from '../../../shared/product';
+import TaxonomySelector from './taxonomy/TaxonomySelector';
 
 const ProductForm = ({ initialData, onSubmit, title, subTitle }) => {
     const navigate = useNavigate();
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+    const categories    = useStore(taxonomyStore, state => state.categories);
+    const brands        = useStore(taxonomyStore, state => state.brands);
+    const collections   = useStore(taxonomyStore, state => state.collections);
+    const storeStatus   = useStore(taxonomyStore, state => state.status);
+    const initialized   = useStore(taxonomyStore, state => state.initialized);
+
+    // Build a compatible taxonomies object for legacy helper functions
+    const taxonomies = React.useMemo(() => ({
+        [TAXONOMY_TYPES.CATEGORY]:   categories,
+        [TAXONOMY_TYPES.BRAND]:      brands,
+        [TAXONOMY_TYPES.COLLECTION]: collections,
+    }), [categories, brands, collections]);
+
+    const isLoadingTaxonomies = storeStatus === 'loading';
+    const hasFetched          = initialized;
+
+    useEffect(() => {
+        if (!initialized && storeStatus === 'idle') {
+            // Trigger fetch via the shared store (repository wired in taxonomyService)
+            // Only fetch if taxonomyService has not already initialized
+            taxonomyStore.getState().fetchTaxonomies && console.debug('[ProductForm] taxonomies not yet loaded; expecting app-level init.');
+        }
+    }, [initialized, storeStatus]);
+
+    const [productStructure, setProductStructure] = useState(() => {
+        return initialData ? detectProductStructure(initialData) : PRODUCT_STRUCTURE_TYPES.UNKNOWN;
+    });
 
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -15,25 +47,11 @@ const ProductForm = ({ initialData, onSubmit, title, subTitle }) => {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    const [formData, setFormData] = useState({
-        displayId: '',
-        name: '',
-        price: '',
-        old_price: '',
-        category: '',
-        style: 'classic',
-        description: '',
-        video: '',
-        imageUrl: '',
-        images: [],
-        variants: [] // Array of { image, price }
-    });
+    const hasInitializedForm = useRef(false);
 
-    const [bulkPrice, setBulkPrice] = useState('');
-    const [selectedImagesForBulk, setSelectedImagesForBulk] = useState([]);
-
-    useEffect(() => {
+    const [formData, setFormData] = useState(() => {
         if (initialData) {
+            hasInitializedForm.current = true;
             const images = initialData.images || (initialData.imageUrl ? [initialData.imageUrl] : []);
             const baseVariants = initialData.variants || [];
             
@@ -46,6 +64,64 @@ const ProductForm = ({ initialData, onSubmit, title, subTitle }) => {
                 }));
             }
 
+            return {
+                displayId: initialData.displayId || '',
+                name: initialData.name || '',
+                price: initialData.price || '',
+                old_price: initialData.old_price || '',
+                category: initialData.category || '',
+                style: initialData.style || 'classic',
+                categoryId: initialData.categoryId || '',
+                brandId: initialData.brandId || '',
+                collectionId: initialData.collectionId || '',
+                genderId: initialData.genderId || '',
+                description: initialData.description || '',
+                video: initialData.video || '',
+                imageUrl: initialData.imageUrl || '',
+                images: images,
+                variants: migratedVariants
+            };
+        }
+        return {
+            displayId: '',
+            name: '',
+            price: '',
+            old_price: '',
+            category: '',
+            style: 'classic',
+            categoryId: '',
+            brandId: '',
+            collectionId: '',
+            genderId: '',
+            description: '',
+            video: '',
+            imageUrl: '',
+            images: [],
+            variants: []
+        };
+    });
+
+    const [bulkPrice, setBulkPrice] = useState('');
+    const [selectedImagesForBulk, setSelectedImagesForBulk] = useState([]);
+
+    useEffect(() => {
+        if (initialData && !hasInitializedForm.current) {
+            hasInitializedForm.current = true;
+            const images = initialData.images || (initialData.imageUrl ? [initialData.imageUrl] : []);
+            const baseVariants = initialData.variants || [];
+            
+            // Auto-populate variants if empty but multiple images exist (Migration Support)
+            let migratedVariants = baseVariants;
+            if (baseVariants.length === 0 && images.length > 1) {
+                migratedVariants = images.map(img => ({
+                    image: img,
+                    price: Number(initialData.price) || 0
+                }));
+            }
+
+            const structure = detectProductStructure(initialData);
+            setProductStructure(structure);
+
             setFormData({
                 displayId: initialData.displayId || '',
                 name: initialData.name || '',
@@ -53,6 +129,10 @@ const ProductForm = ({ initialData, onSubmit, title, subTitle }) => {
                 old_price: initialData.old_price || '',
                 category: initialData.category || '',
                 style: initialData.style || 'classic',
+                categoryId: initialData.categoryId || '',
+                brandId: initialData.brandId || '',
+                collectionId: initialData.collectionId || '',
+                genderId: initialData.genderId || '',
                 description: initialData.description || '',
                 video: initialData.video || '',
                 imageUrl: initialData.imageUrl || '',
@@ -61,6 +141,20 @@ const ProductForm = ({ initialData, onSubmit, title, subTitle }) => {
             });
         }
     }, [initialData]);
+
+    const hasMappedLegacy = useRef(false);
+
+    // Handle asynchronous legacy mapping once taxonomies load
+    useEffect(() => {
+        if (initialData && hasFetched && taxonomies && productStructure === PRODUCT_STRUCTURE_TYPES.LEGACY && !hasMappedLegacy.current) {
+            hasMappedLegacy.current = true;
+            setFormData(prev => ({
+                ...prev,
+                categoryId: prev.categoryId || mapLegacyCategoryToId(initialData.category, taxonomies[TAXONOMY_TYPES.CATEGORY] || []) || '',
+                brandId: prev.brandId || mapLegacyStyleToId(initialData.style, taxonomies[TAXONOMY_TYPES.BRAND] || []) || '',
+            }));
+        }
+    }, [initialData, hasFetched, taxonomies, productStructure]);
 
 
 
@@ -522,7 +616,28 @@ const ProductForm = ({ initialData, onSubmit, title, subTitle }) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        await onSubmit(formData);
+
+        const hasAnyTaxonomy = categories.length > 0 || brands.length > 0;
+        if (!hasAnyTaxonomy) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'تنبيه',
+                text: 'يجب إضافة أصناف في إدارة الأصناف أولاً (لا يمكن إضافة منتجات بدون أصناف).',
+                background: '#141414',
+                color: '#fff'
+            });
+            return;
+        }
+
+        const finalData = { ...formData };
+        if (finalData.categoryId) {
+            finalData.category = mapIdToLegacyCategory(finalData.categoryId, taxonomies[TAXONOMY_TYPES.CATEGORY] || []) || finalData.category;
+        }
+        if (finalData.brandId) {
+            finalData.style = mapIdToLegacyStyle(finalData.brandId, taxonomies[TAXONOMY_TYPES.BRAND] || []) || finalData.style;
+        }
+
+        await onSubmit(finalData);
     };
 
     return (
@@ -646,25 +761,38 @@ const ProductForm = ({ initialData, onSubmit, title, subTitle }) => {
                     )}
 
                     <div className="form-grid">
-                        <div style={formGroup}>
-                            <label style={labelStyle}>الفئة</label>
-                            <select value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })} required style={inputStyle}>
-                                <option value="" disabled>اختر الفئة</option>
-                                <option value="men">رجالي</option>
-                                <option value="women">نسائي</option>
-                                <option value="kids">أطفال</option>
-                            </select>
-                        </div>
-                        <div style={formGroup}>
-                            <label style={labelStyle}>النمط</label>
-                            <select value={formData.style} onChange={e => setFormData({ ...formData, style: e.target.value })} required style={inputStyle}>
-                                <option value="classic">كلاسيكي</option>
-                                <option value="formal">رسمي</option>
-                                <option value="wedding">عرائسي</option>
-                                <option value="smart">سمارت</option>
-                                <option value="sport">سبورت</option>
-                            </select>
-                        </div>
+                        <TaxonomySelector
+                            label="الفئة"
+                            type={TAXONOMY_TYPES.CATEGORY}
+                            value={formData.categoryId}
+                            onChange={(val) => setFormData({ ...formData, categoryId: val })}
+                            entities={taxonomies[TAXONOMY_TYPES.CATEGORY]}
+                            isLoading={isLoadingTaxonomies}
+                            required={true}
+                        />
+                        <TaxonomySelector
+                            label="الماركة (اختياري)"
+                            type={TAXONOMY_TYPES.BRAND}
+                            value={formData.brandId}
+                            onChange={(val) => setFormData({ ...formData, brandId: val })}
+                            entities={taxonomies[TAXONOMY_TYPES.BRAND]}
+                            isLoading={isLoadingTaxonomies}
+                        />
+                        <TaxonomySelector
+                            label="المجموعة (اختياري)"
+                            type={TAXONOMY_TYPES.COLLECTION}
+                            value={formData.collectionId}
+                            onChange={(val) => setFormData({ ...formData, collectionId: val })}
+                            entities={taxonomies[TAXONOMY_TYPES.COLLECTION]}
+                            isLoading={isLoadingTaxonomies}
+                        />
+                        <TaxonomySelector
+                            label="الجنس (اختياري)"
+                            value={formData.genderId}
+                            onChange={(val) => setFormData({ ...formData, genderId: val })}
+                            entities={GENDERS}
+                            isLoading={false}
+                        />
                     </div>
 
                     <div style={formGroup}>

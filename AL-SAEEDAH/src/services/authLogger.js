@@ -37,6 +37,9 @@ export const logAuthEvent = async (userId, eventType, provider = null, metadata 
             platform: navigator?.platform || 'unknown',
         };
 
+        const { ConnectivityService } = await import('@shared/connectivity/ConnectivityService');
+        await ConnectivityService.getInstance().requireOnline();
+
         const docRef = await addDoc(collection(db, 'auth_event_logs'), {
             user_id: userId || null,
             event_type: eventType,

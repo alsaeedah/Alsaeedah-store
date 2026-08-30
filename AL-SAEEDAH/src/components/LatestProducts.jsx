@@ -95,23 +95,34 @@ const SkeletonLoader = () => (
 const LatestProducts = () => {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [showSkeleton, setShowSkeleton] = useState(false);
 
     useEffect(() => {
-        loadLatest();
-        
-        // Realtime Subscription
-        const unsubscribe = subscribeToProducts((payload) => {
-            loadLatest();
+        let isMounted = true;
+        const timer = setTimeout(() => {
+            if (isMounted && loading) setShowSkeleton(true);
+        }, 150);
+
+        import('../services/productService').then(({ fetchLatestProducts }) => {
+            fetchLatestProducts().then((data) => {
+                if (isMounted) {
+                    setProducts(data || []);
+                    setLoading(false);
+                    setShowSkeleton(false);
+                }
+            }).catch(() => {
+                if (isMounted) {
+                    setLoading(false);
+                    setShowSkeleton(false);
+                }
+            });
         });
 
-        return () => unsubscribe();
+        return () => {
+            isMounted = false;
+            clearTimeout(timer);
+        };
     }, []);
-
-    const loadLatest = async () => {
-        const data = await fetchLatestProducts();
-        setProducts(data);
-        setLoading(false);
-    };
 
     if (!loading && products.length === 0) return null;
 
@@ -142,9 +153,9 @@ const LatestProducts = () => {
                     </p>
                 </motion.div>
 
-                {loading ? (
+                {loading && showSkeleton ? (
                     <SkeletonLoader />
-                ) : (
+                ) : !loading ? (
                     <>
                         {/* Featured Product */}
                         {featuredProduct && (
@@ -180,7 +191,7 @@ const LatestProducts = () => {
                             </motion.div>
                         )}
                     </>
-                )}
+                ) : null}
             </div>
         </section>
     );

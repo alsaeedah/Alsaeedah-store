@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '../firebase/config';
 import { collection, query, orderBy, getDocs, doc, deleteDoc, addDoc, updateDoc, where, limit } from 'firebase/firestore';
@@ -29,6 +30,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import Swal from 'sweetalert2';
+import { useDashboardSWR } from '../hooks/useDashboardSWR';
 
 // Sub-component for a sortable slide item
 const SortableSlide = ({ slide, index, isExpanded, onToggle, onRemove, onImageUpload, onFieldChange }) => {
@@ -196,18 +198,29 @@ const SortableSlide = ({ slide, index, isExpanded, onToggle, onRemove, onImageUp
 
 const Settings = () => {
     const { startLoading, stopLoading } = useLoading();
+    
+    // UI and Draft States
     const [activeUploads, setActiveUploads] = useState({});
     const abortRefs = useRef({});
     const cancelledRefs = useRef({});
+    
     // Draft state: heroSlides holds the local (possibly unsaved) copy
     const [heroSlides, setHeroSlides] = useState([]);
     // savedSlides mirrors the last-saved server state for dirty detection
     const [savedSlides, setSavedSlides] = useState([]);
     // IDs of real DB rows the user deleted locally (committed on Save)
     const [deletedSlideIds, setDeletedSlideIds] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [expandedSlides, setExpandedSlides] = useState({});
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+    // Management Hub State
+    const [hubSearch, setHubSearch] = useState('');
+    const [hubSearchResults, setHubSearchResults] = useState([]);
+    const [isSearchingHub, setIsSearchingHub] = useState(false);
+    const [hubActiveTab, setHubActiveTab] = useState('latest'); // 'latest' or 'best'
+
+    const [latestProducts, setLatestProducts] = useState([]);
+    const [bestSellers, setBestSellers] = useState([]);
 
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -218,41 +231,64 @@ const Settings = () => {
     const sensors = useSensors(
         useSensor(PointerSensor),
         useSensor(TouchSensor, {
-            activationConstraint: {
-                delay: 250,
-                tolerance: 5,
-            },
+            activationConstraint: { delay: 250, tolerance: 5 },
         }),
-        useSensor(KeyboardSensor, {
-            coordinateGetter: sortableKeyboardCoordinates,
-        })
+        useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
     );
 
+    const { data: settingsData, loading: isInitialLoading, error, executeSWR } = useDashboardSWR({
+        cacheKey: 'dashboard_settings_data',
+        fetcher: async (cachedData) => {
+            let errorCount = 0;
+            
+            const getSubsection = async (queryObj, cacheKey) => {
+                try {
+                    const snap = await getDocs(queryObj);
+                    if (snap.metadata.fromCache && snap.empty) {
+                        errorCount++;
+                        if (cachedData && cachedData[cacheKey]) return cachedData[cacheKey];
+                        return [];
+                    }
+                    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                } catch (err) {
+                    console.error(`[Settings] Subsection ${cacheKey} fetch error:`, err);
+                    errorCount++;
+                    if (cachedData && cachedData[cacheKey]) return cachedData[cacheKey];
+                    return [];
+                }
+            };
+            
+            const heroData = await getSubsection(query(collection(db, 'hero'), orderBy('sort_order', 'asc')), 'hero');
+            
+            // Client-side sorting avoids Firebase composite index requirements (which throw errors if missing)
+            const latestDocs = await getSubsection(query(collection(db, 'products'), where('is_latest', '==', true)), 'latest');
+            const latestData = latestDocs.sort((a, b) => ((b.created_at?.toMillis?.() || b.created_at || 0) - (a.created_at?.toMillis?.() || a.created_at || 0)));
+            
+            const bestDocs = await getSubsection(query(collection(db, 'products'), where('is_best_seller', '==', true)), 'best');
+            const bestData = bestDocs.sort((a, b) => ((b.created_at?.toMillis?.() || b.created_at || 0) - (a.created_at?.toMillis?.() || a.created_at || 0)));
+
+            if (errorCount === 3 && !cachedData) {
+                throw new Error("Offline or completely failed to load data, and no cache exists.");
+            }
+
+            return {
+                data: { hero: heroData, latest: latestData, best: bestData }
+            };
+        }
+    });
+
     useEffect(() => {
-        fetchSettings();
-    }, []);
+        if (settingsData) {
+            setHeroSlides(settingsData.hero || []);
+            setSavedSlides(settingsData.hero || []);
+            setLatestProducts(settingsData.latest || []);
+            setBestSellers(settingsData.best || []);
+            setDeletedSlideIds([]);
+        }
+    }, [settingsData]);
 
     const fetchSettings = async () => {
-        startLoading();
-        setLoading(true);
-        try {
-            const q = query(collection(db, 'hero'), orderBy('sort_order', 'asc'));
-            const snapshot = await getDocs(q);
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-            if (data) {
-                // Populate both the draft and the saved-state mirror
-                setHeroSlides(data);
-                setSavedSlides(data);
-                // Reset any pending local changes
-                setDeletedSlideIds([]);
-            }
-        } catch (error) {
-            console.error("Error fetching settings:", error);
-        } finally {
-            setLoading(false);
-            stopLoading();
-        }
+        await executeSWR(false);
     };
 
     const handleSlideChange = (id, field, value) => {
@@ -381,6 +417,9 @@ const Settings = () => {
     const saveSettings = async () => {
         startLoading();
         try {
+            const { ConnectivityService } = await import('../../../shared/connectivity/ConnectivityService.js');
+            await ConnectivityService.getInstance().requireOnline();
+
             // ── Step 1: Delete removed slides ─────────────────────────────────
             if (deletedSlideIds.length > 0) {
                 for (const delId of deletedSlideIds) {
@@ -469,35 +508,9 @@ const Settings = () => {
         return false;
     }, [heroSlides, savedSlides, deletedSlideIds]);
 
-    // Management Hub State
-    const [hubSearch, setHubSearch] = useState('');
-    const [hubSearchResults, setHubSearchResults] = useState([]);
-    const [isSearchingHub, setIsSearchingHub] = useState(false);
-    const [hubActiveTab, setHubActiveTab] = useState('latest'); // 'latest' or 'best'
-
-    const [latestProducts, setLatestProducts] = useState([]);
-    const [bestSellers, setBestSellers] = useState([]);
-
-    useEffect(() => {
-        loadHubData();
-    }, []);
-
-    const loadHubData = async () => {
-        try {
-            const latestSnap = await getDocs(query(collection(db, 'products'), where('is_latest', '==', true), orderBy('created_at', 'desc')));
-            const latestData = latestSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
-            const bestSnap = await getDocs(query(collection(db, 'products'), where('is_best_seller', '==', true), orderBy('created_at', 'desc')));
-            const bestData = bestSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-            setLatestProducts(latestData);
-            setBestSellers(bestData);
-        } catch (err) { console.error(err); }
-    };
-
-    const handleHubSearch = async (query) => {
-        setHubSearch(query);
-        if (query.trim().length < 2) {
+    const handleHubSearch = async (searchQuery) => {
+        setHubSearch(searchQuery);
+        if (searchQuery.trim().length < 2) {
             setHubSearchResults([]);
             return;
         }
@@ -507,7 +520,7 @@ const Settings = () => {
             const snap = await getDocs(query(collection(db, 'products'), limit(50))); // limit to avoid fetching all if too large, doing client side filter
             let allData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             
-            const lq = query.toLowerCase();
+            const lq = searchQuery.toLowerCase();
             let data = allData.filter(p => 
                 (p.name && p.name.toLowerCase().includes(lq)) ||
                 (p.displayId && String(p.displayId).includes(lq))
@@ -521,6 +534,9 @@ const Settings = () => {
     const toggleCurationStatus = async (product, type, status) => {
         startLoading();
         try {
+            const { ConnectivityService } = await import('../../../shared/connectivity/ConnectivityService.js');
+            await ConnectivityService.getInstance().requireOnline();
+
             const column = type === 'latest' ? 'is_latest' : 'is_best_seller';
             await updateDoc(doc(db, 'products', product.id), { [column]: status });
             
@@ -551,7 +567,33 @@ const Settings = () => {
         }
     };
 
-    if (loading) return null;
+    if (isInitialLoading) {
+        return (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ width: '40px', height: '40px', border: '3px solid rgba(212, 175, 55, 0.3)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                <p style={{ color: 'var(--text-muted)' }}>جاري تحميل الإعدادات...</p>
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            </div>
+        );
+    }
+
+    if (error && !settingsData) {
+        return (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', gap: '20px', padding: '20px', textAlign: 'center' }}>
+                <AlertCircle size={48} color="#ef4444" />
+                <h2 style={{ color: '#fff', fontSize: '1.5rem', fontWeight: '800' }}>تعذر تحميل الإعدادات</h2>
+                <p style={{ color: 'var(--text-muted)', maxWidth: '400px' }}>
+                    يبدو أنك غير متصل بالإنترنت ولا توجد بيانات محفوظة مسبقاً. يرجى التحقق من اتصالك والمحاولة مرة أخرى.
+                </p>
+                <button 
+                    onClick={() => executeSWR(true)}
+                    style={{ padding: '12px 24px', background: 'var(--primary)', color: '#000', borderRadius: '12px', fontWeight: 'bold', border: 'none', cursor: 'pointer' }}
+                >
+                    إعادة المحاولة
+                </button>
+            </div>
+        );
+    }
 
     return (
         <div style={{ direction: 'rtl', padding: isMobile ? '5px' : '10px' }}>
@@ -570,7 +612,7 @@ const Settings = () => {
                     </h1>
                     <p style={{ color: 'var(--text-muted)', fontSize: isMobile ? '0.9rem' : '1.1rem' }}>تخصيص محتوى وترتيب الأقسام المميزة.</p>
                 </div>
-                <div style={{ width: isMobile ? '100%' : 'auto' }}>
+                <div style={{ width: isMobile ? '100%' : 'auto', display: 'flex', gap: '12px' }}>
                     <AnimatePresence>
                         {isDirty && (
                             <motion.button 

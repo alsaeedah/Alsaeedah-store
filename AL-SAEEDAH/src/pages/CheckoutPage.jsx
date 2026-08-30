@@ -402,7 +402,7 @@ export default function CheckoutPage() {
                                     </p>
 
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '300px', margin: '0 auto' }}>
-                                        <button onClick={() => navigate('/profile?tab=orders')} className="btn-primary" style={{ justifyContent: 'center', padding: '14px' }}>
+                                        <button onClick={() => navigate('/orders')} className="btn-primary" style={{ justifyContent: 'center', padding: '14px' }}>
                                             <Package size={18} /> عرض طلباتي
                                         </button>
                                         <button onClick={() => navigate('/')} style={{ background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '14px', padding: '14px', color: 'var(--text-dim)', cursor: 'pointer', fontFamily: 'var(--font-main)', fontSize: '0.9rem' }}>

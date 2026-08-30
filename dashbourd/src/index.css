@@ -741,3 +741,12 @@ h3 {
     padding: 2rem 1.5rem;
   }
 }
+
+/* ─── Taxonomy Modal Scroll Lock ─────────────────────────────────────────── */
+/* Applied to <body> via a ref-counted useEffect inside BrandForm / TaxonomyForm.
+   Prevents the underlying page from scrolling while a modal is open.
+   The class is removed only when the open-modal counter reaches zero,
+   so two simultaneous modals (if ever possible) do not race-remove it. */
+body.taxonomy-modal-open {
+  overflow: hidden;
+}

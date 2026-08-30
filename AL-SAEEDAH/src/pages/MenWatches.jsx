@@ -1,12 +1,5 @@
-import ProductList from '../components/ProductList';
+import { Navigate } from 'react-router-dom';
 
 export default function MenWatches() {
-    return (
-        <ProductList 
-            initialCategory="men" 
-            title="ساعات" 
-            subtitle="رجالية" 
-            description="اكتشف مجموعتنا المميزة من الساعات الرجالية الفاخرة التي تناسب جميع الأذواق" 
-        />
-    );
+    return <Navigate to="/category/men-watches" replace />;
 }

@@ -1,5 +1,4 @@
 import { createContext, useState, useContext, useCallback, useEffect } from 'react';
-import { subscribeToProducts } from '../services/productService';
 
 const ProductContext = createContext();
 
@@ -17,44 +16,6 @@ export const ProductProvider = ({ children }) => {
         maxPrice: ''
     });
     const [scrollPosition, setScrollPosition] = useState(0);
-
-    // Real-time synchronization
-    useEffect(() => {
-        const unsubscribe = subscribeToProducts((payload) => {
-            const { eventType, new: newProduct, old: oldProduct } = payload;
-
-            if (eventType === 'INSERT') {
-                setCachedProducts(prev => {
-                    // Check if product already exists to avoid duplicates
-                    if (prev.find(p => p.id === newProduct.id)) return prev;
-                    
-                    // Format for frontend (consistent with fetch logic if needed)
-                    const formatted = {
-                        ...newProduct,
-                        image: newProduct.imageUrl || (newProduct.images && newProduct.images[0]) || 'https://placehold.co/400x400/1a1a1a/ffffff?text=No+Image'
-                    };
-                    
-                    // Add to the beginning of the list for fresh arrivals
-                    return [formatted, ...prev];
-                });
-            } else if (eventType === 'UPDATE') {
-                setCachedProducts(prev => prev.map(p => {
-                    if (p.id === newProduct.id) {
-                        return {
-                            ...p,
-                            ...newProduct,
-                            image: newProduct.imageUrl || (newProduct.images && newProduct.images[0]) || p.image
-                        };
-                    }
-                    return p;
-                }));
-            } else if (eventType === 'DELETE') {
-                setCachedProducts(prev => prev.filter(p => p.id !== oldProduct.id));
-            }
-        });
-
-        return () => unsubscribe && unsubscribe();
-    }, []);
 
     const updateCachedProducts = useCallback((newProducts, append = true) => {
         if (append) {

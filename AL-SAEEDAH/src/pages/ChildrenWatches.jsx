@@ -1,12 +1,5 @@
-import ProductList from '../components/ProductList';
+import { Navigate } from 'react-router-dom';
 
 export default function ChildrenWatches() {
-    return (
-        <ProductList 
-            initialCategory="kids" 
-            title="ساعات" 
-            subtitle="أطفال" 
-            description="ساعات مرحة وعملية تناسب جميع الأعمار" 
-        />
-    );
+    return <Navigate to="/category/children-watches" replace />;
 }

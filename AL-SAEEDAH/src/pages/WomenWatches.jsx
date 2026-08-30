@@ -1,12 +1,5 @@
-import ProductList from '../components/ProductList';
+import { Navigate } from 'react-router-dom';
 
 export default function WomenWatches() {
-    return (
-        <ProductList 
-            initialCategory="women" 
-            title="ساعات" 
-            subtitle="نسائية" 
-            description="تألقي بأجمل التصاميم من الساعات النسائية التي تضفي لمسة من الأناقة" 
-        />
-    );
+    return <Navigate to="/category/women-watches" replace />;
 }

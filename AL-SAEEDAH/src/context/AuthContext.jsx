@@ -7,6 +7,7 @@ import { useLoader } from './LoaderContext';
 import { StartupProvider } from '@shared/startup/StartupProvider';
 import { clearCachedSession } from '@shared/startup/cache';
 import { startBackgroundValidation } from '@shared/startup/authSync';
+import { PushNotificationService } from '../notifications';
 
 const AuthContext = createContext();
 
@@ -120,6 +121,8 @@ export const AuthProvider = ({ children, openAuthOnMount = false, onAuthMountHan
     const logout = async () => {
         showLoader('جاري تسجيل الخروج...');
 
+        await PushNotificationService.handleLogout();
+
         await signOut(auth);
         await clearCachedSession();
         setCurrentUser(null);
@@ -152,6 +155,9 @@ export const AuthProvider = ({ children, openAuthOnMount = false, onAuthMountHan
         if (updatedData.district !== undefined) dbPayload.district = updatedData.district;
         if (updatedData.neighborhood !== undefined) dbPayload.neighborhood = updatedData.neighborhood;
         dbPayload.updated_at = new Date().toISOString();
+
+        const { ConnectivityService } = await import('@shared/connectivity/ConnectivityService');
+        await ConnectivityService.getInstance().requireOnline();
 
         try {
             await updateDoc(doc(db, 'users', currentUser.uid), dbPayload);

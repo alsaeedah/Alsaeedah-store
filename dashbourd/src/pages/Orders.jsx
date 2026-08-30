@@ -3,17 +3,17 @@ import { useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { useLoading } from '../context/LoadingContext';
 import { db } from '../firebase/config';
-import { collection, query, where, getDocs, onSnapshot, updateDoc, deleteDoc, doc, orderBy, limit, startAfter } from 'firebase/firestore';
 import Swal from 'sweetalert2';
+import { StorageEngine } from '../../../shared/storage/StorageEngine.js';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Download, Trash2, CheckCircle, XCircle, RotateCcw, Loader2, ShoppingCart, TrendingUp, Clock, Users as UsersIcon, Box, ShoppingBag } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { dashboardOrdersRepository } from '../services/DashboardOrdersRepository';
 
 const Orders = () => {
     const [orders, setOrders] = useState([]);
     const [selectedImage, setSelectedImage] = useState(null);
-    const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [page, setPage] = useState(0);
     const [hasMore, setHasMore] = useState(true);
@@ -25,37 +25,108 @@ const Orders = () => {
     const [highlightOrderId, setHighlightOrderId] = useState(null);
     const orderRefs = useRef({});  // { [orderId]: DOM element }
 
+    const lastDocRef = useRef(null);
+    const queryConstraintsRef = useRef([]);
+
+        const cacheKey = dashboardOrdersRepository.buildCacheKey(statusFilter, searchQuery, page);
+    const [isInitialLoading, setIsInitialLoading] = useState(true);
+    const [revalidating, setRevalidating] = useState(false);
+
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+    useEffect(() => {
+        let isMounted = true;
+        const loadOrders = async () => {
+            if (page === 0) setIsInitialLoading(true);
+            const cached = await dashboardOrdersRepository.getCachedOrders(cacheKey);
+            
+            if (isMounted) {
+                if (cached.status === 'READY') {
+                    if (page === 0) {
+                        setOrders(cached.data);
+                    } else {
+                        setOrders(prev => {
+                            const newMap = new Map(prev.map(o => [o.id, o]));
+                            cached.data.forEach(o => newMap.set(o.id, o));
+                            return Array.from(newMap.values()).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+                        });
+                    }
+                    setHasMore(cached.hasMore);
+                    setIsInitialLoading(false);
+                    setLoadingMore(false);
+                } else if (cached.status === 'UNINITIALIZED') {
+                    if (page === 0) setIsInitialLoading(true);
+                }
+                
+                setRevalidating(true);
+                const validated = await dashboardOrdersRepository.revalidateOrders(
+                    cacheKey, statusFilter, searchQuery, page, lastDocRef.current, cached
+                );
+
+                if (isMounted && validated) {
+                    if (page === 0) {
+                        setOrders(validated.data);
+                    } else {
+                        setOrders(prev => {
+                            const newMap = new Map(prev.map(o => [o.id, o]));
+                            validated.data.forEach(o => newMap.set(o.id, o));
+                            return Array.from(newMap.values()).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+                        });
+                    }
+                    setHasMore(validated.hasMore);
+                    if (validated.lastDocRefObj) {
+                        lastDocRef.current = validated.lastDocRefObj;
+                    }
+                    setIsInitialLoading(false);
+                    setRevalidating(false);
+                    setLoadingMore(false);
+                }
+            }
+        };
+
+        loadOrders();
+
+        return () => { isMounted = false; };
+    }, [cacheKey, page, refreshTrigger]);
+
+    useEffect(() => {
+        setPage(0);
+        lastDocRef.current = null;
+    }, [statusFilter, searchQuery]);
+
+    useEffect(() => {
+        if (page > 0) {
+            setLoadingMore(true);
+        }
+    }, [page]);
+
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    // Read ?highlight=orderId from URL (set by FCM notification click)
     useEffect(() => {
         const params = new URLSearchParams(location.search);
         const hId = params.get('highlight');
         if (hId) {
             setHighlightOrderId(hId);
-            // Clear from URL without triggering a navigation
             window.history.replaceState({}, '', location.pathname);
         }
     }, [location.search]);
 
-    // Scroll to highlighted order once orders have loaded
     useEffect(() => {
-        if (!highlightOrderId || loading) return;
+        if (!highlightOrderId || isInitialLoading) return;
         const el = orderRefs.current[highlightOrderId];
         if (el) {
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            // Remove highlight after animation completes
             setTimeout(() => setHighlightOrderId(null), 3500);
         }
-    }, [highlightOrderId, loading, orders]);
+    }, [highlightOrderId, isInitialLoading, orders]);
 
     const observer = useRef();
     const lastOrderRef = useCallback(node => {
-        if (loading || loadingMore) return;
+        if (loadingMore) return; 
         if (observer.current) observer.current.disconnect();
         observer.current = new IntersectionObserver(entries => {
             if (entries[0].isIntersecting && hasMore) {
@@ -63,141 +134,21 @@ const Orders = () => {
             }
         });
         if (node) observer.current.observe(node);
-    }, [loading, loadingMore, hasMore]);
+    }, [loadingMore, hasMore]);
 
-    const lastDocRef = useRef(null);
-
-    const fetchOrders = async (pageNum, isInitial = false) => {
-        if (isInitial) {
-            startLoading();
-            setLoading(true);
-            lastDocRef.current = null;
-        } else {
-            setLoadingMore(true);
-        }
-
-        try {
-            let q = collection(db, 'orders');
-            let constraints = [];
-
-            const rawQuery = searchQuery.trim().toLowerCase();
-            const numericPart = rawQuery.replace(/^ord/, '').trim();
-
-            if (rawQuery) {
-                const isNumericSearch = /^\\d+$/.test(numericPart);
-                if (isNumericSearch) {
-                    const orderNumInt = parseInt(numericPart, 10);
-                    constraints.push(where('order_number', 'in', [numericPart, orderNumInt]));
-                }
-            }
-
-            if (statusFilter !== 'all') {
-                constraints.push(where('status', '==', statusFilter));
-            }
-
-            constraints.push(orderBy('created_at', 'desc'));
-
-            if (!isInitial && lastDocRef.current) {
-                constraints.push(startAfter(lastDocRef.current));
-            }
-
-            constraints.push(limit(6));
-
-            const finalQuery = query(q, ...constraints);
-            const snapshot = await getDocs(finalQuery);
-
-            let newOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-            // Client-side fallback for partial matches and text searches
-            // Note: Exact order IDs are matched server-side across the entire collection.
-            // Partial searches (e.g., '362') only match within the currently fetched page limit.
-            if (rawQuery) {
-                newOrders = newOrders.filter(o => {
-                    const oNum = o.order_number ? String(o.order_number).toLowerCase() : '';
-                    const oName = o.customer_name ? String(o.customer_name).toLowerCase() : '';
-                    const oPhone = o.customer_phone ? String(o.customer_phone).toLowerCase() : '';
-                    
-                    return (
-                        oNum.includes(numericPart) || 
-                        `ord${oNum}`.includes(rawQuery) ||
-                        oName.includes(rawQuery) ||
-                        oPhone.includes(rawQuery)
-                    );
-                });
-            }
-
-            if (snapshot.docs.length > 0) {
-                lastDocRef.current = snapshot.docs[snapshot.docs.length - 1];
-            }
-
-            if (isInitial) {
-                setOrders(newOrders);
-            } else {
-                setOrders(prev => {
-                    const existingIds = new Set(prev.map(o => o.id));
-                    const uniqueNew = newOrders.filter(o => !existingIds.has(o.id));
-                    return [...prev, ...uniqueNew];
-                });
-            }
-
-            setHasMore(snapshot.docs.length === 6);
-        } catch (error) {
-            console.error("Critical Error fetching orders:", error);
-            Swal.fire({
-                icon: 'error',
-                title: 'خطأ',
-                text: `فشل تحميل الطلبات: ${error.message || 'خطأ غير معروف'}`,
-                background: '#141414',
-                color: '#fff'
-            });
-        } finally {
-            if (isInitial) {
-                setLoading(false);
-                stopLoading();
-            } else {
-                setLoadingMore(false);
-            }
-        }
-    };
-
-    useEffect(() => {
+    const fetchOrders = () => {
         setPage(0);
-        fetchOrders(0, true);
-    }, [statusFilter, searchQuery]);
-
-    useEffect(() => {
-        if (page > 0) {
-            fetchOrders(page);
-        }
-    }, [page]);
-
-    useEffect(() => {
-        const q = query(collection(db, 'orders'), orderBy('created_at', 'desc'), limit(50));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
-                if (change.type === 'added') {
-                    const newOrder = { id: change.doc.id, ...change.doc.data() };
-                    setOrders(prev => {
-                        if (!prev.find(o => o.id === newOrder.id)) {
-                            return [newOrder, ...prev].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-                        }
-                        return prev;
-                    });
-                } else if (change.type === 'modified') {
-                    setOrders(prev => prev.map(o => o.id === change.doc.id ? { ...o, ...change.doc.data() } : o));
-                } else if (change.type === 'removed') {
-                    setOrders(prev => prev.filter(o => o.id !== change.doc.id));
-                }
-            });
-        });
-
-        return () => unsubscribe();
-    }, []);
+        lastDocRef.current = null;
+        setRefreshTrigger(prev => prev + 1);
+    };
 
     const handleUpdateStatus = async (orderId, newStatus) => {
         try {
-            await updateDoc(doc(db, 'orders', orderId), { status: newStatus, updated_at: new Date().toISOString() });
+            const { ConnectivityService } = await import('../../../shared/connectivity/ConnectivityService.js');
+            await ConnectivityService.getInstance().requireOnline();
 
+            await dashboardOrdersRepository.updateOrderStatus(orderId, newStatus);
+            
             if (statusFilter !== 'all' && statusFilter !== newStatus) {
                 setOrders(prev => prev.filter(o => o.id !== orderId));
             } else {
@@ -220,7 +171,7 @@ const Orders = () => {
             Swal.fire({
                 icon: 'error',
                 title: 'خطأ',
-                text: 'فشل تحديث حالة الطلب',
+                text: error.name === 'OfflineError' ? error.message : 'فشل تحديث حالة الطلب',
                 background: '#141414',
                 color: '#fff'
             });
@@ -244,7 +195,13 @@ const Orders = () => {
         if (result.isConfirmed) {
             startLoading();
             try {
-                await deleteDoc(doc(db, 'orders', orderId));
+                const { ConnectivityService } = await import('../../../shared/connectivity/ConnectivityService.js');
+                await ConnectivityService.getInstance().requireOnline();
+
+                const order = orders.find(o => o.id === orderId);
+                if (order) {
+                    await dashboardOrdersRepository.deleteOrder(orderId, order.total_amount, order.status);
+                }
 
                 setOrders(prev => prev.filter(order => order.id !== orderId));
                 Swal.fire({
@@ -259,7 +216,7 @@ const Orders = () => {
                 Swal.fire({
                     icon: 'error',
                     title: 'خطأ',
-                    text: 'فشل حذف الطلب',
+                    text: error.name === 'OfflineError' ? error.message : 'فشل حذف الطلب',
                     background: '#141414',
                     color: '#fff'
                 });
@@ -533,13 +490,14 @@ const Orders = () => {
                     <input type="text" placeholder="البحث برقم الطلب، الاسم، الواتساب..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ width: '100%', padding: '12px 48px 12px 16px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', borderRadius: '14px', color: '#fff', fontSize: '0.95rem', outline: 'none' }} />
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', overflowX: 'auto', paddingBottom: isMobile ? '5px' : '0' }}>
+                    <button onClick={() => fetchOrders(0, true)} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '8px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)', color: 'var(--text-muted)', cursor: 'pointer', fontWeight: '700', fontSize: '0.85rem', whiteSpace: 'nowrap' }}><RotateCcw size={16} /> تحديث</button>
                     {[{ label: 'الجميع', value: 'all' }, { label: 'انتظار', value: 'pending' }, { label: 'مكتمل', value: 'completed' }, { label: 'ملغي', value: 'cancelled' }].map(status => (
                         <button key={status.value} onClick={() => setStatusFilter(status.value)} style={{ padding: '8px 16px', borderRadius: '10px', border: '1px solid', borderColor: statusFilter === status.value ? 'var(--primary)' : 'rgba(255,255,255,0.05)', background: statusFilter === status.value ? 'var(--primary)' : 'rgba(255,255,255,0.02)', color: statusFilter === status.value ? '#000' : 'var(--text-muted)', cursor: 'pointer', fontWeight: '700', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{status.label}</button>
                     ))}
                 </div>
             </div>
 
-            {loading ? (
+            {isInitialLoading ? (
                 <div style={{ textAlign: 'center', padding: '100px', color: 'var(--primary)' }}><Loader2 className="animate-spin" style={{ margin: '0 auto 20px', width: '50px', height: '50px' }} /><p style={{ fontWeight: '700' }}>جاري تحميل البيانات الفاخرة...</p></div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', paddingBottom: '50px' }}>

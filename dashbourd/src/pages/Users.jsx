@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLoading } from '../context/LoadingContext';
 import { db, firebaseConfig } from '../firebase/config';
-import { collection, query, orderBy, getDocs, doc, deleteDoc, setDoc, onSnapshot, getCountFromServer } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, doc, deleteDoc, setDoc, onSnapshot, getCountFromServer, limit, where, startAfter } from 'firebase/firestore';
 import { initializeApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import Swal from 'sweetalert2';
@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Users as UsersIcon, Search, Phone,
     Calendar, Trash2, Loader2, UserCheck, Shield,
-    Store, Clock, Plus, X, Eye, EyeOff, User, Lock
+    Store, Clock, Plus, X, Eye, EyeOff, User, Lock, RotateCcw
 } from 'lucide-react';
 
 // ── Add User Modal ────────────────────────────────────────────────────────────
@@ -43,6 +43,9 @@ const AddUserModal = ({ onClose, onSuccess }) => {
 
         setIsSubmitting(true);
         try {
+            const { ConnectivityService } = await import('../../../shared/connectivity/ConnectivityService.js');
+            await ConnectivityService.getInstance().requireOnline();
+
             const secondaryApp = initializeApp(firebaseConfig, 'SecondaryUserApp');
             const secondaryAuth = getAuth(secondaryApp);
             const dummyEmail = `${formData.phone.trim()}@alsaeedah.store`;
@@ -72,7 +75,11 @@ const AddUserModal = ({ onClose, onSuccess }) => {
             });
         } catch (err) {
             console.error('Create user error:', err);
-            setError(err.message || 'حدث خطأ أثناء إنشاء الحساب');
+            if (err.name === 'OfflineError') {
+                setError(err.message);
+            } else {
+                setError(err.message || 'حدث خطأ أثناء إنشاء الحساب');
+            }
         } finally {
             setIsSubmitting(false);
         }
@@ -367,9 +374,10 @@ const UserCard = ({ user, index, onDelete, lastUserRef, isMobile }) => {
 };
 
 // ── Main Users Page ───────────────────────────────────────────────────────────
+import { useDashboardSWR } from '../hooks/useDashboardSWR';
+
 const Users = () => {
     const [users, setUsers] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [page, setPage] = useState(0);
     const [hasMore, setHasMore] = useState(true);
@@ -385,78 +393,115 @@ const Users = () => {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
+    const lastDocRef = useRef(null);
+
+    const { data: swrData, loading: isInitialLoading, executeSWR } = useDashboardSWR({
+        cacheKey: `dashboard_users_list_q${searchQuery.trim().toLowerCase()}_p${page}`,
+        fetcher: async () => {
+            let q = collection(db, 'users');
+            let constraints = [];
+            
+            if (searchQuery) {
+                const queryStr = searchQuery.trim();
+                const isPhone = /^[0-9+]+$/.test(queryStr);
+                
+                if (isPhone) {
+                    constraints.push(where('phone', '==', queryStr));
+                } else {
+                    constraints.push(where('name', '>=', queryStr));
+                    constraints.push(where('name', '<=', queryStr + '\uf8ff'));
+                }
+            } else {
+                constraints.push(orderBy('created_at', 'desc'));
+            }
+
+            if (page > 0 && lastDocRef.current) {
+                constraints.push(startAfter(lastDocRef.current));
+            }
+            constraints.push(limit(8));
+
+            const finalQuery = query(q, ...constraints);
+            const snapshot = await getDocs(finalQuery);
+
+            let newUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            if (snapshot.docs.length > 0) {
+                lastDocRef.current = snapshot.docs[snapshot.docs.length - 1];
+            }
+
+            let currentTotalCount = totalCount;
+            if (page === 0) {
+                try {
+                    const snap = await getCountFromServer(collection(db, 'users'));
+                    currentTotalCount = snap.data().count;
+                } catch (e) { console.error(e); }
+            }
+
+            return {
+                data: {
+                    users: newUsers,
+                    totalCount: currentTotalCount
+                },
+                snapshot,
+                hasMore: snapshot.docs.length === 8
+            };
+        },
+        dependencies: [searchQuery, page],
+        isInitial: false
+    });
+
     const observer = useRef();
     const lastUserRef = useCallback(node => {
-        if (loading || loadingMore) return;
+        if (isInitialLoading || loadingMore) return;
         if (observer.current) observer.current.disconnect();
         observer.current = new IntersectionObserver(entries => {
             if (entries[0].isIntersecting && hasMore) setPage(prev => prev + 1);
         });
         if (node) observer.current.observe(node);
-    }, [loading, loadingMore, hasMore]);
+    }, [isInitialLoading, loadingMore, hasMore]);
 
-    const allUsersRef = useRef([]);
-
-    const fetchStats = async () => {
-        try {
-            const snap = await getCountFromServer(collection(db, 'users'));
-            setTotalCount(snap.data().count);
-        } catch (e) { console.error(e); }
-    };
-
-    const fetchUsers = async (pageNum, isInitial = false) => {
-        if (isInitial) { startLoading(); setLoading(true); }
-        else setLoadingMore(true);
-
-        try {
-            if (isInitial) {
-                const snap = await getDocs(query(collection(db, 'users'), orderBy('created_at', 'desc')));
-                allUsersRef.current = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                fetchStats();
-            }
-
-            let filtered = allUsersRef.current;
-            if (searchQuery) {
-                const lowerQ = searchQuery.toLowerCase();
-                filtered = filtered.filter(u => 
-                    (u.name && u.name.toLowerCase().includes(lowerQ)) ||
-                    (u.phone && String(u.phone).includes(lowerQ)) ||
-                    (u.store_owner_info && u.store_owner_info.toLowerCase().includes(lowerQ))
-                );
-            }
-
-            const from = pageNum * 8;
-            const to = from + 8;
-            const slice = filtered.slice(from, to);
-
-            if (isInitial) { setUsers(slice); }
-            else { setUsers(prev => [...prev, ...slice]); }
-
-            setHasMore(filtered.length > to);
-        } catch (error) {
-            console.error(error);
-            Swal.fire({ icon: 'error', title: 'خطأ', text: 'فشل تحميل بيانات المستخدمين', background: '#141414', color: '#fff' });
-        } finally {
-            if (isInitial) { setLoading(false); stopLoading(); }
-            else setLoadingMore(false);
-        }
-    };
-
-    useEffect(() => { setPage(0); fetchUsers(0, true); }, [searchQuery]);
-    useEffect(() => { if (page > 0) fetchUsers(page); }, [page]);
-
+    // 1. Trigger execution on page or query change
     useEffect(() => {
-        const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
-                if (change.type === 'modified') {
-                    const data = { id: change.doc.id, ...change.doc.data() };
-                    setUsers(prev => prev.map(u => u.id === data.id ? { ...u, ...data } : u));
-                    allUsersRef.current = allUsersRef.current.map(u => u.id === data.id ? { ...u, ...data } : u);
-                }
-            });
-        });
-        return () => unsubscribe();
-    }, []);
+        if (page === 0) {
+            lastDocRef.current = null;
+            executeSWR(true);
+        } else {
+            setLoadingMore(true);
+            executeSWR(false).finally(() => setLoadingMore(false));
+        }
+    }, [page, searchQuery, executeSWR]);
+
+    // 2. Sync swrData to our local users list. 
+    // This makes initial cache hit immediate, while background revalidate updates seamlessly.
+    useEffect(() => {
+        if (swrData) {
+            if (page === 0) {
+                setUsers(swrData.users || []);
+                setTotalCount(swrData.totalCount || 0);
+            } else {
+                setUsers(prev => {
+                    const merged = [...prev];
+                    const mergedIds = new Map(merged.map((o, i) => [o.id, i]));
+                    
+                    (swrData.users || []).forEach(newObj => {
+                        if (mergedIds.has(newObj.id)) {
+                            merged[mergedIds.get(newObj.id)] = newObj;
+                        } else {
+                            merged.push(newObj);
+                            mergedIds.set(newObj.id, merged.length - 1);
+                        }
+                    });
+                    
+                    return merged;
+                });
+            }
+            if (swrData.hasMore !== undefined) {
+                setHasMore(swrData.hasMore);
+            }
+        }
+    }, [swrData, page]);
+
+    // onSnapshot removed to eliminate full collection reads
 
     const handleDeleteUser = async (userId, userName) => {
         const result = await Swal.fire({
@@ -473,11 +518,20 @@ const Users = () => {
         if (result.isConfirmed) {
             startLoading();
             try {
-                await deleteDoc(doc(db, 'users', userId));
+                if (!window.__usersDAL) {
+                    const { UsersDAL } = await import('../../../shared/users/infrastructure/cache/UsersDAL.js');
+                    window.__usersDAL = new UsersDAL();
+                    await window.__usersDAL.initialize();
+                }
+                await window.__usersDAL.deleteUser(userId);
+                
                 setUsers(prev => prev.filter(u => u.id !== userId));
-                allUsersRef.current = allUsersRef.current.filter(u => u.id !== userId);
                 setTotalCount(prev => prev - 1);
-                Swal.fire({ icon: 'success', title: 'تم الحذف', text: 'تم حذف المستخدم بنجاح. سيتم حذف الحساب بالكامل عند تفعيل Cloud Functions.', background: '#141414', color: '#fff' });
+                
+                // Revalidate current page in background to sync cache
+                executeSWR(page === 0);
+                
+                Swal.fire({ icon: 'success', title: 'تم الحذف', text: 'تم حذف المستخدم بنجاح. سيتم تطبيق التغييرات في الخلفية.', background: '#141414', color: '#fff' });
             } catch (error) {
                 console.error('Delete Error:', error);
                 Swal.fire({ icon: 'error', title: 'خطأ', text: 'فشل حذف المستخدم.', background: '#141414', color: '#fff' });
@@ -493,7 +547,10 @@ const Users = () => {
             {showAddModal && (
                 <AddUserModal
                     onClose={() => setShowAddModal(false)}
-                    onSuccess={() => { setPage(0); fetchUsers(0, true); }}
+                    onSuccess={() => {
+                        setPage(0);
+                        executeSWR(true);
+                    }}
                 />
             )}
 
@@ -543,6 +600,25 @@ const Users = () => {
                     </motion.div>
 
                     <motion.button
+                        whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                        onClick={() => {
+                            setPage(0);
+                            executeSWR(true);
+                        }}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '8px',
+                            background: 'rgba(255,255,255,0.05)',
+                            border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontWeight: '800',
+                            fontSize: isMobile ? '0.85rem' : '0.95rem',
+                            padding: isMobile ? '10px 16px' : '13px 22px', borderRadius: '14px',
+                            cursor: 'pointer', fontFamily: "'Cairo', sans-serif",
+                            whiteSpace: 'nowrap'
+                        }}
+                    >
+                        <RotateCcw size={isMobile ? 16 : 18} />
+                        تحديث
+                    </motion.button>
+                    <motion.button
                         id="open-add-user-modal-btn"
                         whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                         onClick={() => setShowAddModal(true)}
@@ -588,7 +664,7 @@ const Users = () => {
             </div>
 
             {/* User Grid */}
-            {loading ? (
+            {isInitialLoading && users.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: isMobile ? '60px 0' : '100px 0', color: 'var(--primary)' }}>
                     <Loader2 className="spin" style={{ margin: '0 auto 20px', width: '50px', height: '50px' }} />
                     <p style={{ fontWeight: '800', fontSize: '1rem' }}>جاري استرجاع السجلات...</p>

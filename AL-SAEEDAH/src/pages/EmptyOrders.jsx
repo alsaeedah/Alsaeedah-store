@@ -50,7 +50,7 @@ export default function EmptyOrders({ isMobile }) {
           margin: '0 auto',
           lineHeight: '1.5'
         }}>
-          مستقبلا سترى جميع طلباتكف ي هذه الخانه
+          مستقبلا سترى جميع طلباتك في هذه الخانه
         </p>
       </div>
 

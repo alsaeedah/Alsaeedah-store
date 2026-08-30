@@ -1,0 +1,12 @@
+{
+  "name": "taxonomy-migration-cli",
+  "version": "1.0.0",
+  "description": "CLI for safely migrating legacy products to the taxonomy reference structure.",
+  "type": "module",
+  "scripts": {
+    "start": "node cli.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}

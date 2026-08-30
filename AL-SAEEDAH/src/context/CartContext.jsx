@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { useAuth } from './AuthContext';
-import { db } from '../firebase/config';
-import { collection, doc, onSnapshot, getDocs, setDoc, query, where, documentId, runTransaction } from 'firebase/firestore';
+import { fetchProductsByIds, productRepository } from '../services/productService';
 import { createOrder } from '../services/orderService';
 
 import logo from '../assets/logo.png';
@@ -27,106 +26,6 @@ export const CartProvider = ({ children }) => {
     const [isCartOpen, setIsCartOpen] = useState(false);
     const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false);
     
-    // Real-time listener for product deletions and updates + On-load Hydration
-    useEffect(() => {
-        let unsubscribe = null;
-
-        const hydrateCart = async () => {
-            const saved = localStorage.getItem('time-tick-cart');
-            const initialCart = saved ? JSON.parse(saved) : [];
-            if (initialCart.length === 0) return;
-            
-            const productIds = [...new Set(initialCart.map(item => String(item?.id)).filter(Boolean))];
-            
-            try {
-                // Fetch latest details
-                const productsRef = collection(db, 'products');
-                // Firestore 'in' query supports up to 10 items.
-                // Assuming cart has <= 10 distinct products. If more, we need chunks.
-                const chunks = [];
-                for (let i = 0; i < productIds.length; i += 10) {
-                    chunks.push(productIds.slice(i, i + 10));
-                }
-
-                let latestProducts = [];
-                for (const chunk of chunks) {
-                    const q = query(productsRef, where(documentId(), 'in', chunk));
-                    const snapshot = await getDocs(q);
-                    snapshot.forEach(docSnap => {
-                        latestProducts.push({ id: docSnap.id, ...docSnap.data() });
-                    });
-                }
-                    
-                setCart(prev => {
-                    return prev.map(item => {
-                        const latest = latestProducts.find(p => String(p.id) === String(item.id));
-                        if (!latest) return null; // Remove if deleted
-                        
-                        let updatedPrice = latest.price;
-                        if (item.selectedMaterial || item.selectedColor) {
-                            const variants = latest.variants || [];
-                            const matchedVariant = variants.find(v => 
-                                (!item.selectedMaterial || v.material === item.selectedMaterial) && 
-                                (!item.selectedColor || v.color === item.selectedColor)
-                            );
-                            if (matchedVariant && matchedVariant.price) {
-                                updatedPrice = matchedVariant.price;
-                            }
-                        }
-                        
-                        return {
-                            ...item,
-                            name: latest.name || item.name,
-                            price: updatedPrice || item.price,
-                            image: item.variantImage || latest.imageUrl || (latest.images && latest.images[0]) || item.image
-                        };
-                    }).filter(Boolean);
-                });
-
-                // Set up real-time listener for products in cart
-                unsubscribe = onSnapshot(productsRef, (snapshot) => {
-                    snapshot.docChanges().forEach(change => {
-                        if (change.type === 'removed') {
-                            setCart(prev => prev.filter(item => String(item.id) !== String(change.doc.id)));
-                        } else if (change.type === 'modified') {
-                            const updatedProduct = { id: change.doc.id, ...change.doc.data() };
-                            setCart(prev => prev.map(item => {
-                                if (String(item.id) === String(updatedProduct.id)) {
-                                    let updatedPrice = updatedProduct.price;
-                                    if (item.selectedMaterial || item.selectedColor) {
-                                        const variants = updatedProduct.variants || [];
-                                        const matchedVariant = variants.find(v => 
-                                            (!item.selectedMaterial || v.material === item.selectedMaterial) && 
-                                            (!item.selectedColor || v.color === item.selectedColor)
-                                        );
-                                        if (matchedVariant && matchedVariant.price) {
-                                            updatedPrice = matchedVariant.price;
-                                        }
-                                    }
-                                    return {
-                                        ...item,
-                                        name: updatedProduct.name || item.name,
-                                        price: updatedPrice || item.price,
-                                        image: item.variantImage || updatedProduct.imageUrl || (updatedProduct.images && updatedProduct.images[0]) || item.image
-                                    };
-                                }
-                                return item;
-                            }));
-                        }
-                    });
-                });
-            } catch (err) {
-                console.error("Failed to hydrate cart:", err);
-            }
-        };
-        
-        hydrateCart();
-
-        return () => {
-            if (unsubscribe) unsubscribe();
-        };
-    }, []);
-
     const navigate = useNavigate();
 
     const openCart = () => navigate('/cart');
@@ -172,6 +71,38 @@ export const CartProvider = ({ children }) => {
     };
 
     const clearCart = () => setCart([]);
+
+    const reconcileCart = (changes) => {
+        setCart(prev => {
+            let updatedCart = [...prev];
+            
+            changes.forEach(change => {
+                if (change.type === 'PRODUCT_DELETED' || change.type === 'VARIANT_DELETED') {
+                    updatedCart = updatedCart.filter(item => item.variantId !== change.variantId);
+                } else if (change.type === 'PRICE_CHANGED' || change.type === 'VARIANT_PRICE_CHANGED') {
+                    updatedCart = updatedCart.map(item => {
+                        if (item.variantId === change.variantId) {
+                            return { ...item, price: change.currentPrice };
+                        }
+                        return item;
+                    });
+                } else if (change.type === 'PRODUCT_DATA_CHANGED' || change.type === 'VARIANT_DATA_CHANGED') {
+                    updatedCart = updatedCart.map(item => {
+                        if (item.variantId === change.variantId) {
+                            return { 
+                                ...item, 
+                                name: change.freshName || item.name, 
+                                image: change.freshImage || item.image 
+                            };
+                        }
+                        return item;
+                    });
+                }
+            });
+            
+            return updatedCart;
+        });
+    };
 
     const total = cart.reduce((sum, item) => sum + (item.price * item.dp_qty), 0);
 
@@ -359,6 +290,7 @@ export const CartProvider = ({ children }) => {
             removeFromCart,
             updateQuantity,
             clearCart,
+            reconcileCart,
             total,
             prepareWhatsAppCheckout,
             isCartOpen,

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { bootApplication, runBackgroundValidation, AppStartupState } from './engine';
 import { Capacitor } from '@capacitor/core';
+import { bootstrapSync } from '../sync/index.js';
 
 const StartupContext = createContext();
 
@@ -55,10 +56,22 @@ export const StartupProvider = ({
         appName, 
         (updatedSession) => {
           if (onSessionUpdated) onSessionUpdated(updatedSession);
+          // Bootstrap data sync after auth is validated
+          try {
+            bootstrapSync(db, auth);
+          } catch (err) {
+            console.error('[Startup] Non-fatal background sync error:', err);
+          }
           setStartupState(AppStartupState.Ready);
         },
         () => {
           if (onForceLogout) onForceLogout();
+          // Still bootstrap data sync (some data might be public)
+          try {
+            bootstrapSync(db, auth);
+          } catch (err) {
+            console.error('[Startup] Non-fatal background sync error:', err);
+          }
           setStartupState(AppStartupState.Ready);
         }
       );

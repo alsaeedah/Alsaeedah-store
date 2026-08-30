@@ -13,7 +13,7 @@ const ProtectedRoute = ({ children }) => {
         if (user) {
             const hasOrdersPermission = hasPermission('orders');
             if (hasOrdersPermission) {
-                setupFCMNotifications(user.id);
+                setupFCMNotifications(user.uid);
             }
         }
     }, [user]);

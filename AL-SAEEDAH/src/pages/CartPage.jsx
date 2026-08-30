@@ -8,6 +8,8 @@ import { Trash2, ShoppingBag, Minus, Plus, ArrowRight, AlertTriangle, PackageOpe
 import ClearCartConfirmModal from '../components/ClearCartConfirmModal';
 import CheckoutSuccessModal from '../components/CheckoutSuccessModal';
 import PaymentMethodsModal from '../components/PaymentMethodsModal';
+import ValidationChangesModal from '../components/ValidationChangesModal';
+import { validateCartForCheckout } from '../services/cartValidationService';
 
 export default function CartPage() {
     const { cart, removeFromCart, updateQuantity, total, prepareWhatsAppCheckout, clearCart } = useCart();
@@ -19,10 +21,13 @@ export default function CartPage() {
     const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [showProfileWarning, setShowProfileWarning] = useState(false);
+    const [validationChanges, setValidationChanges] = useState(null);
+    const [isValidationModalOpen, setIsValidationModalOpen] = useState(false);
+    const [isValidating, setIsValidating] = useState(false);
 
     const handleClearCart = () => { clearCart(); setIsClearConfirmOpen(false); };
 
-    const handleCheckoutClick = () => {
+    const handleCheckoutClick = async () => {
         if (!currentUser) { openAuthModal(); return; }
         if (cart.length === 0) return;
         if (!currentUser.whatsapp || !currentUser.governorate || !currentUser.district) {
@@ -30,7 +35,30 @@ export default function CartPage() {
             return;
         }
         setShowProfileWarning(false);
-        navigate('/checkout');
+        
+        if (isValidating) return;
+
+        setIsValidating(true);
+        showLoader('جاري التحقق من المنتجات...');
+        
+        try {
+            const result = await validateCartForCheckout(cart);
+            
+            if (result.networkError) {
+                alert('تعذر التحقق من السلة. يرجى التأكد من اتصالك بالإنترنت والمحاولة مرة أخرى.');
+                return;
+            }
+
+            if (result.valid) {
+                navigate('/checkout');
+            } else {
+                setValidationChanges(result.changes);
+                setIsValidationModalOpen(true);
+            }
+        } finally {
+            hideLoader();
+            setIsValidating(false);
+        }
     };
 
     const handleConfirmCheckout = async (paymentMethod) => {
@@ -49,6 +77,7 @@ export default function CartPage() {
             <ClearCartConfirmModal isOpen={isClearConfirmOpen} onClose={() => setIsClearConfirmOpen(false)} onConfirm={handleClearCart} />
             <PaymentMethodsModal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} onConfirm={handleConfirmCheckout} />
             <CheckoutSuccessModal isOpen={isSuccessModalOpen} onClose={() => setIsSuccessModalOpen(false)} onProceed={() => { setIsSuccessModalOpen(false); navigate('/'); }} />
+            <ValidationChangesModal isOpen={isValidationModalOpen} onClose={() => setIsValidationModalOpen(false)} changes={validationChanges || []} />
 
             <div style={{ minHeight: '100dvh', background: 'var(--bg-main)', padding: '40px 20px 80px' }}>
                 <div style={{ maxWidth: '900px', margin: '0 auto' }}>

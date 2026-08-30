@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase/config';
-import { collection, query, where, getCountFromServer, getDocs, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, limit, doc, getDoc } from 'firebase/firestore';
 import { useLoading } from '../context/LoadingContext';
 import {
     ShoppingBag,
@@ -15,12 +15,12 @@ import {
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import useAuthStore from '../store/useAuthStore';
+import { useDashboardSWR } from '../hooks/useDashboardSWR';
 
 const Home = () => {
     const { startLoading, stopLoading } = useLoading();
     const user = useAuthStore(state => state.user);
     const navigate = useNavigate();
-    const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState({
         products: 0,
         orders: 0,
@@ -44,49 +44,122 @@ const Home = () => {
         }
     }, [user, navigate]);
 
+    const { data, loading } = useDashboardSWR({
+        cacheKey: 'dashboard_home_stats',
+        fetcher: async (cachedData) => {
+            const lastSyncAt = cachedData?.lastSyncAt;
+            const currentSyncAt = new Date().toISOString();
+            
+            let newStats = {
+                products: Number(cachedData?.stats?.products) || 0,
+                orders: Number(cachedData?.stats?.orders) || 0,
+                users: Number(cachedData?.stats?.users) || 0,
+                revenue: Number(cachedData?.stats?.revenue) || 0
+            };
+            if (isNaN(newStats.revenue)) newStats.revenue = 0;
+
+            try {
+                const statsDocRef = doc(db, 'stats', 'store');
+                const statsDocSnap = await getDoc(statsDocRef);
+                if (statsDocSnap.exists()) {
+                    const docData = statsDocSnap.data();
+                    newStats = {
+                        products: docData.productsCount ?? docData.products ?? newStats.products,
+                        orders: docData.ordersCount ?? docData.orders ?? newStats.orders,
+                        users: docData.usersCount ?? docData.users ?? newStats.users,
+                        revenue: docData.revenue ?? docData.totalRevenue ?? newStats.revenue
+                    };
+                }
+            } catch (e) {
+                console.warn("[Dashboard Home] Failed to fetch stats/store, preserving LKG cache", e);
+            }
+
+            let newRecentOrders = [...(cachedData?.recentOrders || [])].filter(o => o.status !== 'deleted');
+            let recentOrdersSnapshot = null;
+            let needsFullFetch = false;
+
+            if (lastSyncAt) {
+                try {
+                    const changesQuery = query(
+                        collection(db, 'orders'),
+                        where('updated_at', '>', lastSyncAt)
+                    );
+                    const changesSnap = await getDocs(changesQuery);
+                    recentOrdersSnapshot = changesSnap;
+                    
+                    if (!changesSnap.empty && !changesSnap.metadata.fromCache) {
+                        const changes = changesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        
+                        changes.forEach(changedOrder => {
+                            const idx = newRecentOrders.findIndex(o => o.id === changedOrder.id);
+                            if (changedOrder.status === 'deleted') {
+                                if (idx > -1) newRecentOrders.splice(idx, 1);
+                            } else {
+                                if (idx > -1) {
+                                    newRecentOrders[idx] = changedOrder;
+                                } else {
+                                    newRecentOrders.push(changedOrder);
+                                }
+                            }
+                        });
+                        
+                        newRecentOrders.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+                        newRecentOrders = newRecentOrders.slice(0, 5);
+                        
+                        if (newRecentOrders.length < 5 && (cachedData?.recentOrders?.length >= 5)) {
+                            needsFullFetch = true;
+                        }
+                    }
+                } catch (e) {
+                    console.warn("[Dashboard Home] Incremental orders fetch failed, preserving LKG cache", e);
+                }
+            } else {
+                needsFullFetch = true;
+            }
+
+            if (needsFullFetch) {
+                try {
+                    const fullQuery = query(
+                        collection(db, 'orders'),
+                        orderBy('created_at', 'desc'),
+                        limit(15)
+                    );
+                    const fullSnap = await getDocs(fullQuery);
+                    if (!recentOrdersSnapshot) recentOrdersSnapshot = fullSnap;
+                    
+                    if (!fullSnap.metadata.fromCache) {
+                        newRecentOrders = fullSnap.docs
+                            .map(d => ({ id: d.id, ...d.data() }))
+                            .filter(o => o.status !== 'deleted')
+                            .slice(0, 5);
+                    }
+                } catch (e) {
+                    console.warn("[Dashboard Home] Full orders fetch failed, preserving LKG cache", e);
+                }
+            }
+
+            return {
+                data: {
+                    stats: newStats,
+                    recentOrders: newRecentOrders,
+                    lastSyncAt: currentSyncAt
+                },
+                snapshot: recentOrdersSnapshot || { metadata: { fromCache: true } }
+            };
+        }
+    });
+
+    // Sync SWR data to local state if needed (or just use `data` directly)
+    useEffect(() => {
+        if (data) {
+            setStats(data.stats);
+            setRecentOrders(data.recentOrders || []);
+        }
+    }, [data]);
+
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
         window.addEventListener('resize', handleResize);
-        
-        const fetchDashboardData = async () => {
-            startLoading();
-            setLoading(true);
-            try {
-                // 1. Fetch Counts
-                const productsCount = await getCountFromServer(collection(db, 'products'));
-                const ordersCount = await getCountFromServer(collection(db, 'orders'));
-                const usersCount = await getCountFromServer(collection(db, 'users'));
-
-                // 2. Fetch Recent Orders
-                const recentOrdersQuery = query(
-                    collection(db, 'orders'),
-                    orderBy('created_at', 'desc'),
-                    limit(5)
-                );
-                const recentOrdersSnapshot = await getDocs(recentOrdersQuery);
-                const ordersData = recentOrdersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-                // 3. Calculate Total Revenue (completed orders)
-                const revenueQuery = query(collection(db, 'orders'), where('status', '==', 'completed'));
-                const revenueSnapshot = await getDocs(revenueQuery);
-                const totalRevenue = revenueSnapshot.docs.reduce((acc, doc) => acc + (Number(doc.data().total_amount) || 0), 0);
-
-                setStats({
-                    products: productsCount.data().count,
-                    orders: ordersCount.data().count,
-                    users: usersCount.data().count,
-                    revenue: totalRevenue
-                });
-                setRecentOrders(ordersData);
-            } catch (error) {
-                console.error("Dashboard fetch error:", error);
-            } finally {
-                setLoading(false);
-                stopLoading();
-            }
-        };
-
-        fetchDashboardData();
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
@@ -94,7 +167,7 @@ const Home = () => {
         { label: 'إجمالي المنتجات', value: stats.products, icon: Box, color: '#d4af37', bg: 'rgba(212, 175, 55, 0.15)', glow: 'rgba(212, 175, 55, 0.3)' },
         { label: 'إجمالي الطلبات', value: stats.orders, icon: ShoppingBag, color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.15)', glow: 'rgba(59, 130, 246, 0.3)' },
         { label: 'إجمالي المستخدمين', value: stats.users, icon: UsersIcon, color: '#10b981', bg: 'rgba(16, 185, 129, 0.15)', glow: 'rgba(16, 185, 129, 0.3)' },
-        { label: 'إجمالي الأرباح', value: `${stats.revenue.toLocaleString()} ر.س`, icon: TrendingUp, color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.15)', glow: 'rgba(245, 158, 11, 0.3)' },
+        { label: 'إجمالي الأرباح', value: typeof stats.revenue === 'number' ? `${stats.revenue.toLocaleString()} ر.س` : stats.revenue, icon: TrendingUp, color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.15)', glow: 'rgba(245, 158, 11, 0.3)' },
     ];
 
     return (

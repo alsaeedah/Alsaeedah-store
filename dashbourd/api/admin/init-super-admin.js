@@ -20,6 +20,12 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
+    // Guard: Admin SDK must be initialized; fails silently if env var is missing
+    if (!admin.apps.length) {
+        console.error('[init-super-admin] Firebase Admin SDK is not initialized. Check FIREBASE_SERVICE_ACCOUNT_KEY env var.');
+        return res.status(503).json({ error: 'Service Unavailable: Server-side Firebase not configured.' });
+    }
+
     try {
         const secret = req.headers['x-init-secret'];
         if (!secret || secret !== process.env.SUPER_ADMIN_INIT_SECRET) {

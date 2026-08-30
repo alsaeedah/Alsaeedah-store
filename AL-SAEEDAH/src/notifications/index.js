@@ -10,6 +10,10 @@
 // The single entry point service
 export * as NotificationService from './NotificationService';
 
+// Push Notifications
+export * as PushNotificationService from './PushNotificationService';
+export * as PushTokenManager from './PushTokenManager';
+
 // Event definitions (for use with NotificationService.show(event, data))
 export { EVENTS } from './NotificationEvents';
 export {

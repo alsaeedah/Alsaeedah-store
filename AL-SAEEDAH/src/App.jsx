@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CartProvider, useCart } from './context/CartContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -10,7 +10,7 @@ import { useTheme } from './context/ThemeContext';
 import ErrorBoundary from './components/ErrorBoundary';
 
 import HeroCarousel from './components/HeroCarousel';
-import Navbar from './components/Navbar';
+import StoreNavigation from './components/navigation/StoreNavigation';
 import Features from './components/Features';
 import BestSellers from './components/BestSellers';
 import LatestProducts from './components/LatestProducts';
@@ -43,6 +43,11 @@ import Returns from './pages/Returns';
 import MenWatches from './pages/MenWatches';
 import WomenWatches from './pages/WomenWatches';
 import ChildrenWatches from './pages/ChildrenWatches';
+import CategoryPage from './pages/CategoryPage';
+import BrandPage from './pages/BrandPage';
+import SearchPage from './pages/SearchPage';
+
+import { initializeTaxonomies, refreshTaxonomies } from './services/taxonomyService';
 
 import { StatusBar } from '@capacitor/status-bar';
 import { App as CapApp } from '@capacitor/app';
@@ -50,7 +55,7 @@ import { Capacitor } from '@capacitor/core';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Lenis from 'lenis';
 import { lenisService } from './services/lenisService';
-import { NotificationService, EVENTS, ReminderManager } from './notifications';
+import { NotificationService, PushNotificationService, EVENTS, ReminderManager } from './notifications';
 
 // Page transition variants
 const pageVariants = {
@@ -86,10 +91,10 @@ const Home = () => (
 // Routes where navbar/footer should be hidden
 const ISOLATED_ROUTES = ['/checkout', '/download'];
 
-const ConditionalNavbar = () => {
+const ConditionalStoreNavigation = () => {
   const location = useLocation();
   if (ISOLATED_ROUTES.includes(location.pathname)) return null;
-  return <Navbar />;
+  return <StoreNavigation />;
 };
 
 const ConditionalFooter = () => {
@@ -111,9 +116,19 @@ const AnimatedRoutes = () => {
       <Routes location={location} key={location.pathname}>
         <Route path="/" element={<Home />} />
         <Route path="/product/:id" element={<PageWrapper><ProductDetails /></PageWrapper>} />
+        
+        {/* Search Route */}
+        <Route path="/search" element={<PageWrapper><SearchPage /></PageWrapper>} />
+        
+        {/* Dynamic Taxonomy Route */}
+        <Route path="/category/:slugId" element={<PageWrapper><CategoryPage /></PageWrapper>} />
+        <Route path="/brand/:slugId" element={<PageWrapper><BrandPage /></PageWrapper>} />
+
+        {/* Legacy Route Redirects */}
         <Route path="/men-watches" element={<PageWrapper><MenWatches /></PageWrapper>} />
         <Route path="/women-watches" element={<PageWrapper><WomenWatches /></PageWrapper>} />
         <Route path="/children-watches" element={<PageWrapper><ChildrenWatches /></PageWrapper>} />
+
         <Route path="/cart" element={<PageWrapper><CartPage /></PageWrapper>} />
         <Route path="/wishlist" element={<PageWrapper><WishlistPage /></PageWrapper>} />
         <Route path="/profile" element={<PageWrapper><ProfilePage /></PageWrapper>} />
@@ -220,7 +235,8 @@ function PullToRefreshGate({ children }) {
     <PullToRefresh
       disabled={disabled}
       onRefresh={async () => {
-        window.location.reload();
+        await refreshTaxonomies();
+        window.dispatchEvent(new CustomEvent('app-pull-to-refresh'));
       }}
     >
       {children}
@@ -272,8 +288,12 @@ function AuthGate({ children }) {
 // Notification Setup: initializes NotificationService inside Router for useNavigate access
 function NotificationSetup() {
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
 
   useEffect(() => {
+    // Taxonomy Initialization
+    initializeTaxonomies();
+
     if (!Capacitor.isNativePlatform()) return;
 
     NotificationService.initialize({
@@ -294,6 +314,14 @@ function NotificationSetup() {
       NotificationService.destroy();
     };
   }, [navigate]);
+
+  useEffect(() => {
+    // Non-blocking Push Notification Initialization
+    // Runs independently of local notifications and Product SyncEngine
+    if (currentUser?.uid) {
+      PushNotificationService.initialize(currentUser.uid).catch(console.error);
+    }
+  }, [currentUser]);
 
   return null;
 }
@@ -346,7 +374,7 @@ function App() {
                           <SEOHelper />
                           <div className="app-container">
                             <SystemBarsSync />
-                            <ConditionalNavbar />
+                            <ConditionalStoreNavigation />
                             <AuthModal />
                             <LogoutConfirmModal />
                             <ProfileModal />

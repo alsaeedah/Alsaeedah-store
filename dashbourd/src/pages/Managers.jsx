@@ -2,15 +2,17 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLoading } from '../context/LoadingContext';
 import useAuthStore from '../store/useAuthStore';
 import { db, firebaseConfig } from '../firebase/config';
-import { collection, query, orderBy, getDocs, doc, deleteDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, doc, deleteDoc, setDoc, updateDoc, onSnapshot, limit } from 'firebase/firestore';
 import { initializeApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import Swal from 'sweetalert2';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Shield, Mail, Lock, UserCheck, X, Plus, Trash2, Edit3, Loader2,
-    Calendar, Key, Power, ShieldAlert, CheckSquare, Square, Check, User
+    Calendar, Key, Power, ShieldAlert, CheckSquare, Square, Check, User, RotateCcw
 } from 'lucide-react';
+import { StorageEngine } from '../../../shared/storage/StorageEngine.js';
+import { useDashboardSWR } from '../hooks/useDashboardSWR';
 
 // ── Password Strength Validator ────────────────────────────────────────────────
 const validatePassword = (pwd) => {
@@ -76,6 +78,9 @@ const AddManagerModal = ({ onClose, onSuccess }) => {
 
         setIsSubmitting(true);
         try {
+            const { ConnectivityService } = await import('../../../shared/connectivity/ConnectivityService.js');
+            await ConnectivityService.getInstance().requireOnline();
+
             const secondaryApp = initializeApp(firebaseConfig, 'SecondaryManagerApp');
             const secondaryAuth = getAuth(secondaryApp);
             
@@ -104,7 +109,11 @@ const AddManagerModal = ({ onClose, onSuccess }) => {
             onClose();
         } catch (err) {
             console.error('Create manager error:', err);
-            setError(err.message || 'حدث خطأ أثناء إنشاء حساب المدير');
+            if (err.name === 'OfflineError') {
+                setError(err.message);
+            } else {
+                setError(err.message || 'حدث خطأ أثناء إنشاء حساب المدير');
+            }
         } finally {
             setIsSubmitting(false);
         }
@@ -337,6 +346,9 @@ const EditManagerModal = ({ manager, onClose, onSuccess }) => {
 
         setIsSubmitting(true);
         try {
+            const { ConnectivityService } = await import('../../../shared/connectivity/ConnectivityService.js');
+            await ConnectivityService.getInstance().requireOnline();
+
             await updateDoc(doc(db, 'managers', manager.id), {
                 name: formData.name.trim(),
                 email: formData.email.trim(),
@@ -366,7 +378,11 @@ const EditManagerModal = ({ manager, onClose, onSuccess }) => {
             onClose();
         } catch (err) {
             console.error('Update manager error:', err);
-            setError(err.message || 'حدث خطأ أثناء تعديل حساب المدير');
+            if (err.name === 'OfflineError') {
+                setError(err.message);
+            } else {
+                setError(err.message || 'حدث خطأ أثناء تعديل حساب المدير');
+            }
         } finally {
             setIsSubmitting(false);
         }
@@ -758,7 +774,6 @@ const Managers = () => {
     const { startLoading, stopLoading } = useLoading();
     const user = useAuthStore(state => state.user);
     const [managersList, setManagersList] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [selectedManager, setSelectedManager] = useState(null);
@@ -770,38 +785,32 @@ const Managers = () => {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    const fetchManagers = async (isInitial = false) => {
-        if (isInitial) { startLoading(); setLoading(true); }
-        try {
-            const snap = await getDocs(query(collection(db, 'managers'), orderBy('created_at', 'desc')));
-            const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setManagersList(data || []);
-        } catch (error) {
-            console.error('Failed to load managers:', error);
-            Swal.fire({
-                icon: 'error',
-                title: 'خطأ',
-                text: 'فشل تحميل بيانات المدراء من قاعدة البيانات',
-                background: '#141414',
-                color: '#fff'
-            });
-        } finally {
-            if (isInitial) { setLoading(false); stopLoading(); }
+    const { data: swrData, loading: isInitialLoading, executeSWR } = useDashboardSWR({
+        cacheKey: 'dashboard_managers_list',
+        fetcher: async () => {
+            const snap = await getDocs(query(
+                collection(db, 'managers'), 
+                orderBy('created_at', 'desc'),
+                limit(50)
+            ));
+            return {
+                data: snap.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+                snapshot: snap
+            };
         }
+    });
+
+    useEffect(() => {
+        if (swrData) {
+            setManagersList(swrData);
+        }
+    }, [swrData]);
+
+    const fetchManagers = (force = false) => {
+        executeSWR(force);
     };
 
-    useEffect(() => {
-        fetchManagers(true);
-    }, []);
 
-    // Subscribe to database changes for managers table
-    useEffect(() => {
-        const unsubscribe = onSnapshot(collection(db, 'managers'), (snapshot) => {
-            fetchManagers(false); // Update list silently
-        });
-
-        return () => unsubscribe();
-    }, []);
 
     const handleDeleteManager = async (managerId, managerName) => {
         const result = await Swal.fire({
@@ -818,10 +827,17 @@ const Managers = () => {
         if (result.isConfirmed) {
             startLoading();
             try {
-                await deleteDoc(doc(db, 'managers', managerId));
-                setManagersList(prev => prev.filter(m => m.id !== managerId));
+                if (!window.__managersDAL) {
+                    const { ManagersDAL } = await import('../../../shared/managers/infrastructure/cache/ManagersDAL.js');
+                    window.__managersDAL = new ManagersDAL();
+                    await window.__managersDAL.initialize();
+                }
+                await window.__managersDAL.deleteManager(managerId);
                 
-                Swal.fire({ icon: 'success', title: 'تم الحذف', text: 'تم حذف حساب المدير بنجاح.', background: '#141414', color: '#fff' });
+                setManagersList(prev => prev.filter(m => m.id !== managerId));
+                fetchManagers(false);
+                
+                Swal.fire({ icon: 'success', title: 'تم الحذف', text: 'تم حذف حساب المدير بنجاح. سيتم تطبيق التغييرات في الخلفية.', background: '#141414', color: '#fff' });
             } catch (err) {
                 console.error('Delete Manager Error:', err);
                 Swal.fire({ icon: 'error', title: 'خطأ', text: 'فشل حذف حساب المدير.', background: '#141414', color: '#fff' });
@@ -835,13 +851,20 @@ const Managers = () => {
         const nextStatus = mng.is_active === false;
         startLoading();
         try {
-            await updateDoc(doc(db, 'managers', mng.id), {
-                is_active: nextStatus
+            if (!window.__managersDAL) {
+                const { ManagersDAL } = await import('../../../shared/managers/infrastructure/cache/ManagersDAL.js');
+                window.__managersDAL = new ManagersDAL();
+                await window.__managersDAL.initialize();
+            }
+            await window.__managersDAL.updateManager(mng.id, {
+                is_active: nextStatus,
+                updated_at: new Date().toISOString()
             });
 
             setManagersList(prev => 
                 prev.map(m => m.id === mng.id ? { ...m, is_active: nextStatus } : m)
             );
+            fetchManagers(false);
 
             Swal.fire({
                 icon: 'success',
@@ -932,6 +955,22 @@ const Managers = () => {
                     </motion.div>
 
                     <motion.button
+                        whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                        onClick={() => fetchManagers(true)}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '8px',
+                            background: 'rgba(255,255,255,0.05)',
+                            border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontWeight: '800',
+                            fontSize: isMobile ? '0.85rem' : '0.95rem',
+                            padding: isMobile ? '10px 16px' : '13px 22px', borderRadius: '14px',
+                            cursor: 'pointer', fontFamily: "'Cairo', sans-serif",
+                            whiteSpace: 'nowrap'
+                        }}
+                    >
+                        <RotateCcw size={isMobile ? 16 : 18} />
+                        تحديث
+                    </motion.button>
+                    <motion.button
                         id="open-add-manager-modal-btn"
                         whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                         onClick={() => setShowAddModal(true)}
@@ -953,7 +992,7 @@ const Managers = () => {
             </div>
 
             {/* Manager Grid */}
-            {loading ? (
+            {isInitialLoading ? (
                 <div style={{ textAlign: 'center', padding: isMobile ? '60px 0' : '100px 0', color: 'var(--primary)' }}>
                     <Loader2 className="spin" style={{ margin: '0 auto 20px', width: '50px', height: '50px' }} />
                     <p style={{ fontWeight: '800', fontSize: '1rem' }}>جاري تحميل حسابات المدراء...</p>

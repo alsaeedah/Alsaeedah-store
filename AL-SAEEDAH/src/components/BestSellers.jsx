@@ -95,23 +95,34 @@ const SkeletonLoader = () => (
 const BestSellers = () => {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [showSkeleton, setShowSkeleton] = useState(false);
 
     useEffect(() => {
-        loadData();
+        let isMounted = true;
+        const timer = setTimeout(() => {
+            if (isMounted && loading) setShowSkeleton(true);
+        }, 150);
 
-        // Realtime Subscription
-        const unsubscribe = subscribeToProducts((payload) => {
-            loadData();
+        import('../services/productService').then(({ fetchBestSellers }) => {
+            fetchBestSellers().then((data) => {
+                if (isMounted) {
+                    setProducts(data || []);
+                    setLoading(false);
+                    setShowSkeleton(false);
+                }
+            }).catch(() => {
+                if (isMounted) {
+                    setLoading(false);
+                    setShowSkeleton(false);
+                }
+            });
         });
 
-        return () => unsubscribe();
+        return () => {
+            isMounted = false;
+            clearTimeout(timer);
+        };
     }, []);
-
-    const loadData = async () => {
-        const data = await fetchBestSellers();
-        setProducts(data);
-        setLoading(false);
-    };
 
     if (!loading && products.length === 0) return null;
 
@@ -142,9 +153,9 @@ const BestSellers = () => {
                     </p>
                 </motion.div>
 
-                {loading ? (
+                {loading && showSkeleton ? (
                     <SkeletonLoader />
-                ) : (
+                ) : !loading ? (
                     <>
                         {/* Featured Product */}
                         {featuredProduct && (
@@ -180,7 +191,7 @@ const BestSellers = () => {
                             </motion.div>
                         )}
                     </>
-                )}
+                ) : null}
             </div>
         </section>
     );

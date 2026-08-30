@@ -1,0 +1,71 @@
+﻿name: Fix Admin Auth + Deploy Firestore Rules
+
+on:
+  workflow_dispatch:
+    inputs:
+      admin_uid:
+        description: 'Admin UID to fix'
+        required: false
+        default: 'piEGB4UK4lNWBeCApyw7bQNp6l53'
+      admin_email:
+        description: 'Admin email address'
+        required: false
+        default: 'alsaeedah8@gmail.com'
+
+jobs:
+  fix-admin-and-deploy-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install firebase-admin
+        run: npm install firebase-admin
+
+      - name: Fix Admin Custom Claims + Create managers document
+        env:
+          FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          ADMIN_UID: ${{ github.event.inputs.admin_uid }}
+          ADMIN_EMAIL: ${{ github.event.inputs.admin_email }}
+        run: |
+          node --input-type=module <<'EOF'
+          import admin from 'firebase-admin';
+          const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+          admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+          const uid   = process.env.ADMIN_UID;
+          const email = process.env.ADMIN_EMAIL;
+          const db    = admin.firestore();
+          const auth  = admin.auth();
+          console.log('=== Fixing admin account ===');
+          console.log('UID:', uid);
+          const user = await auth.getUser(uid);
+          console.log('Current claims:', JSON.stringify(user.customClaims || {}));
+          const correctClaims = {
+            role: 'super_admin',
+            permissions: { products: true, orders: true, users: true, managers: true, settings: true }
+          };
+          await auth.setCustomUserClaims(uid, correctClaims);
+          console.log('Claims updated to:', JSON.stringify(correctClaims));
+          await db.collection('managers').doc(uid).set({
+            email: email, name: 'المدير العام', role: 'super_admin', is_active: true,
+            permissions: { products: true, orders: true, users: true, managers: true, settings: true },
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+          console.log('managers document created/updated');
+          const updated = await auth.getUser(uid);
+          console.log('Verified claims:', JSON.stringify(updated.customClaims));
+          console.log('Done! User must sign out and sign in again.');
+          EOF
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Deploy Firestore Security Rules
+        run: firebase deploy --only firestore:rules --project al-saeedah8
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}

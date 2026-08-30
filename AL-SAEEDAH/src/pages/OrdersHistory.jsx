@@ -19,6 +19,16 @@ export default function OrdersHistory() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const [showSkeleton, setShowSkeleton] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const timer = setTimeout(() => {
+      if (isMounted && loading) setShowSkeleton(true);
+    }, 150);
+    return () => { isMounted = false; clearTimeout(timer); };
+  }, [loading]);
+
   useEffect(() => {
     if (currentUser) {
       refreshOrders();
@@ -49,8 +59,10 @@ export default function OrdersHistory() {
           </motion.div>
         )}
 
-        {loading ? (
+        {loading && showSkeleton ? (
           <OrderSkeleton isMobile={isMobile} />
+        ) : loading && !showSkeleton ? (
+          <div style={{ minHeight: '60vh' }}></div>
         ) : !error && orders.length === 0 ? (
           <EmptyOrders isMobile={isMobile} />
         ) : !error && (

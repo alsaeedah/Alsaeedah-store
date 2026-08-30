@@ -1,169 +1,104 @@
 import { db } from '../firebase/config';
-import { collection, query, orderBy, getDocs, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { FirestoreProductRepository } from '../../../shared/product/infrastructure/FirestoreProductRepository.js';
+import { ProductDAL } from '../../../shared/product/infrastructure/cache/ProductDAL.js';
+import { resolveFilters } from './productQueryBuilder';
+
+const firestoreRepository = new FirestoreProductRepository(db);
+export const productRepository = new ProductDAL(firestoreRepository);
 
 export const fetchProductsFromFirestore = async () => {
-    try {
-        const q = query(collection(db, 'products'), orderBy('created_at', 'desc'));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    } catch (error) {
-        console.error('Unexpected error fetching products:', error);
-        return [];
-    }
+    return await productRepository.getLatest(1000); // Or another appropriate fallback
+};
+
+export const fetchFreshProductsByIds = async (ids) => {
+    return await firestoreRepository.getByIds(ids);
 };
 
 export const fetchLatestProducts = async () => {
-    try {
-        const q = query(collection(db, 'products'), where('is_latest', '==', true));
-        const snapshot = await getDocs(q);
-        const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        return products.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    } catch (error) {
-        console.error('Error in fetchLatestProducts:', error);
-        return [];
-    }
+    return await productRepository.getLatest();
 };
 
 export const fetchBestSellers = async () => {
-    try {
-        const q = query(collection(db, 'products'), where('is_best_seller', '==', true));
-        const snapshot = await getDocs(q);
-        const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        return products.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    } catch (error) {
-        console.error('Error fetching best sellers:', error);
-        return [];
-    }
+    return await productRepository.getBestSellers();
 };
 
-export const fetchProductsPaginated = async (page = 0, pageSize = 6, filters = {}) => {
-    try {
-        const from = page * pageSize;
-        const to = from + pageSize;
+export const fetchProductsPaginated = async (page = 0, pageSize = 6, filters = {}, cursor = null) => {
+    const resolvedFilters = resolveFilters(filters);
+    return await productRepository.getPaginated(resolvedFilters, page, pageSize, cursor);
+};
 
-        // Note: Firestore doesn't support offset pagination or random sorting easily.
-        // For a typical e-commerce store with < 10,000 items, fetching the filtered set
-        // and slicing in memory is practical and guarantees UI compatibility.
+export const fetchRelatedProducts = async (id, limitCount = 12) => {
+    return await productRepository.getRelated(id, limitCount);
+};
 
-        let q = collection(db, 'products');
-        const queryConstraints = [];
+export const fetchProductsByIds = async (ids) => {
+    return await productRepository.getByIds(ids);
+};
 
-        if (filters.category && filters.category !== 'all') {
-            queryConstraints.push(where('category', '==', filters.category));
-        }
-        if (filters.style && filters.style !== 'all') {
-            queryConstraints.push(where('style', '==', filters.style));
-        }
-        
-        // Firestore only allows inequality filters (>=, <=) on a single field.
-        // We will apply price filters in memory to allow combining with sorting.
-        
-        const finalQuery = query(q, ...queryConstraints);
-        const snapshot = await getDocs(finalQuery);
-        
-        let allProducts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-        // Apply price filters in memory (Firestore limitation workaround)
-        if (filters.minPrice) {
-            allProducts = allProducts.filter(p => p.price >= filters.minPrice);
-        }
-        if (filters.maxPrice) {
-            allProducts = allProducts.filter(p => p.price <= filters.maxPrice);
-        }
-
-        // Apply search filter in memory
-        if (filters.search) {
-            const term = filters.search.toLowerCase();
-            allProducts = allProducts.filter(p => 
-                (p.name && p.name.toLowerCase().includes(term)) || 
-                (p.displayId && p.displayId.toLowerCase().includes(term))
-            );
-        }
-
-        // Random sort fallback logic
-        if (filters.sortPrice === 'none' && filters.seed) {
-            // Simple deterministic shuffle based on seed
-            const seededRandom = (seed) => {
-                const x = Math.sin(seed++) * 10000;
-                return x - Math.floor(x);
-            };
-            allProducts.sort((a, b) => seededRandom(a.created_at?.length || 1) - 0.5);
-        } else if (filters.sortPrice === 'asc') {
-            allProducts.sort((a, b) => Number(a.price) - Number(b.price));
-        } else if (filters.sortPrice === 'desc') {
-            allProducts.sort((a, b) => Number(b.price) - Number(a.price));
-        } else {
-            // Default sort: newest first
-            allProducts.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-        }
-
-        const paginatedProducts = allProducts.slice(from, to);
-
-        return {
-            products: paginatedProducts,
-            hasMore: allProducts.length > to,
-            total: allProducts.length
-        };
-    } catch (error) {
-        console.error('Error in fetchProductsPaginated:', error);
-        return { products: [], hasMore: false, total: 0 };
-    }
+export const fetchAvailableBrandIds = async (categoryIds) => {
+    return await productRepository.getAvailableBrandIds(categoryIds);
 };
 
 export const subscribeToProducts = (callback) => {
-    const q = query(collection(db, 'products'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-        // Mock payload structure to match Supabase's expected format in some UI components
-        snapshot.docChanges().forEach(change => {
-            const payload = {
-                eventType: change.type === 'added' ? 'INSERT' : change.type === 'modified' ? 'UPDATE' : 'DELETE',
-                new: change.type !== 'removed' ? { id: change.doc.id, ...change.doc.data() } : null,
-                old: change.type === 'removed' ? { id: change.doc.id } : null
-            };
-            callback(payload);
-        });
-    });
-
-    return unsubscribe;
+    return productRepository.subscribeToList({ usePayloadFormat: true }, callback);
 };
 
-export const subscribeToProduct = (id, callback) => {
-    const docRef = doc(db, 'products', String(id));
-    
-    // Initial fetch
-    getDoc(docRef).then(docSnap => {
-        if (docSnap.exists()) {
-            callback({ id: docSnap.id, ...docSnap.data() });
-        } else {
-            callback(null);
-        }
-    }).catch(err => {
-        console.error('Error fetching product:', err);
-        callback(null);
-    });
-
-    const unsubscribe = onSnapshot(docRef, (docSnap) => {
-        if (docSnap.exists()) {
-            callback({ id: docSnap.id, ...docSnap.data() });
-        } else {
-            callback(null);
-        }
-    });
-
-    return unsubscribe;
+export const fetchProductById = async (id) => {
+    return await productRepository.getById(id);
 };
 
 export const subscribeToHero = (callback) => {
-    const q = query(collection(db, 'hero'), orderBy('sort_order', 'asc'));
-    
-    // Initial fetch
-    getDocs(q).then(snapshot => {
-        callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }).catch(err => console.error('Error fetching hero:', err));
+    let isCancelled = false;
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-        callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    const fetchHeroLocalFirst = async () => {
+        try {
+            const { StorageEngine } = await import('../../../shared/storage/StorageEngine');
+            const { collection, getDocs } = await import('firebase/firestore');
 
-    return unsubscribe;
+            const localHero = await StorageEngine.get('hero_data');
+            if (!isCancelled && localHero && Array.isArray(localHero) && localHero.length > 0) {
+                callback(localHero);
+            }
+
+            const snap = await getDocs(collection(db, 'hero'));
+            const serverHero = [];
+            snap.forEach(doc => serverHero.push({ id: doc.id, ...doc.data() }));
+
+            await StorageEngine.set('hero_data', serverHero);
+
+            if (!isCancelled) {
+                callback(serverHero);
+            }
+        } catch (error) {
+            console.error('[subscribeToHero] Background refresh failed:', error);
+            // DO NOT call callback([]) here, as it would erase the valid cache when offline.
+        }
+    };
+
+    fetchHeroLocalFirst();
+
+    return () => {
+        isCancelled = true;
+    };
+};
+
+// ==========================================
+// SWR SUBSCRIPTIONS
+// ==========================================
+
+export const subscribeToLatestSWR = (callback) => {
+    return productRepository.subscribeToLatestSWR(6, callback);
+};
+
+export const subscribeToBestSellersSWR = (callback) => {
+    return productRepository.subscribeToBestSellersSWR(6, callback);
+};
+
+export const subscribeToRelatedSWR = (id, callback, limitCount = 12) => {
+    return productRepository.subscribeToRelatedSWR(id, limitCount, callback);
+};
+
+export const subscribeToPaginatedSWR = (page = 0, pageSize = 6, filters = {}, cursor = null, callback) => {
+    const resolvedFilters = resolveFilters(filters);
+    return productRepository.subscribeToPaginatedSWR(resolvedFilters, page, pageSize, cursor, callback);
 };

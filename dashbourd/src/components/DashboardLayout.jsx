@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import { db } from '../firebase/config';
-import { collection, query, where, getCountFromServer, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getCountFromServer, onSnapshot, limit, orderBy } from 'firebase/firestore';
 import Swal from 'sweetalert2';
 import { listenForForegroundMessages } from '../utils/pushManager';
 import {
@@ -17,6 +17,7 @@ import {
     Bell,
     Plus,
     Shield,
+    Tag,
     Settings as SettingsIcon
 } from 'lucide-react';
 
@@ -100,7 +101,7 @@ const DashboardLayout = ({ children }) => {
 
         fetchPendingCount();
 
-        const q = query(collection(db, 'orders'));
+        const q = query(collection(db, 'orders'), orderBy('created_at', 'desc'), limit(10));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             fetchPendingCount();
             snapshot.docChanges().forEach((change) => {
@@ -134,6 +135,10 @@ const DashboardLayout = ({ children }) => {
 
     if (hasPermission('products')) {
         menuItems.push({ path: '/products', label: 'المنتجات', icon: ShoppingBag });
+    }
+
+    if (hasPermission('settings')) {
+        menuItems.push({ path: '/taxonomy', label: 'إدارة التصنيفات', icon: Tag });
     }
 
     if (hasPermission('orders')) {

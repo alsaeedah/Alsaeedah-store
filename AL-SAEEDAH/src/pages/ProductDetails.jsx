@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { db } from '../firebase/config';
-import { collection, query, where, limit, getDocs } from 'firebase/firestore';
+
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { createPortal } from 'react-dom';
 
@@ -20,8 +19,10 @@ import {
   Sparkles, CircleDot, Wind, Layers
 } from 'lucide-react';
 
-import { subscribeToProducts, subscribeToProduct } from '../services/productService';
+import { subscribeToProducts, fetchProductById, fetchRelatedProducts, subscribeToRelatedSWR } from '../services/productService';
+import ProductCard from '../components/ProductCard';
 import ProductOptionsModal from '../components/ProductOptionsModal';
+import { resolveTaxonomyLabel } from '../../../shared/product/index.js';
 
 /* ─────────────────────────────────────────────
    Animation variants
@@ -375,7 +376,7 @@ const ProductInfo = ({ product, discountValue, onAddToCart, onBuyNow }) => {
     <div className="product-info">
       <motion.div variants={fadeUp} custom={0} initial="hidden" animate="visible">
         {/* Category badge */}
-        <span className="pi-category-badge">{getCategoryLabel(product.category)}</span>
+        <span className="pi-category-badge">{resolveTaxonomyLabel(product, 'categoryId')}</span>
 
         {/* Product name */}
         <h1 className="pi-title">{product.name}</h1>
@@ -538,7 +539,7 @@ const specsConfig = (product) => [
   { icon: Droplets, label: 'مقاومة الماء', value: '30 متر' },
   { icon: Maximize2, label: 'قطر الهيكل', value: '42 مم' },
   { icon: ShieldCheck, label: 'الضمان', value: 'سنة كاملة' },
-  { icon: MapPin, label: 'المنشأ', value: getCategoryLabel(product.category) },
+  { icon: MapPin, label: 'المنشأ', value: resolveTaxonomyLabel(product, 'categoryId') },
 ];
 
 const SpecsStrip = ({ product }) => (
@@ -750,8 +751,8 @@ const InfoTabs = ({ product }) => {
                 </p>
                 {product.style && (
                   <div className="tab-desc-tags">
-                    <span className="desc-tag"><Tag size={13} /> {getStyleLabel(product.style)}</span>
-                    <span className="desc-tag"><Watch size={13} /> {getCategoryLabel(product.category)}</span>
+                    <span className="desc-tag"><Tag size={13} /> {resolveTaxonomyLabel(product, 'brandId')}</span>
+                    <span className="desc-tag"><Watch size={13} /> {resolveTaxonomyLabel(product, 'categoryId')}</span>
                   </div>
                 )}
               </div>
@@ -907,6 +908,7 @@ const ProductDetails = () => {
   const [product, setProduct] = useState(null);
   const [relatedProducts, setRelatedProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showSkeleton, setShowSkeleton] = useState(false);
   const [mediaMode, setMediaMode] = useState('image');
   const [activeImage, setActiveImage] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -919,11 +921,21 @@ const ProductDetails = () => {
     if (!isVideoPlaying && mediaMode === 'video') setMediaMode('image');
   }, [activeVideoId, id, mediaMode, isVideoPlaying]);
 
+  useEffect(() => {
+    let isMounted = true;
+    const timer = setTimeout(() => {
+      if (isMounted && loading) setShowSkeleton(true);
+    }, 150);
+    return () => { isMounted = false; clearTimeout(timer); };
+  }, [loading]);
+
   /* ── Load product ── */
   useEffect(() => {
-    showLoader('تحميل تفاصيل المنتج...');
+    let isMounted = true;
     setLoading(true);
-    const unsubscribe = subscribeToProduct(id, (data) => {
+    
+    fetchProductById(id).then(data => {
+      if (!isMounted) return;
       if (data) {
         setProduct(data);
         if (data.video && data.imageUrl?.includes('placehold.co')) setMediaMode('video');
@@ -933,17 +945,15 @@ const ProductDetails = () => {
         setProduct(null);
       }
       setLoading(false);
-      hideLoader();
     });
-    return () => unsubscribe();
+    
+    return () => { isMounted = false; };
   }, [id]);
 
   /* ── Load related products ── */
   useEffect(() => {
     const fetchRelated = async () => {
-      const q = query(collection(db, 'products'), where('id', '!=', id), limit(12));
-      const snapshot = await getDocs(q);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const data = await fetchRelatedProducts(id, 12);
       if (data) {
         setRelatedProducts(data.map(p => ({
           ...p,
@@ -953,17 +963,35 @@ const ProductDetails = () => {
         })));
       }
     };
+    
+    const unsubscribeSWR = subscribeToRelatedSWR(id, (freshData) => {
+      if (freshData) {
+        setRelatedProducts(freshData.map(p => ({
+          ...p,
+          price: Number(p.price) || 0,
+          image: p.imageUrl || p.image || 'https://placehold.co/400x500/1a1a1a/ffffff?text=No+Image',
+          video: p.video || ''
+        })));
+      }
+    }, 12);
+
     fetchRelated();
+
+    return () => unsubscribeSWR();
   }, [id]);
 
   const handleBuyNow = () => setShowModal(true);
   const handleAddToCart = () => setShowModal(true);
 
   /* ── Empty / error state ── */
-  if (loading) return (
+  if (loading && showSkeleton) return (
     <div className="pdp-container">
       <SkeletonLoader />
     </div>
+  );
+
+  if (loading && !showSkeleton) return (
+    <div className="pdp-container" style={{ minHeight: '100vh' }}></div>
   );
 
   if (!product) {

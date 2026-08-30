@@ -116,7 +116,7 @@ export default function HeroCarousel() {
     useEffect(() => {
         const unsubscribe = subscribeToHero((data) => {
             setSlides(data && data.length > 0 ? data : []);
-            setTimeout(() => setLoading(false), 800);
+            setLoading(false);
         });
         return () => unsubscribe();
     }, []);
@@ -138,7 +138,7 @@ export default function HeroCarousel() {
             }}
         >
             {/* Loading Placeholder */}
-            {(loading || slides.length === 0) && (
+            {(loading && slides.length === 0) && (
                 <div 
                     style={{
                         position: 'absolute',

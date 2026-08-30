@@ -14,29 +14,52 @@ export const ordersService = {
     }
 
     try {
-      const ordersRef = collection(db, 'orders');
+      const { StorageEngine } = await import('../../../shared/storage/StorageEngine');
+      const cacheKey = `order_history_${userId}`;
       
-      // Only query by user_id to avoid needing a composite index
-      const q = query(
-        ordersRef,
-        where('user_id', '==', userId)
-      );
-
-      const snapshot = await getDocs(q);
+      let userOrders = [];
       
-      const orders = [];
-      snapshot.forEach(doc => {
-        orders.push({ id: doc.id, ...doc.data() });
-      });
+      // 1. Try local cache first
+      try {
+          const cached = await StorageEngine.get(cacheKey);
+          if (cached && Array.isArray(cached)) {
+              userOrders = cached;
+          }
+      } catch (err) {}
 
-      // Sort client-side by created_at descending (newest first)
-      orders.sort((a, b) => {
-        const dateA = new Date(a.created_at || 0).getTime();
-        const dateB = new Date(b.created_at || 0).getTime();
-        return dateB - dateA;
-      });
+      // 2. Try network
+      try {
+          const q = query(collection(db, 'orders'), where('user_id', '==', userId));
+          const snapshot = await getDocs(q);
+          const freshOrders = [];
+          snapshot.forEach(doc => {
+              freshOrders.push({ id: doc.id, ...doc.data() });
+          });
+          
+          if (freshOrders.length > 0) {
+              userOrders = freshOrders;
+              // Sort client-side by created_at descending
+              userOrders.sort((a, b) => {
+                  const dateA = new Date(a.created_at || 0).getTime();
+                  const dateB = new Date(b.created_at || 0).getTime();
+                  return dateB - dateA;
+              });
+              await StorageEngine.set(cacheKey, userOrders);
+          }
+      } catch (networkErr) {
+          console.warn('[ordersService] Network failed, using cache if available');
+      }
 
-      return orders;
+      // 3. Fallback sort just in case cache was out of order
+      if (userOrders.length > 0) {
+          userOrders.sort((a, b) => {
+              const dateA = new Date(a.created_at || 0).getTime();
+              const dateB = new Date(b.created_at || 0).getTime();
+              return dateB - dateA;
+          });
+      }
+
+      return userOrders;
     } catch (error) {
       console.error('Error fetching user orders:', error);
       throw error;

@@ -4,8 +4,7 @@ import { Package, Calendar, CreditCard, ChevronDown, ChevronUp, Copy, CheckCircl
 import { useCart } from '../context/CartContext';
 import { useLoader } from '../context/LoaderContext';
 import ToastNotification from '../components/ToastNotification';
-import { db } from '../firebase/config';
-import { doc, getDoc } from 'firebase/firestore';
+import { fetchProductsByIds } from '../services/productService';
 
 export default function OrderCard({ order, isMobile }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -48,14 +47,16 @@ export default function OrderCard({ order, isMobile }) {
       const availableItems = [];
       const unavailableItems = [];
 
-      // Validate products existence before reordering
+      // Fetch products in bulk using the service layer
+      const itemIds = (order.items || []).map(item => String(item.id));
+      const products = await fetchProductsByIds(itemIds);
+      
+      const productMap = {};
+      products.forEach(p => { productMap[String(p.id)] = p; });
+
       for (const item of order.items || []) {
-        const productRef = doc(db, 'products', String(item.id));
-        const productSnap = await getDoc(productRef);
-        
-        if (productSnap.exists()) {
-          const productData = { id: productSnap.id, ...productSnap.data() };
-          // Assume product is available if it exists
+        const productData = productMap[String(item.id)];
+        if (productData) {
           availableItems.push({ item, productData });
         } else {
           unavailableItems.push(item);

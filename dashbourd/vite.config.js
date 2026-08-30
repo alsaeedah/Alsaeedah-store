@@ -5,11 +5,24 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+const resolveSharedDepsPlugin = () => ({
+  name: 'resolve-shared-deps',
+  resolveId(source, importer) {
+    if (importer && importer.includes(path.normalize('/shared/').replace(/\\/g, '/')) && !source.startsWith('.') && !source.startsWith('/')) {
+      return this.resolve(source, path.resolve(__dirname, 'index.html'), { skipSelf: true })
+        .then(resolved => resolved || null);
+    }
+    return null;
+  }
+});
+
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
   plugins: [
     react(),
+    resolveSharedDepsPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg', 'logo.png'],
@@ -47,5 +60,8 @@ export default defineConfig({
     fs: {
       allow: ['..']
     }
+  },
+  optimizeDeps: {
+    exclude: ['shared']
   }
 })

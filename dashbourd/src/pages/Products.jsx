@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLoading } from '../context/LoadingContext';
-import { db } from '../firebase/config';
-import { collection, query, where, getCountFromServer, getDocs, onSnapshot, updateDoc, deleteDoc, doc, orderBy, limit, startAfter } from 'firebase/firestore';
+import { productRepository } from '../services/productService';
 import Swal from 'sweetalert2';
 import { 
     Plus, Trash2, Edit, Loader2, Search, Layers, Users, 
@@ -18,6 +17,7 @@ const Products = () => {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
+    const [error, setError] = useState(null);
     const [page, setPage] = useState(0);
     const [hasMore, setHasMore] = useState(true);
     const [totalStats, setTotalStats] = useState({ total: 0, men: 0, women: 0, kids: 0 });
@@ -55,85 +55,76 @@ const Products = () => {
 
     const fetchStats = async () => {
         try {
-            const productsRef = collection(db, 'products');
-            const totalSnap = await getCountFromServer(productsRef);
-            
-            const menQ = query(productsRef, where('category', '==', 'men'));
-            const menSnap = await getCountFromServer(menQ);
-            
-            const womenQ = query(productsRef, where('category', '==', 'women'));
-            const womenSnap = await getCountFromServer(womenQ);
-            
-            const kidsQ = query(productsRef, where('category', '==', 'kids'));
-            const kidsSnap = await getCountFromServer(kidsQ);
-
-            setTotalStats({ total: totalSnap.data().count || 0, men: menSnap.data().count || 0, women: womenSnap.data().count || 0, kids: kidsSnap.data().count || 0 });
+            const stats = await productRepository.getStats();
+            setTotalStats(stats);
         } catch (error) {
             console.error("Stats fetch error:", error);
         }
     };
 
-    const allFilteredProductsRef = useRef([]); // To handle pagination in memory
+    const nextCursorRef = useRef(null);
+    const LIMIT = 20;
 
     const fetchProducts = async (pageNum, isInitial = false) => {
         if (isInitial) {
             startLoading();
-            setLoading(true);
+            // Only show full-page loader if we have no products at all
+            if (products.length === 0) setLoading(true);
+            setError(null);
+            nextCursorRef.current = null;
         } else {
             setLoadingMore(true);
         }
 
         try {
-            if (isInitial) {
-                let q = collection(db, 'products');
-                let constraints = [];
-                if (filterType !== 'all') constraints.push(where('category', '==', filterType));
-                if (filterStyle !== 'all') constraints.push(where('style', '==', filterStyle));
-                if (minPrice !== '') constraints.push(where('price', '>=', Number(minPrice)));
-                if (maxPrice !== '') constraints.push(where('price', '<=', Number(maxPrice)));
-                
-                const finalQuery = query(q, ...constraints);
-                const snapshot = await getDocs(finalQuery);
-                let allData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-                // In-memory text search
-                if (searchQuery) {
-                    const lq = searchQuery.toLowerCase();
-                    allData = allData.filter(p => 
-                        (p.name && p.name.toLowerCase().includes(lq)) ||
-                        (p.displayId && String(p.displayId).includes(lq))
-                    );
-                }
-
-                // In-memory sort
-                if (sortPrice === 'asc') allData.sort((a, b) => Number(a.price) - Number(b.price));
-                else if (sortPrice === 'desc') allData.sort((a, b) => Number(b.price) - Number(a.price));
-                else allData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-                allFilteredProductsRef.current = allData;
-                setTotalMatchingCount(allData.length);
+            const resolvedFilters = {
+                legacyCategory: filterType !== 'all' ? filterType : null,
+                legacyStyle: filterStyle !== 'all' ? filterStyle : null,
+                minPrice: minPrice !== '' ? Number(minPrice) : null,
+                maxPrice: maxPrice !== '' ? Number(maxPrice) : null,
+                search: searchQuery,
+                sortPrice: sortPrice
+            };
+            
+            const currentCursor = isInitial ? null : nextCursorRef.current;
+            const response = await productRepository.getPaginated(resolvedFilters, pageNum, LIMIT, currentCursor);
+            
+            if (response && response._isStaleCache) {
+                console.log("[Products] Using LKG data, background revalidation started.");
             }
-
-            const from = pageNum * 6;
-            const to = from + 6;
-            const paginatedData = allFilteredProductsRef.current.slice(from, to);
+            
+            const newProducts = response?.products || [];
+            nextCursorRef.current = response?.nextCursor || null;
 
             if (isInitial) {
-                setProducts(paginatedData);
+                setProducts(newProducts);
+                setTotalMatchingCount(response?.total || newProducts.length);
             } else {
-                setProducts(prev => [...prev, ...paginatedData]);
+                setProducts(prev => {
+                    const existingIds = new Set(prev.map(p => p.id));
+                    const uniqueNew = newProducts.filter(p => !existingIds.has(p.id));
+                    return [...prev, ...uniqueNew];
+                });
             }
 
-            setHasMore(allFilteredProductsRef.current.length > to);
-        } catch (error) {
-            console.error(error);
-            Swal.fire({
-                icon: 'error',
-                title: 'خطأ',
-                text: 'فشل تحميل المنتجات من قاعدة البيانات',
-                background: '#141414',
-                color: '#fff'
-            });
+            setHasMore(response?.hasMore || false);
+        } catch (err) {
+            console.error("[Products] Product loading failed", err);
+            // Protect LKG: only set error if we don't have existing products
+            if (isInitial && products.length === 0) {
+                setError({
+                    code: err?.code || 'unknown',
+                    message: err?.message || 'فشل تحميل المنتجات من قاعدة البيانات'
+                });
+            } else if (!isInitial) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'خطأ',
+                    text: 'فشل تحميل المزيد من المنتجات',
+                    background: '#141414',
+                    color: '#fff'
+                });
+            }
         } finally {
             if (isInitial) {
                 setLoading(false);
@@ -158,28 +149,7 @@ const Products = () => {
         }
     }, [page]);
 
-    useEffect(() => {
-        const q = query(collection(db, 'products'));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
-                if (change.type === 'added') {
-                    // Only fetch stats and restart on major changes if needed, but here we can just do:
-                    fetchStats();
-                    if (products.length < 6) {
-                        setPage(0);
-                        fetchProducts(0, true);
-                    }
-                } else if (change.type === 'modified') {
-                    setProducts(prev => prev.map(p => p.id === change.doc.id ? { ...p, ...change.doc.data() } : p));
-                } else if (change.type === 'removed') {
-                    setProducts(prev => prev.filter(p => p.id !== change.doc.id));
-                    fetchStats();
-                }
-            });
-        });
-
-        return () => unsubscribe();
-    }, []);
+    // Unbounded listener removed to comply with Phase 9 bounds constraints.
 
     const handleDelete = async (id) => {
         const result = await Swal.fire({
@@ -199,10 +169,9 @@ const Products = () => {
             startLoading();
             try {
                 // Fetch product to get images and video
-                const productSnap = await getDocs(query(collection(db, 'products'), where('__name__', '==', id)));
+                const productToDelete = await productRepository.getById(id);
                 
-                if (!productSnap.empty) {
-                    const productToDelete = productSnap.docs[0].data();
+                if (productToDelete) {
                     if (productToDelete.video && productToDelete.video.includes('cloudinary')) {
                         await deleteFromCloudinary(productToDelete.video, 'video');
                     }
@@ -215,13 +184,17 @@ const Products = () => {
                     }
                 }
 
-                await deleteDoc(doc(db, 'products', id));
+                await productRepository.delete(id);
 
                 setProducts(prev => prev.filter(p => p.id !== id));
                 fetchStats();
                 Swal.fire({ title: 'تم الحذف بنجاح', icon: 'success', background: '#141414', color: '#fff' });
             } catch (error) {
                 console.error(error);
+                if (error.name === 'OfflineError') {
+                    Swal.fire({ icon: 'error', title: 'خطأ', text: error.message, background: '#141414', color: '#fff' });
+                    return;
+                }
                 Swal.fire({ icon: 'error', title: 'خطأ', text: 'فشل الحذف', background: '#141414', color: '#fff' });
             } finally {
                 stopLoading();
@@ -232,7 +205,7 @@ const Products = () => {
     const toggleBestSellerStatus = async (id, currentStatus) => {
         startLoading();
         try {
-            await updateDoc(doc(db, 'products', id), { is_best_seller: !currentStatus });
+            await productRepository.update(id, { is_best_seller: !currentStatus });
             
             setProducts(prev => prev.map(p => p.id === id ? { ...p, is_best_seller: !currentStatus } : p));
             
@@ -249,6 +222,10 @@ const Products = () => {
             });
         } catch (error) {
             console.error(error);
+            if (error.name === 'OfflineError') {
+                Swal.fire({ icon: 'error', title: 'خطأ', text: error.message, background: '#141414', color: '#fff' });
+                return;
+            }
             Swal.fire({ icon: 'error', title: 'خطأ', text: 'فشل تحديث الحالة', background: '#141414', color: '#fff' });
         } finally {
             stopLoading();
@@ -258,7 +235,7 @@ const Products = () => {
     const toggleLatestStatus = async (id, currentStatus) => {
         startLoading();
         try {
-            await updateDoc(doc(db, 'products', id), { is_latest: !currentStatus });
+            await productRepository.update(id, { is_latest: !currentStatus });
             
             setProducts(prev => prev.map(p => p.id === id ? { ...p, is_latest: !currentStatus } : p));
             
@@ -275,6 +252,10 @@ const Products = () => {
             });
         } catch (error) {
             console.error(error);
+            if (error.name === 'OfflineError') {
+                Swal.fire({ icon: 'error', title: 'خطأ', text: error.message, background: '#141414', color: '#fff' });
+                return;
+            }
             Swal.fire({ icon: 'error', title: 'خطأ', text: 'فشل تحديث الحالة', background: '#141414', color: '#fff' });
         } finally {
             stopLoading();
@@ -357,7 +338,7 @@ const Products = () => {
                             await deleteFromCloudinary(img, 'image');
                         }
                     }
-                    await deleteDoc(doc(db, 'products', product.id));
+                    await productRepository.delete(product.id);
                 }
 
                 setProducts(prev => prev.filter(p => !selectedProducts.has(p.id)));
@@ -366,6 +347,10 @@ const Products = () => {
                 Swal.fire({ title: 'تم الحذف بنجاح', icon: 'success', background: '#141414', color: '#fff' });
             } catch (error) {
                 console.error(error);
+                if (error.name === 'OfflineError') {
+                    Swal.fire({ icon: 'error', title: 'خطأ', text: error.message, background: '#141414', color: '#fff' });
+                    return;
+                }
                 Swal.fire({ icon: 'error', title: 'خطأ', text: 'فشل الحذف الجماعي', background: '#141414', color: '#fff' });
             } finally {
                 stopLoading();
@@ -464,7 +449,17 @@ const Products = () => {
                 sortPrice={sortPrice} setSortPrice={setSortPrice}
             />
 
-            {loading ? (
+            {error && products.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '100px 0' }}>
+                    <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '30px', borderRadius: '20px', display: 'inline-block', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                        <h3 style={{ color: '#ef4444', fontSize: '1.5rem', marginBottom: '10px' }}>تعذر تحميل البيانات</h3>
+                        <p style={{ color: 'var(--text-muted)', marginBottom: '20px' }}>السبب: {error.message}</p>
+                        <button onClick={() => fetchProducts(0, true)} style={{ padding: '12px 24px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold' }}>
+                            إعادة المحاولة
+                        </button>
+                    </div>
+                </div>
+            ) : loading ? (
                 <div style={{ textAlign: 'center', padding: '120px 0', color: 'var(--primary)' }}>
                     <Loader2 className="animate-spin" style={{ margin: '0 auto 24px', width: '56px', height: '56px' }} />
                     <p style={{ fontWeight: '800', fontSize: '1.1rem', letterSpacing: '1px' }}>جاري استحضار المجموعة الملكية...</p>

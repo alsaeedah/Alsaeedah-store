@@ -1,5 +1,5 @@
 import { db } from '../firebase/config';
-import { collection, doc, setDoc, query, where, getDocs, limit } from 'firebase/firestore';
+import { collection, doc, setDoc, query, where, getDocs, limit, increment } from 'firebase/firestore';
 
 /**
  * Validates and creates an order in Firestore with idempotency and timeout protection.
@@ -21,60 +21,57 @@ export const createOrder = async (orderData, requestId) => {
     );
 
     const orderPromise = (async () => {
-        // Step 1: Check for duplicate order (Idempotency)
-        console.log(`[OrderService] Checking for duplicate requestId: ${requestId}`);
-        const ordersRef = collection(db, 'orders');
-        const duplicateQuery = query(ordersRef, where('requestId', '==', requestId), limit(1));
-        const duplicateSnapshot = await getDocs(duplicateQuery);
-
-        if (!duplicateSnapshot.empty) {
-            const existingOrder = duplicateSnapshot.docs[0].data();
-            console.log(`[OrderService] Duplicate order found. Returning existing invoiceId: ORD${existingOrder.order_number}`);
-            return `ORD${existingOrder.order_number}`;
+        // Validation is now handled completely before reaching Checkout.
+        // Proceeding directly to order creation.
+        try {
+            const ordersRef = collection(db, 'orders');
+            const duplicateQuery = query(ordersRef, where('requestId', '==', requestId), limit(1));
+            const duplicateSnapshot = await getDocs(duplicateQuery);
+            if (!duplicateSnapshot.empty) {
+                const existingOrder = duplicateSnapshot.docs[0].data();
+                return `ORD${existingOrder.order_number}`;
+            }
+        } catch (err) {
+            // Ignore cache/network issues for duplicate check
         }
 
-        // Step 2: Generate Order Number
-        // Generate a 5-digit random number
-        console.log(`[OrderService] Generating order number.`);
+        // Step 2: Generate Order Number and Save directly to Firestore
         const orderNumber = Math.floor(10000 + Math.random() * 90000).toString();
-        const newOrderId = doc(ordersRef).id;
+        const ordersRef = collection(db, 'orders');
+        const newOrderDoc = doc(ordersRef);
         
-        console.log(`[OrderService] Order number generated: ${orderNumber}`);
-
-        // Step 3: Create Order Document
-        console.log(`[OrderService] Creating order document in Firestore.`);
-        const orderRef = doc(db, 'orders', newOrderId);
-        
-        // Firestore does not accept undefined values, so we sanitize the object
+        const timestamp = new Date().toISOString();
         const rawOrderData = {
             ...orderData,
             order_number: orderNumber,
             requestId,
-            created_at: new Date().toISOString()
+            status: 'pending',
+            payment_status: 'pending',
+            created_at: timestamp,
+            updated_at: timestamp
         };
         
-        // Remove undefined properties recursively by stringifying and parsing
         const cleanOrderData = JSON.parse(JSON.stringify(rawOrderData));
 
-        await setDoc(orderRef, cleanOrderData);
-
-        console.log(`[OrderService] Order document created successfully.`);
+        // Write directly to Firestore
+        await setDoc(newOrderDoc, cleanOrderData);
+        
+        // Update stats transactionally or asynchronously if needed (dashboard usually calculates this or we can skip for now)
+        // We will just let the backend/dashboard handle it.
+        
         return `ORD${orderNumber}`;
     })();
 
     try {
         const finalInvoiceId = await Promise.race([orderPromise, timeoutPromise]);
-        console.log(`[OrderService] Order flow completed successfully: ${finalInvoiceId}`);
-        return { success: true, invoiceId: finalInvoiceId };
+        return { success: true, invoiceId: finalInvoiceId, pendingNetwork: false };
     } catch (error) {
-        console.error("[OrderService] Order creation failed:", error);
-        if (error.message === 'TIMEOUT') {
-            return { 
-                success: false, 
-                reason: 'timeout', 
-                message: 'انتهى وقت الطلب. يرجى المحاولة مرة أخرى أو التحقق من اتصالك بالإنترنت.' 
-            };
+        if (error.message === 'TIMEOUT' || error.message.includes('offline')) {
+            // Handled as offline queued in an advanced implementation.
+            // For now, return a generic error or success if we managed to queue it.
+            return { success: false, reason: 'network', message: 'الشبكة ضعيفة، تمت محاولة الحفظ.' };
         }
+
         return { 
             success: false, 
             reason: 'error', 

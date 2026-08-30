@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { useLoading } from '../context/LoadingContext';
-import { db } from '../firebase/config';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { productRepository } from '../services/productService';
 import { deleteFromCloudinary } from '../utils/cloudinary';
 import Swal from 'sweetalert2';
 import ProductForm from '../components/ProductForm';
 import { useParams, useNavigate } from 'react-router-dom';
+import { ArrowRight } from 'lucide-react';
 
 const EditProduct = () => {
     const { id } = useParams();
@@ -14,23 +14,27 @@ const EditProduct = () => {
     const { startLoading, stopLoading } = useLoading();
     const [initialData, setInitialData] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [errorState, setErrorState] = useState(null);
 
     useEffect(() => {
         const fetchProduct = async () => {
-            try {
-                const docRef = doc(db, 'products', id);
-                const docSnap = await getDoc(docRef);
+            if (!id) {
+                setErrorState('invalid-id');
+                setLoading(false);
+                return;
+            }
 
-                if (docSnap.exists()) {
-                    setInitialData({ id: docSnap.id, ...docSnap.data() });
+            try {
+                const product = await productRepository.getById(id);
+
+                if (product) {
+                    setInitialData(product);
                 } else {
-                    Swal.fire({ icon: 'error', title: 'خطأ', text: 'المنتج غير موجود', background: '#141414', color: '#fff' });
-                    navigate('/products');
+                    setErrorState('not-found');
                 }
             } catch (error) {
                 console.error(error);
-                Swal.fire({ icon: 'error', title: 'خطأ', text: 'حدث خطأ أثناء تحميل البيانات', background: '#141414', color: '#fff' });
-                navigate('/products');
+                setErrorState('network');
             } finally {
                 setLoading(false);
                 stopLoading();
@@ -87,13 +91,17 @@ const EditProduct = () => {
             }
             // ─────────────────────────────────────────────────────────────────────
 
-            await updateDoc(doc(db, 'products', id), {
+            await productRepository.update(id, {
                 displayId: Number(formData.displayId),
                 name: formData.name,
                 price: formData.price,
                 old_price: formData.old_price || null,
-                category: formData.category,
-                style: formData.style,
+                categoryId: formData.categoryId || null,
+                brandId: formData.brandId || null,
+                collectionId: formData.collectionId || null,
+                genderId: formData.genderId || null,
+                category: formData.category || '',
+                style: formData.style || '',
                 description: formData.description,
                 video: formData.video,
                 imageUrl: formData.imageUrl,
@@ -115,6 +123,10 @@ const EditProduct = () => {
             navigate('/products');
         } catch (error) {
             console.error(error);
+            if (error.name === 'OfflineError') {
+                Swal.fire({ icon: 'error', title: 'خطأ', text: error.message, background: '#141414', color: '#fff' });
+                return;
+            }
             Swal.fire({ icon: 'error', title: 'خطأ', text: 'حدث خطأ أثناء التحديث', background: '#141414', color: '#fff' });
         } finally {
             stopLoading();
@@ -126,14 +138,38 @@ const EditProduct = () => {
         return (
             <div style={{ textAlign: 'center', padding: '100px', color: 'var(--primary)' }}>
                 <div className="loader" style={{ margin: '0 auto 20px', width: '40px', height: '40px', border: '3px solid var(--glass-border)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                <p style={{ fontWeight: '600' }}>جاري تحميل البيانات...</p>
+                <p style={{ fontWeight: '600' }}>جاري تحميل بيانات المنتج...</p>
                 <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+            </div>
+        );
+    }
+
+    if (errorState) {
+        let message = '';
+        if (errorState === 'invalid-id') message = 'تعذر تحديد المنتج المطلوب تعديله.';
+        else if (errorState === 'not-found') message = 'المنتج غير موجود أو تم حذفه.';
+        else if (errorState === 'network') message = 'تعذر تحميل بيانات المنتج.';
+
+        return (
+            <div style={{ textAlign: 'center', padding: '100px', color: 'var(--text-muted)' }}>
+                <div style={{ fontSize: '3rem', marginBottom: '20px' }}>⚠️</div>
+                <h2 style={{ color: '#fff', marginBottom: '10px' }}>خطأ</h2>
+                <p style={{ marginBottom: '30px', fontSize: '1.2rem' }}>{message}</p>
+                <button
+                    onClick={() => navigate('/products')}
+                    className="btn-primary"
+                    style={{ padding: '12px 24px', display: 'inline-flex', alignItems: 'center', gap: '10px' }}
+                >
+                    <ArrowRight size={20} />
+                    العودة إلى المنتجات
+                </button>
             </div>
         );
     }
 
     return (
         <ProductForm
+            key={id}
             initialData={initialData}
             onSubmit={handleSubmit}
             title="تعديل الساعة"

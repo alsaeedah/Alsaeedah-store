@@ -4,12 +4,14 @@ import {
     ShoppingCart,
     Users,
     Shield,
-    Settings as SettingsIcon
+    Settings as SettingsIcon,
+    Package
 } from 'lucide-react';
 
 export const ADMIN_MODULES = [
     { id: 'home', path: '/', label: 'الرئيسية', icon: LayoutDashboard, permission: 'all', order: 1 },
     { id: 'products', path: '/products', label: 'المنتجات', icon: ShoppingBag, permission: 'products', order: 2 },
+    { id: 'inventory', path: '/inventory', label: 'المخزون', icon: Package, permission: 'products', order: 2.5 },
     { id: 'orders', path: '/orders', label: 'الطلبات', icon: ShoppingCart, badge: true, permission: 'orders', order: 3 },
     { id: 'users', path: '/users', label: 'المستخدمين', icon: Users, permission: 'users', order: 4 },
     { id: 'managers', path: '/managers', label: 'المدراء', icon: Shield, permission: 'all', order: 5 },
