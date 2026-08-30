@@ -6,6 +6,7 @@ class DashboardOrdersRepository {
     constructor() {
         this.activeRequests = new Map();
         this.cacheGenerations = new Map();
+        this.deletedOrderIds = new Set();
     }
 
     buildCacheKey(statusFilter, searchQuery, page) {
@@ -16,10 +17,14 @@ class DashboardOrdersRepository {
         try {
             const cached = await StorageEngine.get(cacheKey);
             if (cached && typeof cached === 'object' && cached.status) {
+                if (cached.data) {
+                    cached.data = cached.data.filter(o => !this.deletedOrderIds.has(o.id));
+                }
                 return cached;
             }
             if (cached && Array.isArray(cached)) {
-                return { status: 'READY', data: cached, generation: 0, hasMore: false };
+                const filtered = cached.filter(o => !this.deletedOrderIds.has(o.id));
+                return { status: 'READY', data: filtered, generation: 0, hasMore: false };
             }
             return { status: 'UNINITIALIZED', data: [], generation: 0, hasMore: false };
         } catch (e) {
@@ -130,12 +135,14 @@ class DashboardOrdersRepository {
 
     _reconcile(localData, serverData) {
         if (!localData || localData.length === 0) {
-            return serverData;
+            return serverData.filter(s => !this.deletedOrderIds.has(s.id));
         }
 
         const reconciledMap = new Map(localData.map(item => [item.id, item]));
         
         serverData.forEach(serverItem => {
+            if (this.deletedOrderIds.has(serverItem.id)) return;
+
             if (reconciledMap.has(serverItem.id)) {
                 const localItem = reconciledMap.get(serverItem.id);
                 const localUpdate = new Date(localItem.updated_at || 0).getTime();
@@ -151,25 +158,11 @@ class DashboardOrdersRepository {
 
         const finalData = [];
         serverData.forEach(serverItem => {
-            finalData.push(reconciledMap.get(serverItem.id));
-        });
-
-        localData.forEach(localItem => {
-            const inServer = serverData.some(s => s.id === localItem.id);
-            if (!inServer) {
-                if (localItem.status === 'deleted') {
-                    // It's explicitly deleted
-                } else {
-                    // Do not infer deletion just from absence in a bounded paginated response.
-                    // However, for query-based caching, if it is absent from the page bounds, 
-                    // it shouldn't be rendered on this specific page anymore.
-                    // We will drop it from THIS page's cache so the UI stays consistent with the server sorting.
-                }
+            if (!this.deletedOrderIds.has(serverItem.id)) {
+                finalData.push(reconciledMap.get(serverItem.id));
             }
         });
 
-        // The query bounds dictate the exact items that belong on this page.
-        // We replace the page contents with the updated mapped items, preserving order.
         return finalData;
     }
 
@@ -182,20 +175,43 @@ class DashboardOrdersRepository {
     }
 
     async deleteOrder(orderId, orderTotal, orderStatus) {
-        const { updateDoc, doc, setDoc, increment } = await import('firebase/firestore');
-        
-        // Soft delete
-        await updateDoc(doc(db, 'orders', orderId), {
-            status: 'deleted',
-            updated_at: new Date().toISOString()
-        });
+        try {
+            const { writeBatch, doc, increment, getDoc } = await import('firebase/firestore');
+            
+            const orderRef = doc(db, 'orders', orderId);
+            const orderSnap = await getDoc(orderRef);
+            
+            if (!orderSnap.exists()) {
+                this.deletedOrderIds.add(orderId);
+                return { success: true, orderId };
+            }
 
-        // Update stats
-        const updates = { ordersCount: increment(-1) };
-        if (orderStatus === 'completed') {
-            updates.revenue = increment(-(Number(orderTotal) || 0));
+            const batch = writeBatch(db);
+            batch.delete(orderRef);
+
+            const statsRef = doc(db, 'stats', 'store');
+            const updates = { ordersCount: increment(-1) };
+            if (orderStatus === 'completed') {
+                updates.revenue = increment(-(Number(orderTotal) || 0));
+            }
+            batch.set(statsRef, updates, { merge: true });
+
+            await batch.commit();
+
+            this.deletedOrderIds.add(orderId);
+
+            try {
+                const { EntityStore } = await import('../../../shared/storage/EntityStore.js');
+                await EntityStore.remove('order', orderId);
+            } catch (e) {
+                console.warn("[DashboardOrdersRepository] Failed to clear EntityStore:", e);
+            }
+
+            return { success: true, orderId };
+        } catch (error) {
+            console.error("[DashboardOrdersRepository] deleteOrder error:", error);
+            return { success: false, error };
         }
-        await setDoc(doc(db, 'stats', 'store'), updates, { merge: true }).catch(e => console.warn(e));
     }
 }
 

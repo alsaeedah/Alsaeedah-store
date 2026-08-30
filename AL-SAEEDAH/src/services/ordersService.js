@@ -27,7 +27,11 @@ export const ordersService = {
           }
       } catch (err) {}
 
-      // 2. Try network
+      // 2. Try network — Firestore is the source of truth on success.
+      //    A successful response (including an empty array) always replaces
+      //    the local cache.  Only a network failure leaves the existing cache
+      //    intact so offline-first behaviour is preserved.
+      let firestoreSucceeded = false;
       try {
           const q = query(collection(db, 'orders'), where('user_id', '==', userId));
           const snapshot = await getDocs(q);
@@ -35,23 +39,24 @@ export const ordersService = {
           snapshot.forEach(doc => {
               freshOrders.push({ id: doc.id, ...doc.data() });
           });
-          
-          if (freshOrders.length > 0) {
-              userOrders = freshOrders;
-              // Sort client-side by created_at descending
-              userOrders.sort((a, b) => {
-                  const dateA = new Date(a.created_at || 0).getTime();
-                  const dateB = new Date(b.created_at || 0).getTime();
-                  return dateB - dateA;
-              });
-              await StorageEngine.set(cacheKey, userOrders);
-          }
+
+          // Sort client-side by created_at descending
+          freshOrders.sort((a, b) => {
+              const dateA = new Date(a.created_at || 0).getTime();
+              const dateB = new Date(b.created_at || 0).getTime();
+              return dateB - dateA;
+          });
+
+          // Always replace — even when freshOrders is []
+          userOrders = freshOrders;
+          await StorageEngine.set(cacheKey, freshOrders);
+          firestoreSucceeded = true;
       } catch (networkErr) {
           console.warn('[ordersService] Network failed, using cache if available');
       }
 
-      // 3. Fallback sort just in case cache was out of order
-      if (userOrders.length > 0) {
+      // 3. Fallback sort for the cached result when Firestore was unreachable
+      if (!firestoreSucceeded && userOrders.length > 0) {
           userOrders.sort((a, b) => {
               const dateA = new Date(a.created_at || 0).getTime();
               const dateB = new Date(b.created_at || 0).getTime();

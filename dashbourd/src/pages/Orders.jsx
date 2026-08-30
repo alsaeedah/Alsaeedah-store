@@ -12,6 +12,7 @@ import html2canvas from 'html2canvas';
 import { dashboardOrdersRepository } from '../services/DashboardOrdersRepository';
 
 const Orders = () => {
+
     const [orders, setOrders] = useState([]);
     const [selectedImage, setSelectedImage] = useState(null);
     const [loadingMore, setLoadingMore] = useState(false);
@@ -23,6 +24,7 @@ const Orders = () => {
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
     const location = useLocation();
     const [highlightOrderId, setHighlightOrderId] = useState(null);
+    const [deletingOrderId, setDeletingOrderId] = useState(null);
     const orderRefs = useRef({});  // { [orderId]: DOM element }
 
     const lastDocRef = useRef(null);
@@ -179,6 +181,9 @@ const Orders = () => {
     };
 
     const handleDeleteOrder = async (orderId) => {
+        if (deletingOrderId === orderId) return;
+        setDeletingOrderId(orderId);
+
         const result = await Swal.fire({
             title: 'هل أنت متأكد؟',
             text: "لن تتمكن من استرجاع هذا الطلب!",
@@ -200,7 +205,10 @@ const Orders = () => {
 
                 const order = orders.find(o => o.id === orderId);
                 if (order) {
-                    await dashboardOrdersRepository.deleteOrder(orderId, order.total_amount, order.status);
+                    const deleteResult = await dashboardOrdersRepository.deleteOrder(orderId, order.total_amount, order.status);
+                    if (!deleteResult.success) {
+                        throw deleteResult.error || new Error('Delete failed');
+                    }
                 }
 
                 setOrders(prev => prev.filter(order => order.id !== orderId));
@@ -213,16 +221,24 @@ const Orders = () => {
                 });
             } catch (error) {
                 console.error("Delete error:", error);
+                let errorMessage = 'فشل حذف الطلب';
+                if (error.name === 'OfflineError') errorMessage = error.message;
+                else if (error.code === 'permission-denied') errorMessage = 'ليس لديك صلاحية لحذف هذا الطلب.';
+                else if (error.code === 'unavailable') errorMessage = 'لا يمكن الاتصال بقاعدة البيانات حالياً.';
+
                 Swal.fire({
                     icon: 'error',
                     title: 'خطأ',
-                    text: error.name === 'OfflineError' ? error.message : 'فشل حذف الطلب',
+                    text: errorMessage,
                     background: '#141414',
                     color: '#fff'
                 });
             } finally {
                 stopLoading();
+                setDeletingOrderId(null);
             }
+        } else {
+            setDeletingOrderId(null);
         }
     };
 
@@ -516,6 +532,7 @@ const Orders = () => {
                                     onInvoice={generateInvoice} 
                                     onImageClick={setSelectedImage}
                                     isHighlighted={highlightOrderId === order.id}
+                                    isDeleting={deletingOrderId === order.id}
                                     setRef={(el) => { if (el) orderRefs.current[order.id] = el; }}
                                 />
                             ))
@@ -600,7 +617,7 @@ const ImagePreviewModal = ({ imageUrl, onClose }) => {
     );
 };
 
-const OrderCard = ({ order, index, lastOrderRef, onUpdateStatus, onDelete, onInvoice, onImageClick, isHighlighted, setRef }) => {
+const OrderCard = ({ order, index, lastOrderRef, onUpdateStatus, onDelete, onInvoice, onImageClick, isHighlighted, isDeleting, setRef }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const [invoiceType, setInvoiceType] = useState('cash');
     const isMobile = window.innerWidth < 768;
@@ -794,12 +811,13 @@ const OrderCard = ({ order, index, lastOrderRef, onUpdateStatus, onDelete, onInv
                     )}
                     
                     <motion.button 
-                        whileHover={{ scale: 1.05, background: '#ef4444', color: '#fff' }} 
-                        whileTap={{ scale: 0.95 }} 
-                        onClick={() => onDelete(order.id)} 
+                        whileHover={isDeleting ? {} : { scale: 1.05, background: '#ef4444', color: '#fff' }} 
+                        whileTap={isDeleting ? {} : { scale: 0.95 }} 
+                        onClick={() => !isDeleting && onDelete(order.id)} 
+                        disabled={isDeleting}
                         title="حذف نهائي"
-                        style={{ width: isMobile ? '38px' : '44px', height: isMobile ? '38px' : '44px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', color: 'var(--text-dim)', border: '1px solid var(--border-color)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <Trash2 size={isMobile ? 14 : 16} />
+                        style={{ width: isMobile ? '38px' : '44px', height: isMobile ? '38px' : '44px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', color: 'var(--text-dim)', border: '1px solid var(--border-color)', cursor: isDeleting ? 'not-allowed' : 'pointer', opacity: isDeleting ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        {isDeleting ? <Loader2 className="animate-spin" size={isMobile ? 14 : 16} /> : <Trash2 size={isMobile ? 14 : 16} />}
                     </motion.button>
                 </div>
             </div>
@@ -809,3 +827,4 @@ const OrderCard = ({ order, index, lastOrderRef, onUpdateStatus, onDelete, onInv
 };
 
 export default Orders;
+
