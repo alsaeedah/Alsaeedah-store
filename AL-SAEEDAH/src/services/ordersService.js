@@ -64,5 +64,38 @@ export const ordersService = {
       console.error('Error fetching user orders:', error);
       throw error;
     }
+  },
+
+  /**
+   * Injects a newly created order directly into the local cache.
+   * Prevents duplicates and maintains descending sort order.
+   */
+  async injectOrderIntoCache(userId, order) {
+    if (!userId || !order) return;
+    try {
+      const { StorageEngine } = await import('../../../shared/storage/StorageEngine');
+      const cacheKey = `order_history_${userId}`;
+      let cached = await StorageEngine.get(cacheKey) || [];
+      if (!Array.isArray(cached)) cached = [];
+
+      // Avoid duplicates
+      const exists = cached.find(o => o.id === order.id || o.requestId === order.requestId);
+      if (exists) {
+        cached = cached.map(o => (o.id === order.id || o.requestId === order.requestId) ? order : o);
+      } else {
+        cached.unshift(order);
+      }
+
+      // Sort client-side by created_at descending
+      cached.sort((a, b) => {
+        const dateA = new Date(a.created_at || 0).getTime();
+        const dateB = new Date(b.created_at || 0).getTime();
+        return dateB - dateA;
+      });
+
+      await StorageEngine.set(cacheKey, cached);
+    } catch (err) {
+      console.warn('[ordersService] Failed to inject order into cache', err);
+    }
   }
 };

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useLoader } from '../context/LoaderContext';
@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShoppingBag, CheckCircle2, ArrowRight, CreditCard, Banknote, ChevronLeft, Package, Landmark, Check } from 'lucide-react';
 import { NotificationService, EVENTS } from '../notifications';
+import { useOrderSubmission, ORDER_SUBMISSION_STATES } from '../hooks/useOrderSubmission';
 import logo from '../assets/logo.png';
 
 const STEPS = [
@@ -47,9 +48,6 @@ export default function CheckoutPage() {
     const [selectedPayment, setSelectedPayment] = useState('');
     const [selectedBank, setSelectedBank] = useState(null);
     const [orderNumber, setOrderNumber] = useState('');
-    const [orderStatus, setOrderStatus] = useState('idle'); // idle, creating_order, order_created, clearing_cart, completed, failed
-    const [errorMessage, setErrorMessage] = useState('');
-    const requestRef = useRef(crypto.randomUUID());
 
     const handleProceedFromCart = () => {
         if (cart.length === 0) return;
@@ -60,10 +58,66 @@ export default function CheckoutPage() {
         setStep(3);
     };
 
+    const handleSuccess = (order) => {
+        setOrderNumber(order?.order_number || '');
+        clearCart();
+        hideLoader();
+        setStep(4);
+        
+        NotificationService.show(EVENTS.ORDER_SUBMITTED, {
+            type: "ORDER_CREATED",
+            target: "order_history",
+            orderNumber: order?.order_number || ''
+        });
+        
+        if (order?.order_number) {
+            NotificationService.show(EVENTS.ORDER_NUMBER, { 
+                type: "ORDER_CREATED",
+                target: "order_history",
+                orderNumber: order.order_number 
+            });
+        }
+    };
+
+    const {
+        status: orderStatus,
+        clientOrderId,
+        error: errorMessage,
+        verificationAttempt,
+        beginSubmission,
+        handleResult,
+        verify,
+        isSubmitting,
+        setStatus
+    } = useOrderSubmission({ onSuccess: handleSuccess });
+
+    useEffect(() => {
+        if (orderStatus === ORDER_SUBMISSION_STATES.SUBMITTING) {
+            showLoader('جاري إرسال الطلب...');
+            
+            const timer = setTimeout(() => {
+                showLoader('الاتصال بطيء، ما زلنا نحاول إرسال طلبك...');
+            }, 10000);
+            
+            return () => clearTimeout(timer);
+        } else if (orderStatus === ORDER_SUBMISSION_STATES.VERIFYING) {
+            showLoader('جاري التحقق من حالة طلبك...');
+        } else {
+            hideLoader();
+        }
+    }, [orderStatus, showLoader, hideLoader]);
+
+    // Fast-forward to step 3 if we are verifying a pending order on mount
+    useEffect(() => {
+        if (orderStatus === ORDER_SUBMISSION_STATES.VERIFYING && step < 3) {
+            setStep(3);
+        }
+    }, [orderStatus, step]);
+
     const handleConfirmOrder = async () => {
         if (!selectedPayment) return;
         if (selectedPayment === 'transfer' && !selectedBank) return;
-        if (orderStatus === 'creating_order' || orderStatus === 'order_created' || orderStatus === 'clearing_cart') return;
+        if (isSubmitting) return;
 
         let finalPaymentMethod = '';
         if (selectedPayment === 'cash') {
@@ -73,58 +127,22 @@ export default function CheckoutPage() {
             finalPaymentMethod = `تحويل بنكي - ${bank?.name}`;
         }
 
-        setOrderStatus('creating_order');
-        setErrorMessage('');
-        showLoader('جاري إرسال الطلب...');
+        const submissionId = beginSubmission(clientOrderId);
         
         try {
-            const result = await prepareWhatsAppCheckout(finalPaymentMethod, requestRef.current);
-            
-            if (result && result.success) {
-                setOrderStatus('order_created');
-                const invoiceId = result.invoiceId || '';
-                setOrderNumber(invoiceId);
-                
-                setOrderStatus('clearing_cart');
-                try {
-                    clearCart();
-                } catch(e) {
-                    console.error("Failed to clear cart, continuing...", e);
-                }
-                
-                setOrderStatus('completed');
-                hideLoader();
-                // Regenerate requestId for next time
-                requestRef.current = crypto.randomUUID();
-                setStep(4);
-
-                // Fire notifications AFTER all business logic succeeds
-                // Queue handles sequential delivery — no manual delay needed
-                NotificationService.show(EVENTS.ORDER_SUBMITTED, {
-                    type: "ORDER_CREATED",
-                    target: "order_history",
-                    orderNumber: invoiceId || ''
-                });
-                
-                if (invoiceId) {
-                    NotificationService.show(EVENTS.ORDER_NUMBER, { 
-                        type: "ORDER_CREATED",
-                        target: "order_history",
-                        orderNumber: invoiceId 
-                    });
-                }
-            } else {
-                setOrderStatus('failed');
-                hideLoader();
-                setErrorMessage(result?.message || 'فشل في إرسال الطلب. يرجى المحاولة مرة أخرى.');
-            }
+            const result = await prepareWhatsAppCheckout(finalPaymentMethod, submissionId);
+            await handleResult(result);
         } catch (error) {
-            console.error("Unexpected checkout error:", error);
-            setOrderStatus('failed');
-            hideLoader();
-            setErrorMessage('حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.');
+            await handleResult({
+                status: 'unknown',
+                clientOrderId: submissionId,
+                message: 'تعذر تأكيد حالة الطلب.'
+            });
         }
     };
+
+    const isSubmissionLocked = isSubmitting;
+    const canSubmit = selectedPayment && (selectedPayment !== 'transfer' || selectedBank) && !isSubmissionLocked;
 
     return (
         <div style={{ minHeight: '100dvh', background: 'var(--bg-main)', display: 'flex', flexDirection: 'column' }}>
@@ -329,7 +347,7 @@ export default function CheckoutPage() {
 
                                 {/* Error Message Display */}
                                 <AnimatePresence>
-                                    {orderStatus === 'failed' && errorMessage && (
+                                    {orderStatus === ORDER_SUBMISSION_STATES.FAILED && errorMessage && (
                                         <motion.div
                                             initial={{ opacity: 0, height: 0 }}
                                             animate={{ opacity: 1, height: 'auto' }}
@@ -347,7 +365,7 @@ export default function CheckoutPage() {
                                             <p style={{ color: '#ef4444', fontSize: '0.9rem', fontWeight: '600', margin: '0 0 8px 0' }}>خطأ في إرسال الطلب</p>
                                             <p style={{ color: 'var(--text-main)', fontSize: '0.85rem', margin: '0 0 12px 0' }}>{errorMessage}</p>
                                             <button 
-                                                onClick={() => setOrderStatus('idle')}
+                                                onClick={() => setStatus(ORDER_SUBMISSION_STATES.IDLE)}
                                                 style={{
                                                     background: 'rgba(239, 68, 68, 0.15)',
                                                     border: '1px solid rgba(239, 68, 68, 0.4)',
@@ -363,16 +381,74 @@ export default function CheckoutPage() {
                                             </button>
                                         </motion.div>
                                     )}
+                                    {orderStatus === ORDER_SUBMISSION_STATES.RETRYABLE && (
+                                        <motion.div
+                                            initial={{ opacity: 0, height: 0 }}
+                                            animate={{ opacity: 1, height: 'auto' }}
+                                            exit={{ opacity: 0, height: 0 }}
+                                            style={{
+                                                overflow: 'hidden',
+                                                marginBottom: '20px',
+                                                background: 'var(--bg-card)',
+                                                border: '1px solid var(--border-color)',
+                                                borderRadius: '12px',
+                                                padding: '20px',
+                                                textAlign: 'right'
+                                            }}
+                                        >
+                                            <p style={{ color: 'var(--primary)', fontSize: '1rem', fontWeight: '700', margin: '0 0 12px 0' }}>تعذر تأكيد حالة الطلب</p>
+                                            <p style={{ color: 'var(--text-main)', fontSize: '0.9rem', margin: '0 0 16px 0', lineHeight: 1.6 }}>
+                                                قد يكون طلبك قد تم إرساله بالفعل، لكننا لم نتمكن من تأكيد ذلك بسبب مشكلة في الاتصال. <br/>
+                                                يرجى التحقق من طلباتك قبل محاولة إرسال الطلب مرة أخرى.
+                                            </p>
+                                            <div style={{ display: 'flex', gap: '12px' }}>
+                                                <button 
+                                                    onClick={() => navigate('/orders')}
+                                                    style={{
+                                                        background: 'var(--primary)',
+                                                        color: '#000',
+                                                        border: 'none',
+                                                        padding: '10px 16px',
+                                                        borderRadius: '8px',
+                                                        fontSize: '0.85rem',
+                                                        fontWeight: '700',
+                                                        cursor: 'pointer',
+                                                        flex: 1
+                                                    }}
+                                                >
+                                                    عرض طلباتي
+                                                </button>
+                                                <button 
+                                                    onClick={handleConfirmOrder}
+                                                    style={{
+                                                        background: 'transparent',
+                                                        border: '1px solid var(--primary)',
+                                                        color: 'var(--primary)',
+                                                        padding: '10px 16px',
+                                                        borderRadius: '8px',
+                                                        fontSize: '0.85rem',
+                                                        fontWeight: '700',
+                                                        cursor: 'pointer',
+                                                        flex: 1
+                                                    }}
+                                                >
+                                                    التحقق مرة أخرى
+                                                </button>
+                                            </div>
+                                        </motion.div>
+                                    )}
                                 </AnimatePresence>
 
-                                <button
-                                    onClick={handleConfirmOrder}
-                                    disabled={!selectedPayment || (selectedPayment === 'transfer' && !selectedBank) || ['creating_order', 'order_created', 'clearing_cart'].includes(orderStatus)}
-                                    className="btn-primary"
-                                    style={{ width: '100%', justifyContent: 'center', fontSize: '1rem', padding: '15px', borderRadius: '14px', opacity: (!selectedPayment || (selectedPayment === 'transfer' && !selectedBank) || ['creating_order', 'order_created', 'clearing_cart'].includes(orderStatus)) ? 0.5 : 1, cursor: (!selectedPayment || (selectedPayment === 'transfer' && !selectedBank) || ['creating_order', 'order_created', 'clearing_cart'].includes(orderStatus)) ? 'not-allowed' : 'pointer' }}
-                                >
-                                    {['creating_order', 'order_created', 'clearing_cart'].includes(orderStatus) ? 'جاري الإرسال...' : 'تأكيد الطلب'}
-                                </button>
+                                {orderStatus !== ORDER_SUBMISSION_STATES.RETRYABLE && (
+                                    <button
+                                        onClick={handleConfirmOrder}
+                                        disabled={!canSubmit}
+                                        className="btn-primary"
+                                        style={{ width: '100%', justifyContent: 'center', fontSize: '1rem', padding: '15px', borderRadius: '14px', opacity: canSubmit ? 1 : 0.5, cursor: canSubmit ? 'pointer' : 'not-allowed' }}
+                                    >
+                                        {isSubmissionLocked ? 'جاري الإرسال...' : 'تأكيد الطلب'}
+                                    </button>
+                                )}
                             </motion.div>
                         )}
 

@@ -253,16 +253,16 @@ export const CartProvider = ({ children }) => {
         }
     };
 
-    const prepareWhatsAppCheckout = async (paymentMethod = '', requestId = '') => {
+    const prepareWhatsAppCheckout = async (paymentMethod = '', clientOrderId = '') => {
         if (!currentUser) {
             openAuthModal();
-            return { success: false, reason: 'login' };
+            return { status: 'failed', reason: 'login' };
         }
 
-        if (cart.length === 0) return { success: false, reason: 'empty' };
+        if (cart.length === 0) return { status: 'failed', reason: 'empty' };
 
-        if (!requestId) {
-            requestId = crypto.randomUUID();
+        if (!clientOrderId) {
+            clientOrderId = crypto.randomUUID();
         }
 
         const orderData = {
@@ -280,7 +280,7 @@ export const CartProvider = ({ children }) => {
             payment_method: paymentMethod
         };
 
-        return await createOrder(orderData, requestId);
+        return await createOrder(orderData, clientOrderId);
     };
 
     return (
