@@ -314,7 +314,6 @@ export default function FavoritesModal() {
                 product={selectedProduct}
                 onConfirm={(options) => {
                     addToCart(selectedProduct, options);
-                    setIsOptionsModalOpen(false);
                     // Do not close favorites drawer yet so they can continue managing it
                 }}
             />

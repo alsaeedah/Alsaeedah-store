@@ -2,6 +2,8 @@ import { createContext, useState, useContext, useEffect, useCallback } from 'rea
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import { fetchProductsByIds, productRepository } from '../services/productService';
+import { db } from '../firebase/config';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 const FavoritesContext = createContext();
 
@@ -19,45 +21,55 @@ export const FavoritesProvider = ({ children }) => {
     // 1. Auth Sync & Initialization
     useEffect(() => {
         let dalUnsubscribe = null;
+        let activeUid = currentUser?.uid;
 
         const initializeAuthFavorites = async (uid) => {
             setLoading(true);
             try {
                 // Step 1: Initialize DAL
                 const { FavoritesDAL } = await import('../../../shared/favorites/infrastructure/cache/FavoritesDAL.js');
-                const dal = new FavoritesDAL(uid);
+                const dal = new FavoritesDAL(uid, db);
                 
-                // Step 2: Load local cache and pending queue
                 await dal.initialize();
                 
-                // Step 3: Wire adapter
-                const { syncCoordinator } = await import('../../../shared/sync/SyncCoordinator.js');
-                syncCoordinator.setFavoritesDAL(dal);
                 window.__favoritesDAL = dal; // For legacy fallback if needed
                 
-                // Step 4: Subscribe to changes and set initial UI state immediately
+                // Subscribe to changes
                 dalUnsubscribe = dal.onChange((effectiveFavs) => {
                     setFavorites(effectiveFavs);
                 });
-                setFavorites(dal.getEffectiveFavorites());
                 
-                // Step 5: Merge any local guest favorites
+                // Step 2: Fetch complete user favorites from Firestore
+                const q = query(collection(db, 'favorites'), where('user_id', '==', uid));
+                const snapshot = await getDocs(q);
+                
+                const serverFavorites = [];
+                snapshot.forEach(docSnap => {
+                    const data = docSnap.data();
+                    serverFavorites.push({
+                        ...data.product_data,
+                        id: data.product_id,
+                        updated_at: data.updated_at
+                    });
+                });
+                
+                await dal.setCache(serverFavorites);
+
+                // Step 3: Merge any local guest favorites
                 const localFavs = localStorage.getItem('time-tick-favorites');
                 if (localFavs) {
                     const parsed = JSON.parse(localFavs);
                     if (parsed.length > 0) {
                         for (const product of parsed) {
-                            // Enqueue via DAL to handle offline-safe migration
-                            await dal.toggleFavorite(product).catch(() => {});
+                            // Only add if it's not already in the server favorites
+                            const isFav = dal.getEffectiveFavorites().some(f => String(f.id) === String(product.id));
+                            if (!isFav) {
+                                await dal.toggleFavorite(product).catch(() => {});
+                            }
                         }
                     }
                     localStorage.removeItem('time-tick-favorites');
                 }
-
-                // Step 6: Trigger one-time inbound/outbound sync (fire-and-forget)
-                syncCoordinator.syncDomain('favorites').catch(err => {
-                    console.error('[FavoritesContext] initial sync failed:', err);
-                });
                 
             } catch (error) {
                 console.error("Error initializing favorites:", error);
@@ -108,24 +120,14 @@ export const FavoritesProvider = ({ children }) => {
         if (currentUser?.uid) {
             initializeAuthFavorites(currentUser.uid);
         } else {
-            // Clean up previous user if logging out
-            if (window.__favoritesDAL) {
-                import('../../../shared/sync/SyncCoordinator.js').then(({ syncCoordinator }) => {
-                    syncCoordinator.setFavoritesDAL(null);
-                });
-                import('../../../shared/sync/SyncMetadata.js').then(({ SyncMetadata }) => {
-                    SyncMetadata.clearLastSyncAt('favorites');
-                });
-                if (window.__favoritesDAL.queue) {
-                    window.__favoritesDAL.queue.clearAll().catch(() => {});
-                }
-                window.__favoritesDAL = null;
-            }
             initializeGuestFavorites();
         }
 
         return () => {
             if (dalUnsubscribe) dalUnsubscribe();
+            if (window.__favoritesDAL && window.__favoritesDAL.userId === activeUid) {
+                window.__favoritesDAL = null;
+            }
         };
     }, [currentUser]);
 

@@ -39,10 +39,9 @@ export default function WishlistPage() {
                 isOpen={isOptionsOpen}
                 onClose={() => setIsOptionsOpen(false)}
                 product={selectedProduct}
-                onAddToCart={(product, options) => {
-                    addToCart(product, options);
-                    handleAddSuccess(product.id);
-                    setIsOptionsOpen(false);
+                onConfirm={(options) => {
+                    addToCart(selectedProduct, options);
+                    handleAddSuccess(selectedProduct.id);
                 }}
             />
 

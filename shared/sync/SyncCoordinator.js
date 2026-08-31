@@ -4,7 +4,6 @@ import { ProductSyncAdapter } from './adapters/ProductSyncAdapter.js';
 import { TaxonomySyncAdapter } from './adapters/TaxonomySyncAdapter.js';
 import { OrderSyncAdapter } from './adapters/OrderSyncAdapter.js';
 import { ProfileSyncAdapter } from './adapters/ProfileSyncAdapter.js';
-import { FavoritesSyncAdapter } from './adapters/FavoritesSyncAdapter.js';
 import { SettingsSyncAdapter } from './adapters/SettingsSyncAdapter.js';
 import { InventorySyncAdapter } from './adapters/InventorySyncAdapter.js';
 import { UsersSyncAdapter } from './adapters/UsersSyncAdapter.js';
@@ -32,15 +31,7 @@ export class SyncCoordinator {
         const productAdapter = new ProductSyncAdapter(db);
         this.registerAdapter(productAdapter);
 
-        const favoritesDALWrapper = {
-            get initialized() { return window.__favoritesDAL?.initialized || false; },
-            get userId() { return window.__favoritesDAL?.userId; },
-            get queue() { return window.__favoritesDAL?.queue; },
-            initialize: async () => { if (window.__favoritesDAL) await window.__favoritesDAL.initialize(); },
-            safeReconcileCache: async (data) => { if (window.__favoritesDAL) await window.__favoritesDAL.safeReconcileCache(data); }
-        };
-        const favoritesAdapter = new FavoritesSyncAdapter(db, favoritesDALWrapper);
-        this.registerAdapter(favoritesAdapter);
+
         
         const taxonomyAdapter = new TaxonomySyncAdapter(db);
         this.registerAdapter(taxonomyAdapter);
@@ -66,13 +57,6 @@ export class SyncCoordinator {
 
     registerAdapter(adapter) {
         this.adapters.push(adapter);
-    }
-
-    setFavoritesDAL(dal) {
-        const adapter = this.getAdapter('favorites');
-        if (adapter) {
-            adapter.dal = dal;
-        }
     }
 
     getAdapter(domain) {
