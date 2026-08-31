@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase/config';
-import { collection, query, where, getDocs, orderBy, limit, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, limit, doc, getDoc, getCountFromServer } from 'firebase/firestore';
 import { useLoading } from '../context/LoadingContext';
 import {
     ShoppingBag,
@@ -51,91 +51,56 @@ const Home = () => {
             const currentSyncAt = new Date().toISOString();
             
             let newStats = {
-                products: Number(cachedData?.stats?.products) || 0,
-                orders: Number(cachedData?.stats?.orders) || 0,
-                users: Number(cachedData?.stats?.users) || 0,
-                revenue: Number(cachedData?.stats?.revenue) || 0
+                products: cachedData?.stats?.products !== undefined ? Number(cachedData.stats.products) : 0,
+                orders: cachedData?.stats?.orders !== undefined ? Number(cachedData.stats.orders) : 0,
+                users: cachedData?.stats?.users !== undefined ? Number(cachedData.stats.users) : 0,
+                revenue: cachedData?.stats?.revenue !== undefined ? Number(cachedData.stats.revenue) : 0
             };
+            if (isNaN(newStats.products)) newStats.products = 0;
+            if (isNaN(newStats.orders)) newStats.orders = 0;
+            if (isNaN(newStats.users)) newStats.users = 0;
             if (isNaN(newStats.revenue)) newStats.revenue = 0;
 
             try {
-                const statsDocRef = doc(db, 'stats', 'store');
-                const statsDocSnap = await getDoc(statsDocRef);
-                if (statsDocSnap.exists()) {
+                const [productsSnap, usersSnap, ordersSnap, statsDocSnap] = await Promise.all([
+                    getCountFromServer(collection(db, 'products')).catch(e => { console.warn('Products count failed', e); return null; }),
+                    getCountFromServer(collection(db, 'users')).catch(e => { console.warn('Users count failed', e); return null; }),
+                    getCountFromServer(collection(db, 'orders')).catch(e => { console.warn('Orders count failed', e); return null; }),
+                    getDoc(doc(db, 'stats', 'store')).catch(e => { console.warn('Stats doc failed', e); return null; })
+                ]);
+
+                if (productsSnap) newStats.products = productsSnap.data().count;
+                if (usersSnap) newStats.users = usersSnap.data().count;
+                if (ordersSnap) newStats.orders = ordersSnap.data().count;
+
+                if (statsDocSnap && statsDocSnap.exists()) {
                     const docData = statsDocSnap.data();
-                    newStats = {
-                        products: docData.productsCount ?? docData.products ?? newStats.products,
-                        orders: docData.ordersCount ?? docData.orders ?? newStats.orders,
-                        users: docData.usersCount ?? docData.users ?? newStats.users,
-                        revenue: docData.revenue ?? docData.totalRevenue ?? newStats.revenue
-                    };
+                    newStats.revenue = docData.revenue ?? docData.totalRevenue ?? newStats.revenue;
                 }
             } catch (e) {
-                console.warn("[Dashboard Home] Failed to fetch stats/store, preserving LKG cache", e);
+                console.warn("[Dashboard Home] Failed to fetch authoritative stats, preserving LKG cache", e);
             }
 
-            let newRecentOrders = [...(cachedData?.recentOrders || [])].filter(o => o.status !== 'deleted');
+            let newRecentOrders = cachedData?.recentOrders || [];
             let recentOrdersSnapshot = null;
-            let needsFullFetch = false;
 
-            if (lastSyncAt) {
-                try {
-                    const changesQuery = query(
-                        collection(db, 'orders'),
-                        where('updated_at', '>', lastSyncAt)
-                    );
-                    const changesSnap = await getDocs(changesQuery);
-                    recentOrdersSnapshot = changesSnap;
-                    
-                    if (!changesSnap.empty && !changesSnap.metadata.fromCache) {
-                        const changes = changesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-                        
-                        changes.forEach(changedOrder => {
-                            const idx = newRecentOrders.findIndex(o => o.id === changedOrder.id);
-                            if (changedOrder.status === 'deleted') {
-                                if (idx > -1) newRecentOrders.splice(idx, 1);
-                            } else {
-                                if (idx > -1) {
-                                    newRecentOrders[idx] = changedOrder;
-                                } else {
-                                    newRecentOrders.push(changedOrder);
-                                }
-                            }
-                        });
-                        
-                        newRecentOrders.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-                        newRecentOrders = newRecentOrders.slice(0, 5);
-                        
-                        if (newRecentOrders.length < 5 && (cachedData?.recentOrders?.length >= 5)) {
-                            needsFullFetch = true;
-                        }
-                    }
-                } catch (e) {
-                    console.warn("[Dashboard Home] Incremental orders fetch failed, preserving LKG cache", e);
+            try {
+                const fullQuery = query(
+                    collection(db, 'orders'),
+                    orderBy('created_at', 'desc'),
+                    limit(15)
+                );
+                const fullSnap = await getDocs(fullQuery);
+                recentOrdersSnapshot = fullSnap;
+                
+                if (!fullSnap.metadata.fromCache) {
+                    newRecentOrders = fullSnap.docs
+                        .map(d => ({ id: d.id, ...d.data() }))
+                        .filter(o => o.status !== 'deleted')
+                        .slice(0, 5);
                 }
-            } else {
-                needsFullFetch = true;
-            }
-
-            if (needsFullFetch) {
-                try {
-                    const fullQuery = query(
-                        collection(db, 'orders'),
-                        orderBy('created_at', 'desc'),
-                        limit(15)
-                    );
-                    const fullSnap = await getDocs(fullQuery);
-                    if (!recentOrdersSnapshot) recentOrdersSnapshot = fullSnap;
-                    
-                    if (!fullSnap.metadata.fromCache) {
-                        newRecentOrders = fullSnap.docs
-                            .map(d => ({ id: d.id, ...d.data() }))
-                            .filter(o => o.status !== 'deleted')
-                            .slice(0, 5);
-                    }
-                } catch (e) {
-                    console.warn("[Dashboard Home] Full orders fetch failed, preserving LKG cache", e);
-                }
+            } catch (e) {
+                console.warn("[Dashboard Home] Authoritative recent orders fetch failed, preserving LKG cache", e);
             }
 
             return {
