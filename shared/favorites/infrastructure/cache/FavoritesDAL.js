@@ -79,32 +79,56 @@ export class FavoritesDAL {
         const isFav = effective.some(f => String(f.id) === String(product.id));
         const documentId = `${this.userId}_${product.id}`;
 
-        const mutation = {
-            documentId,
-            operation: isFav ? MutationOperation.DELETE : MutationOperation.CREATE,
-            payload: isFav ? { 
-                product_id: String(product.id),
-                user_id: this.userId
-            } : {
-                user_id: this.userId,
-                product_id: String(product.id),
-                product_data: product,
-                updated_at: new Date().toISOString()
-            }
+        const operation = isFav ? MutationOperation.DELETE : MutationOperation.CREATE;
+        const payload = isFav ? { 
+            product_id: String(product.id),
+            user_id: this.userId
+        } : {
+            user_id: this.userId,
+            product_id: String(product.id),
+            product_data: product,
+            updated_at: new Date().toISOString()
         };
 
+        // 1. Durably queue the mutation to IndexedDB
+        const mutation = await this.queue.enqueue(operation, documentId, payload);
+        console.log(`[FavoritesDAL] mutation enqueued { id: '${mutation.id}', op: '${operation}', doc: '${documentId}' }`);
+
+        // 2. Notify listeners for optimistic UI update immediately
+        this._notify();
+
+        // 3. Trigger immediate best-effort outbound sync
+        console.log(`[FavoritesDAL] triggering favorites sync (best-effort)`);
         const { syncCoordinator } = await import('../../../sync/SyncCoordinator.js');
-        const adapter = syncCoordinator.getAdapter('favorites');
-        
-        if (adapter) {
-            await adapter.executeMutation(mutation);
-            await adapter.onMutationCompleted(mutation);
-        }
+        syncCoordinator.syncDomain('favorites').catch(err => {
+            console.error('[FavoritesDAL] Background sync domain failed:', err);
+        });
     }
 
-    async reconcileCache(serverFavorites) {
+    async safeReconcileCache(serverFavorites) {
         if (!this.initialized) await this.initialize();
-        this.cache = serverFavorites;
+        
+        const pendingMutations = this.queue.getAllPendingMutations();
+        
+        const pendingCreates = pendingMutations
+            .filter(m => m.operation === MutationOperation.CREATE)
+            .map(m => ({ ...m.payload.product_data, id: m.payload.product_id }));
+            
+        const pendingDeleteIds = pendingMutations
+            .filter(m => m.operation === MutationOperation.DELETE)
+            .map(m => String(m.payload.product_id));
+
+        // Start from server state, remove items with pending DELETEs
+        const merged = serverFavorites.filter(item => !pendingDeleteIds.includes(String(item.id)));
+        
+        // Add pending CREATEs not yet confirmed by server
+        for (const pc of pendingCreates) {
+            if (!merged.find(s => String(s.id) === String(pc.id))) {
+                merged.push(pc);
+            }
+        }
+        
+        this.cache = merged;
         const storage = await this._getStorageEngine();
         await storage.set(this.cacheKey, this.cache);
         this._notify();

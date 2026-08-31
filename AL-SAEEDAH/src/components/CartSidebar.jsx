@@ -141,78 +141,132 @@ export default function CartSidebar() {
             <div ref={sidebarRef} style={{
                 position: 'fixed',
                 top: 0,
-                right: isCartOpen ? 0 : '-400px', // Slide in from Right
-                width: '350px',
-                maxWidth: '90%',
-                height: '100%',
+                right: 0,
+                width: 'min(340px, 94vw)',
+                height: '100dvh',
                 background: 'var(--bg-card)',
                 zIndex: 2001,
-                boxShadow: '-10px 0 30px rgba(0,0,0,0.5)',
-                transition: 'right 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                display: 'flex',
-                flexDirection: 'column',
-                padding: '20px',
-                borderLeft: '1px solid var(--glass-border)'
+                boxShadow: isCartOpen ? '-12px 0 48px rgba(0,0,0,0.55)' : 'none',
+                transform: isCartOpen ? 'translateX(0)' : 'translateX(100%)',
+                transition: 'transform 0.32s cubic-bezier(0.4, 0, 0.2, 1)',
+                display: 'grid',
+                gridTemplateRows: 'auto 1fr auto',
+                borderLeft: '1px solid rgba(255,255,255,0.05)',
+                borderRadius: '0 0 0 16px',
+                overflow: 'hidden'
             }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                    <h2 style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--primary)' }}>
-                        <ShoppingBag /> سلة المشتريات
+                {/* ─── Header ─────────────────────────── */}
+                <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '14px 16px',
+                    borderBottom: '1px solid rgba(255,255,255,0.06)',
+                    background: 'rgba(0,0,0,0.2)'
+                }}>
+                    <h2 style={{
+                        display: 'flex', alignItems: 'center', gap: '8px',
+                        color: 'var(--primary)',
+                        fontSize: '1rem', fontWeight: 700,
+                        fontFamily: 'var(--font-main)', margin: 0
+                    }}>
+                        <ShoppingBag size={20} /> سلة المشتريات
                     </h2>
 
-                    <div style={{ display: 'flex', gap: '10px' }}>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                         {cart.length > 0 && (
                             <button
                                 onClick={() => setIsClearConfirmOpen(true)}
                                 style={{
-                                    background: 'rgba(255, 75, 75, 0.1)',
-                                    border: '1px solid #ff4b4b',
+                                    background: 'rgba(255, 75, 75, 0.08)',
+                                    border: '1px solid rgba(255, 75, 75, 0.25)',
                                     cursor: 'pointer',
                                     color: '#ff4b4b',
-                                    borderRadius: '5px',
-                                    padding: '5px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center'
+                                    borderRadius: '8px',
+                                    width: '34px', height: '34px',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    transition: 'all 0.18s ease'
                                 }}
                                 title="حذف الكل"
                             >
-                                <Trash2 size={20} />
+                                <Trash2 size={17} />
                             </button>
                         )}
-                        <button onClick={closeCart} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-dim)' }}>
-                            <X size={24} />
+                        <button
+                            onClick={closeCart}
+                            style={{
+                                background: 'var(--skeleton-bg)',
+                                border: '1px solid var(--border-color)',
+                                borderRadius: '50%',
+                                width: '34px', height: '34px',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                cursor: 'pointer',
+                                color: 'var(--text-dim)',
+                                transition: 'all 0.18s ease'
+                            }}
+                        >
+                            <X size={18} />
                         </button>
                     </div>
                 </div>
 
-                <div style={{ flex: 1, overflowY: 'auto' }}>
+                {/* ─── Items Area ─────────────────────── */}
+                <div style={{ overflowY: 'auto', padding: '12px 16px', scrollbarWidth: 'none' }}>
                     {cart.length === 0 ? (
-                        <p style={{ textAlign: 'center', marginTop: '50px', color: 'var(--text-dim)' }}>السلة فارغة حالياً</p>
+                        <div style={{ textAlign: 'center', marginTop: '60px' }}>
+                            <ShoppingBag size={40} style={{ opacity: 0.15, margin: '0 auto 12px' }} />
+                            <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>السلة فارغة حالياً</p>
+                        </div>
                     ) : (
                         cart.map(item => (
                             <div key={item.variantId || item.id} style={{
                                 display: 'flex',
                                 gap: '10px',
-                                marginBottom: '15px',
+                                marginBottom: '12px',
                                 borderBottom: '1px solid var(--glass-border)',
-                                paddingBottom: '15px'
+                                paddingBottom: '12px'
                             }}>
-                                <img src={item.image} alt={item.name} style={{ width: '60px', height: '60px', borderRadius: '8px', objectFit: 'cover' }} />
-                                <div style={{ flex: 1 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                        <h4 style={{ fontSize: '0.9rem', marginBottom: '5px' }}>{item.name}</h4>
-                                        <span style={{ fontSize: '0.75rem', background: 'var(--primary)', color: 'var(--btn-text)', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>#{item.displayId || '---'}</span>
+                                <img
+                                    src={item.image} alt={item.name}
+                                    style={{ width: '56px', height: '56px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }}
+                                />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '6px' }}>
+                                        <h4 style={{ fontSize: '0.82rem', marginBottom: '3px', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {item.name}
+                                        </h4>
+                                        <span style={{
+                                            fontSize: '0.68rem', background: 'var(--primary)', color: '#000',
+                                            padding: '2px 5px', borderRadius: '4px', fontWeight: 700, flexShrink: 0
+                                        }}>
+                                            #{item.displayId || '---'}
+                                        </span>
                                     </div>
-                                    <p style={{ color: 'var(--primary)', fontSize: '0.8rem' }}>{item.price.toLocaleString()} ر.س</p>
-
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '5px' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--skeleton-bg)', borderRadius: '6px', padding: '2px 5px' }}>
-                                            <button onClick={() => updateQuantity(item.variantId || item.id, -1)} style={{ background: 'transparent', border: 'none', color: 'var(--text-main)', padding: '4px 10px', fontSize: '1.2rem', cursor: 'pointer' }}>-</button>
-                                            <span style={{ fontSize: '1.1rem', fontWeight: 'bold', minWidth: '20px', textAlign: 'center' }}>{item.dp_qty}</span>
-                                            <button onClick={() => updateQuantity(item.variantId || item.id, 1)} style={{ background: 'transparent', border: 'none', color: 'var(--text-main)', padding: '4px 10px', fontSize: '1.2rem', cursor: 'pointer' }}>+</button>
+                                    <p style={{ color: 'var(--primary)', fontSize: '0.78rem', marginBottom: '6px' }}>
+                                        {item.price.toLocaleString()} ر.س
+                                    </p>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div style={{
+                                            display: 'flex', alignItems: 'center', gap: '6px',
+                                            background: 'var(--skeleton-bg)', borderRadius: '6px', padding: '2px 4px'
+                                        }}>
+                                            <button
+                                                onClick={() => updateQuantity(item.variantId || item.id, -1)}
+                                                style={{ background: 'transparent', border: 'none', color: 'var(--text-main)', padding: '3px 9px', fontSize: '1.1rem', cursor: 'pointer' }}
+                                            >-</button>
+                                            <span style={{ fontSize: '0.95rem', fontWeight: 700, minWidth: '18px', textAlign: 'center' }}>
+                                                {item.dp_qty}
+                                            </span>
+                                            <button
+                                                onClick={() => updateQuantity(item.variantId || item.id, 1)}
+                                                style={{ background: 'transparent', border: 'none', color: 'var(--text-main)', padding: '3px 9px', fontSize: '1.1rem', cursor: 'pointer' }}
+                                            >+</button>
                                         </div>
-                                        <button onClick={() => removeFromCart(item.variantId || item.id)} style={{ color: '#ff4444', background: 'transparent', border: 'none', cursor: 'pointer' }}>
-                                            <Trash2 size={16} />
+                                        <button
+                                            onClick={() => removeFromCart(item.variantId || item.id)}
+                                            style={{ color: '#ff4444', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px' }}
+                                        >
+                                            <Trash2 size={15} />
                                         </button>
                                     </div>
                                 </div>
@@ -222,10 +276,17 @@ export default function CartSidebar() {
                 </div>
 
                 {cart.length > 0 && (
-                    <div style={{ marginTop: '20px', borderTop: '1px solid var(--glass-border)', paddingTop: '20px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', fontWeight: 'bold' }}>
-                            <span>الإجمالي:</span>
-                            <span style={{ color: 'var(--primary)' }}>{total.toLocaleString()} ر.س</span>
+                    <div style={{
+                        borderTop: '1px solid rgba(255,255,255,0.06)',
+                        padding: '14px 16px',
+                        paddingBottom: 'max(14px, env(safe-area-inset-bottom, 0px))',
+                        background: 'rgba(0,0,0,0.15)'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', fontWeight: 500 }}>الإجمالي</span>
+                            <span style={{ color: 'var(--primary)', fontWeight: 700, fontSize: '1.05rem' }}>
+                                {total.toLocaleString()} ر.س
+                            </span>
                         </div>
 
                         {/* Profile incomplete warning */}
@@ -302,6 +363,8 @@ export default function CartSidebar() {
                             style={{ 
                                 width: '100%', 
                                 justifyContent: 'center',
+                                fontSize: '0.9rem',
+                                padding: '11px 20px',
                                 opacity: ['creating_order', 'order_created', 'clearing_cart'].includes(orderStatus) ? 0.6 : 1,
                                 cursor: ['creating_order', 'order_created', 'clearing_cart'].includes(orderStatus) ? 'not-allowed' : 'pointer'
                             }}

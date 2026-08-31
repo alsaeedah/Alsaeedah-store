@@ -13,9 +13,14 @@ export class FavoritesSyncAdapter extends BaseSyncAdapter {
         return 'favorites';
     }
 
+    getQueue() {
+        return this.dal ? this.dal.queue : null;
+    }
+
     async executeMutation(mutation) {
         const docRef = doc(this.db, 'favorites', mutation.documentId);
         
+        console.log(`[FavoritesSyncAdapter] executeMutation ${mutation.operation} → doc ${mutation.documentId}`);
         if (mutation.operation === MutationOperation.CREATE) {
             await setDoc(docRef, mutation.payload);
         } else if (mutation.operation === MutationOperation.DELETE) {
@@ -59,13 +64,15 @@ export class FavoritesSyncAdapter extends BaseSyncAdapter {
             cache = cache.filter(f => String(f.id) !== String(mutation.payload.product_id));
         }
         
-        await this.dal.reconcileCache(cache);
+        console.log(`[FavoritesSyncAdapter] onMutationCompleted → safeReconcileCache`);
+        await this.dal.safeReconcileCache(cache);
     }
 
     async syncInbound(lastSyncAt, syncBoundary) {
         if (!this.dal.initialized) await this.dal.initialize();
         if (!this.dal.userId) return true; // Nothing to sync if guest
 
+        console.log(`[FavoritesSyncAdapter] syncInbound lastSyncAt=${lastSyncAt} boundary=${syncBoundary}`);
         try {
             let q;
             if (lastSyncAt) {
@@ -91,6 +98,7 @@ export class FavoritesSyncAdapter extends BaseSyncAdapter {
 
             let cache = [...this.dal.cache];
             let changed = false;
+            let newItemsCount = 0;
 
             snapshot.forEach((docSnap) => {
                 const item = docSnap.data();
@@ -106,6 +114,7 @@ export class FavoritesSyncAdapter extends BaseSyncAdapter {
                     cache.push(fav);
                 }
                 changed = true;
+                newItemsCount++;
             });
 
             if (lastSyncAt) {
@@ -121,11 +130,13 @@ export class FavoritesSyncAdapter extends BaseSyncAdapter {
                     const data = docSnap.data();
                     cache = cache.filter(f => String(f.id) !== String(data.productId));
                     changed = true;
+                    newItemsCount++;
                 });
             }
 
+            console.log(`[FavoritesSyncAdapter] syncInbound complete, ${newItemsCount} changed/deleted server items`);
             if (changed || !lastSyncAt) {
-                await this.dal.reconcileCache(cache);
+                await this.dal.safeReconcileCache(cache);
             }
             return true;
         } catch (error) {

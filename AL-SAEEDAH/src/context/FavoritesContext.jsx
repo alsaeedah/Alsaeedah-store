@@ -1,8 +1,6 @@
 import { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
-import { db } from '../firebase/config';
-import { collection, doc, onSnapshot, getDocs, setDoc, deleteDoc, getDoc, query, where } from 'firebase/firestore';
 import { fetchProductsByIds, productRepository } from '../services/productService';
 
 const FavoritesContext = createContext();
@@ -18,176 +16,120 @@ export const FavoritesProvider = ({ children }) => {
 
     const openWishlist = () => navigate('/wishlist');
     
-    // 1. Fetch Favorites from Firestore
-    const fetchFavorites = useCallback(async (userId) => {
-        if (!userId) return;
-        setLoading(true);
-        
-        try {
-            if (!window.__favoritesDAL) {
-                const { FavoritesDAL } = await import('../../../shared/favorites/infrastructure/cache/FavoritesDAL.js');
-                window.__favoritesDAL = new FavoritesDAL(userId);
-            }
-            await window.__favoritesDAL.initialize();
-            // In a fully offline-first app, syncInbound does the fetching.
-            // But we can trigger a manual fetch here for legacy compatibility.
-            
-            const favoritesRef = collection(db, 'favorites');
-            const q = query(favoritesRef, where('user_id', '==', userId));
-            const querySnapshot = await getDocs(q);
-            
-            if (querySnapshot.empty && querySnapshot.metadata && querySnapshot.metadata.fromCache) {
-                // Offline cache miss. Preserving LKG favorites via DAL automatically.
-                setLoading(false);
-                return;
-            }
-            
-            const favProducts = [];
-            querySnapshot.forEach((docSnap) => {
-                const item = docSnap.data();
-                favProducts.push({
-                    ...item.product_data,
-                    id: item.product_id,
-                    updated_at: item.updated_at
-                });
-            });
-            
-            await window.__favoritesDAL.reconcileCache(favProducts);
-        } catch (err) {
-            console.error("Error fetching favorites:", err);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    // Real-time listener for product/favorites deletions
+    // 1. Auth Sync & Initialization
     useEffect(() => {
-        let unsubscribeFavorites = null;
         let dalUnsubscribe = null;
 
-        if (currentUser?.uid) {
-            // Setup DAL
-            import('../../../shared/favorites/infrastructure/cache/FavoritesDAL.js').then(({ FavoritesDAL }) => {
-                if (!window.__favoritesDAL) {
-                    window.__favoritesDAL = new FavoritesDAL(currentUser.uid);
-                }
-                window.__favoritesDAL.initialize().then(() => {
-                    dalUnsubscribe = window.__favoritesDAL.onChange((effectiveFavs) => {
-                        // Hydrate UI if needed, but effectiveFavs contains full product_data
-                        setFavorites(effectiveFavs);
-                    });
+        const initializeAuthFavorites = async (uid) => {
+            setLoading(true);
+            try {
+                // Step 1: Initialize DAL
+                const { FavoritesDAL } = await import('../../../shared/favorites/infrastructure/cache/FavoritesDAL.js');
+                const dal = new FavoritesDAL(uid);
+                
+                // Step 2: Load local cache and pending queue
+                await dal.initialize();
+                
+                // Step 3: Wire adapter
+                const { syncCoordinator } = await import('../../../shared/sync/SyncCoordinator.js');
+                syncCoordinator.setFavoritesDAL(dal);
+                window.__favoritesDAL = dal; // For legacy fallback if needed
+                
+                // Step 4: Subscribe to changes and set initial UI state immediately
+                dalUnsubscribe = dal.onChange((effectiveFavs) => {
+                    setFavorites(effectiveFavs);
                 });
-            });
-
-            const q = query(collection(db, 'favorites'), where('user_id', '==', currentUser.uid));
-            unsubscribeFavorites = onSnapshot(q, (snapshot) => {
-                // Inbound changes handled by SyncEngine/Adapter in a fully Offline-First architecture.
-                // For now, if we receive a snapshot while online, we pass it to DAL to reconcile
-                if (!snapshot.metadata.fromCache && window.__favoritesDAL) {
-                    const favProducts = [];
-                    snapshot.forEach((docSnap) => {
-                        const item = docSnap.data();
-                        favProducts.push({
-                            ...item.product_data,
-                            id: item.product_id,
-                            updated_at: item.updated_at
-                        });
-                    });
-                    window.__favoritesDAL.reconcileCache(favProducts);
+                setFavorites(dal.getEffectiveFavorites());
+                
+                // Step 5: Merge any local guest favorites
+                const localFavs = localStorage.getItem('time-tick-favorites');
+                if (localFavs) {
+                    const parsed = JSON.parse(localFavs);
+                    if (parsed.length > 0) {
+                        for (const product of parsed) {
+                            // Enqueue via DAL to handle offline-safe migration
+                            await dal.toggleFavorite(product).catch(() => {});
+                        }
+                    }
+                    localStorage.removeItem('time-tick-favorites');
                 }
-            });
-        }
 
-        return () => {
-            if (unsubscribeFavorites) unsubscribeFavorites();
-            if (dalUnsubscribe) dalUnsubscribe();
-        };
-    }, [currentUser]);
-
-    // 2. Merge Local Favorites to Database on Login
-    const mergeLocalFavorites = async (userId) => {
-        const localFavs = localStorage.getItem('time-tick-favorites');
-        if (!localFavs || !userId) return;
-
-        try {
-            const parsed = JSON.parse(localFavs);
-            if (parsed.length === 0) return;
-
-            for (const product of parsed) {
-                const favId = `${userId}_${product.id}`;
-                await setDoc(doc(db, 'favorites', favId), {
-                    user_id: userId,
-                    product_id: String(product.id),
-                    product_data: product
-                }, { merge: true });
+                // Step 6: Trigger one-time inbound/outbound sync (fire-and-forget)
+                syncCoordinator.syncDomain('favorites').catch(err => {
+                    console.error('[FavoritesContext] initial sync failed:', err);
+                });
+                
+            } catch (error) {
+                console.error("Error initializing favorites:", error);
+            } finally {
+                setLoading(false);
             }
-            
-            localStorage.removeItem('time-tick-favorites');
-            await fetchFavorites(userId);
-        } catch (err) {
-            console.error("Error merging favorites:", err);
-        }
-    };
+        };
 
-    // 3. Initial Load & Auth Sync
-    useEffect(() => {
-        if (currentUser) {
-            fetchFavorites(currentUser.uid);
-            mergeLocalFavorites(currentUser.uid);
-        } else {
+        const initializeGuestFavorites = async () => {
             const saved = localStorage.getItem('time-tick-favorites');
             if (saved) {
                 const parsedFavs = JSON.parse(saved);
                 if (parsedFavs.length > 0) {
-                    const hydrateGuestFavorites = async () => {
-                        const productIds = parsedFavs.map(p => String(p?.id)).filter(Boolean);
-                        try {
-                            const chunks = [];
-                            for (let i = 0; i < productIds.length; i += 10) {
-                                chunks.push(productIds.slice(i, i + 10));
-                            }
-                            
-                            let latestProducts = [];
-                            for (const chunk of chunks) {
-                                const pq = query(collection(db, 'products'), where(documentId(), 'in', chunk));
-                                const pSnapshot = await getDocs(pq);
-                                pSnapshot.forEach(d => latestProducts.push({ id: d.id, ...d.data() }));
-                            }
-
-                            if (latestProducts.length > 0) {
-                                const hydrated = parsedFavs.map(item => {
-                                    const latest = latestProducts.find(p => String(p.id) === String(item.id));
-                                    if (!latest) return null;
-                                    return {
-                                        ...item,
-                                        name: latest.name || item.name,
-                                        price: latest.price ?? item.price,
-                                        old_price: latest.old_price ?? item.old_price,
-                                        imageUrl: latest.imageUrl || item.imageUrl,
-                                        image: latest.imageUrl || (latest.images?.[0]) || item.image,
-                                        images: latest.images ?? item.images,
-                                        variants: latest.variants ?? item.variants,
-                                    };
-                                }).filter(Boolean);
-                                setFavorites(hydrated);
-                                return;
-                            }
-                        } catch (e) {
-                            console.error("Hydration error:", e);
+                    const productIds = parsedFavs.map(p => String(p?.id)).filter(Boolean);
+                    try {
+                        const latestProducts = await fetchProductsByIds(productIds);
+                        
+                        if (latestProducts && latestProducts.length > 0) {
+                            const hydrated = parsedFavs.map(item => {
+                                const latest = latestProducts.find(p => String(p.id) === String(item.id));
+                                if (!latest) return null;
+                                return {
+                                    ...item,
+                                    name: latest.name || item.name,
+                                    price: latest.price ?? item.price,
+                                    old_price: latest.old_price ?? item.old_price,
+                                    imageUrl: latest.imageUrl || item.imageUrl,
+                                    image: latest.imageUrl || (latest.images?.[0]) || item.image,
+                                    images: latest.images ?? item.images,
+                                    variants: latest.variants ?? item.variants,
+                                };
+                            }).filter(Boolean);
+                            setFavorites(hydrated);
+                            return;
                         }
-                        setFavorites(parsedFavs);
-                    };
-                    hydrateGuestFavorites();
+                    } catch (e) {
+                        console.error("Hydration error:", e);
+                    }
+                    setFavorites(parsedFavs);
                 } else {
                     setFavorites([]);
                 }
             } else {
                 setFavorites([]);
             }
-        }
-    }, [currentUser, fetchFavorites]);
+        };
 
-    // 4. Persistence Effect (Guests Only)
+        if (currentUser?.uid) {
+            initializeAuthFavorites(currentUser.uid);
+        } else {
+            // Clean up previous user if logging out
+            if (window.__favoritesDAL) {
+                import('../../../shared/sync/SyncCoordinator.js').then(({ syncCoordinator }) => {
+                    syncCoordinator.setFavoritesDAL(null);
+                });
+                import('../../../shared/sync/SyncMetadata.js').then(({ SyncMetadata }) => {
+                    SyncMetadata.clearLastSyncAt('favorites');
+                });
+                if (window.__favoritesDAL.queue) {
+                    window.__favoritesDAL.queue.clearAll().catch(() => {});
+                }
+                window.__favoritesDAL = null;
+            }
+            initializeGuestFavorites();
+        }
+
+        return () => {
+            if (dalUnsubscribe) dalUnsubscribe();
+        };
+    }, [currentUser]);
+
+    // 2. Persistence Effect (Guests Only)
     useEffect(() => {
         if (!currentUser) {
             localStorage.setItem('time-tick-favorites', JSON.stringify(favorites));
@@ -199,25 +141,13 @@ export const FavoritesProvider = ({ children }) => {
 
         if (currentUser) {
             try {
-                // Initialize singleton DAL on first use
-                if (!window.__favoritesDAL) {
-                    const { FavoritesDAL } = await import('../../../shared/favorites/infrastructure/cache/FavoritesDAL.js');
-                    window.__favoritesDAL = new FavoritesDAL(currentUser.uid);
-                    await window.__favoritesDAL.initialize();
+                if (window.__favoritesDAL) {
+                    await window.__favoritesDAL.toggleFavorite(product);
+                    // UI state is handled automatically by dal.onChange
                 }
-                
-                await window.__favoritesDAL.toggleFavorite(product);
-                
-                // If successful, update UI
-                setFavorites(prev => isFav 
-                    ? prev.filter(fav => String(fav.id) !== String(product.id))
-                    : [...prev, product]
-                );
             } catch (err) {
                 console.error("Failed to enqueue favorite mutation:", err);
-                if (err.name === 'OfflineError') {
-                    // Do nothing or optionally show a toast. SweetAlert is already showing the offline message in requireOnline if we want, or we can just rely on the UI layer. Actually `requireOnline()` handles the Swal popup already.
-                }
+                // requireOnline handles Swal popup if offline
             }
         } else {
             const newFavs = isFav 
@@ -232,9 +162,8 @@ export const FavoritesProvider = ({ children }) => {
 
     const refreshFavoriteProduct = useCallback(async (productId) => {
         try {
-            const docSnap = await getDoc(doc(db, 'products', String(productId)));
-            if (!docSnap.exists()) return null;
-            const data = docSnap.data();
+            const data = await productRepository.getById(String(productId));
+            if (!data) return null;
 
             const freshItem = (existingItem) => ({
                 ...existingItem,

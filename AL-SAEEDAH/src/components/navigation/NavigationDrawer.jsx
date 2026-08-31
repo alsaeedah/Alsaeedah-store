@@ -65,112 +65,176 @@ export default function NavigationDrawer({ isOpen, onClose }) {
         <AnimatePresence>
             {isOpen && (
                 <>
+                    {/* ── Backdrop ── */}
                     <motion.div
                         className="nav-drawer-backdrop"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        transition={{ duration: 0.25 }}
+                        transition={{ duration: 0.22 }}
                         onClick={onClose}
                     />
+
+                    {/* ── Drawer ── */}
                     <motion.div
                         className="nav-drawer-container"
-                        initial={{ x: '100%' }} // RTL: slide in from right
+                        initial={{ x: '100%' }}
                         animate={{ x: 0 }}
                         exit={{ x: '100%' }}
-                        transition={{ type: 'spring', damping: 28, stiffness: 220 }}
+                        transition={{ type: 'spring', damping: 30, stiffness: 240 }}
                     >
-                        <button 
-                            onClick={onClose} 
-                            style={{ 
-                                position: 'absolute', 
-                                top: 'calc(16px + env(safe-area-inset-top, 0px))', 
-                                left: '16px', 
-                                background: 'var(--bg-card)', 
-                                border: '1px solid var(--border-color)', 
-                                borderRadius: '50%', 
-                                width: '36px', 
-                                height: '36px', 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                justifyContent: 'center', 
-                                cursor: 'pointer', 
-                                color: 'var(--text-main)', 
-                                zIndex: 2000 
-                            }}
-                            aria-label="إغلاق القائمة"
-                        >
-                            <X size={20} />
-                        </button>
-
-                        <div className="nav-drawer-content">
-                            {/* Header Logo */}
-                            <div 
-                                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '32px', cursor: 'pointer', flexDirection: 'column', gap: '12px' }} 
+                        {/* ─── Zone 1: Header ─────────────────────────────── */}
+                        <div style={{
+                            padding: 'calc(14px + env(safe-area-inset-top, 0px)) 14px 14px',
+                            borderBottom: '1px solid var(--border-color)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px'
+                        }}>
+                            {/* Logo + Brand */}
+                            <div
+                                style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', flex: 1 }}
                                 onClick={() => handleNavigation('/')}
                             >
-                                <img src={logo} alt="متجر السعيدة" style={{ width: '64px', height: '64px', objectFit: 'cover', filter: theme === 'dark' ? 'drop-shadow(0 0 10px rgba(212, 175, 55, 0.2))' : 'none' }} />
-                                <h2 style={{ fontSize: '1.2rem', fontWeight: '900', margin: 0, fontFamily: 'var(--font-main)' }}>
-                                    <span style={{ color: 'var(--primary)' }}>متجر</span> <span style={{ color: 'var(--text-main)' }}>السعيدة</span>
-                                </h2>
+                                <img
+                                    src={logo}
+                                    alt="متجر السعيدة"
+                                    style={{
+                                        width: '40px', height: '40px',
+                                        objectFit: 'cover',
+                                        borderRadius: '10px',
+                                        border: '1px solid rgba(212,175,55,0.25)',
+                                        boxShadow: theme === 'dark' ? '0 0 10px rgba(212,175,55,0.1)' : 'none',
+                                        flexShrink: 0
+                                    }}
+                                />
+                                <div>
+                                    <p style={{
+                                        fontFamily: 'var(--font-main)',
+                                        fontSize: '0.95rem', fontWeight: 700,
+                                        color: 'var(--text-main)',
+                                        margin: 0, lineHeight: 1.2
+                                    }}>
+                                        <span style={{ color: 'var(--primary)' }}>متجر</span> السعيدة
+                                    </p>
+                                    <p style={{
+                                        fontSize: '0.68rem', color: 'var(--text-dim)',
+                                        margin: 0, fontFamily: 'var(--font-main)'
+                                    }}>تسوق بكل يسر</p>
+                                </div>
                             </div>
+                            {/* Close */}
+                            <button
+                                onClick={onClose}
+                                style={{
+                                    background: 'var(--skeleton-bg)',
+                                    border: '1px solid var(--border-color)',
+                                    borderRadius: '50%',
+                                    width: '34px', height: '34px',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    cursor: 'pointer', color: 'var(--text-dim)', flexShrink: 0
+                                }}
+                                aria-label="إغلاق القائمة"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
 
-                            {/* User Info (same as Sidebar.jsx) */}
-                            <div 
-                                style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', marginBottom: '32px', padding: '12px', borderRadius: '16px', background: 'rgba(212,175,55,0.05)', border: '1px solid rgba(212,175,55,0.1)' }} 
+                        {/* ─── Zone 2: Scrollable Nav ──────────────────────── */}
+                        <div className="nav-drawer-content">
+                            {/* User Card */}
+                            <div
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: '10px',
+                                    cursor: 'pointer', marginBottom: '16px',
+                                    padding: '10px 11px', borderRadius: '12px',
+                                    background: 'rgba(212,175,55,0.05)',
+                                    border: '1px solid rgba(212,175,55,0.09)'
+                                }}
                                 onClick={() => { currentUser ? openProfilePage() : openAuthModal(); onClose(); }}
                             >
                                 <img
                                     src={currentUser?.image || logo}
                                     alt={currentUser?.name || 'ضيف'}
-                                    style={{ width: '48px', height: '48px', borderRadius: '50%', border: '2px solid var(--primary)', objectFit: 'cover', flexShrink: 0 }}
+                                    style={{
+                                        width: '40px', height: '40px', borderRadius: '50%',
+                                        border: '1.5px solid var(--primary)',
+                                        objectFit: 'cover', flexShrink: 0
+                                    }}
                                 />
                                 <div style={{ overflow: 'hidden' }}>
-                                    <p style={{ fontFamily: 'var(--font-main)', fontSize: '1rem', fontWeight: 700, color: 'var(--text-main)', margin: 0, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                                    <p style={{
+                                        fontFamily: 'var(--font-main)', fontSize: '0.875rem',
+                                        fontWeight: 600, color: 'var(--text-main)', margin: 0,
+                                        whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden'
+                                    }}>
                                         {currentUser?.name || 'زائر'}
                                     </p>
-                                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--primary)', margin: 0, letterSpacing: '1px' }}>
-                                        {currentUser ? 'عضو مميز' : 'سجل دخولك'}
+                                    <p style={{ fontSize: '0.72rem', color: 'var(--primary)', margin: 0, fontFamily: 'var(--font-main)' }}>
+                                        {currentUser ? 'عضو مميز' : 'اضغط للتسجيل'}
                                     </p>
                                 </div>
                             </div>
 
-                            {/* Links */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <button className={`nav-drawer-link ${location.pathname === '/' ? 'active' : ''}`} onClick={() => handleNavigation('/')}>
-                                    <Home size={20} /> الرئيسية
+                            {/* Main Links */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <button
+                                    className={`nav-drawer-link ${location.pathname === '/' ? 'active' : ''}`}
+                                    onClick={() => handleNavigation('/')}
+                                >
+                                    <Home size={19} /> الرئيسية
                                 </button>
-                                
                                 <NavigationSection title="الأقسام" items={activeCategories} basePath="/category" status={taxonomyStatus} handleNavigation={handleNavigation} />
                             </div>
 
-                            <div style={{ height: '1px', background: 'var(--border-color)', margin: '24px 0' }} />
+                            <div style={{ height: '1px', background: 'var(--border-color)', margin: '14px 0' }} />
 
-                            {/* Bottom Actions */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {/* Secondary Links */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                 <button className="nav-drawer-link" onClick={() => { openCart(); onClose(); }}>
-                                    <div style={{ position: 'relative' }}>
-                                        <ShoppingBag size={20} />
-                                        {itemCount > 0 && <span className="nav-icon-badge" style={{ transform: 'scale(0.8)', top: '-6px', right: '-8px' }}>{itemCount}</span>}
+                                    <div style={{ position: 'relative', display: 'flex' }}>
+                                        <ShoppingBag size={19} />
+                                        {itemCount > 0 && (
+                                            <span className="nav-icon-badge" style={{ top: '-5px', right: '-7px' }}>
+                                                {itemCount > 9 ? '9+' : itemCount}
+                                            </span>
+                                        )}
                                     </div>
                                     السلة
                                 </button>
                                 <button className="nav-drawer-link" onClick={() => { openWishlist(); onClose(); }}>
-                                    <div style={{ position: 'relative' }}>
-                                        <Heart size={20} />
-                                        {favorites.length > 0 && <span className="nav-icon-badge" style={{ transform: 'scale(0.8)', top: '-6px', right: '-8px' }}>{favorites.length}</span>}
+                                    <div style={{ position: 'relative', display: 'flex' }}>
+                                        <Heart size={19} />
+                                        {favorites.length > 0 && (
+                                            <span className="nav-icon-badge" style={{ top: '-5px', right: '-7px' }}>
+                                                {favorites.length > 9 ? '9+' : favorites.length}
+                                            </span>
+                                        )}
                                     </div>
                                     المفضلة
                                 </button>
                                 <button className="nav-drawer-link" onClick={() => handleNavigation('/profile')}>
-                                    <ListOrdered size={20} /> طلباتي
-                                </button>
-                                
-                                <button className="nav-drawer-link" onClick={toggleTheme}>
-                                    {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-                                    {theme === 'dark' ? 'الوضع النهاري' : 'الوضع الليلي'}
+                                    <ListOrdered size={19} /> طلباتي
                                 </button>
                             </div>
+                        </div>
+
+                        {/* ─── Zone 3: Footer ──────────────────────────────── */}
+                        <div style={{
+                            padding: '10px 12px',
+                            borderTop: '1px solid var(--border-color)',
+                            paddingBottom: 'max(10px, env(safe-area-inset-bottom, 0px))'
+                        }}>
+                            <button
+                                className="nav-drawer-link"
+                                onClick={toggleTheme}
+                                style={{ justifyContent: 'center', gap: '8px', opacity: 0.75 }}
+                            >
+                                {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+                                <span style={{ fontSize: '0.82rem' }}>
+                                    {theme === 'dark' ? 'الوضع النهاري' : 'الوضع الليلي'}
+                                </span>
+                            </button>
                         </div>
                     </motion.div>
                 </>
@@ -232,7 +296,7 @@ function NavigationSection({ title, items, basePath, status, handleNavigation })
                                 <button
                                     key={item.id}
                                     className={`nav-drawer-link ${isActive ? 'active' : ''}`}
-                                    style={{ padding: '10px 16px', fontSize: '0.95rem' }}
+                                    style={{ padding: '9px 12px', fontSize: '0.84rem' }}
                                     onClick={() => handleNavigation(path)}
                                 >
                                     {item.name}

@@ -160,4 +160,9 @@ export class MutationQueue {
     hasPendingMutations() {
         return this.queue.some(m => m.status === MutationState.PENDING || m.status === MutationState.PROCESSING);
     }
+
+    async clearAll() {
+        this.queue = [];
+        await this._persist();
+    }
 }

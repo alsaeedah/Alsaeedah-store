@@ -109,7 +109,10 @@ export class UnifiedSyncEngine {
 
     async _processOutboundMutations(adapter) {
         const domain = adapter.getDomain();
-        const queue = this._getQueue(domain);
+        // Use the adapter's own queue if available (ensures same in-memory instance as DAL)
+        const queue = (typeof adapter.getQueue === 'function' && adapter.getQueue())
+            ? adapter.getQueue()
+            : this._getQueue(domain);
         
         if (!queue.initialized) await queue.initialize();
 

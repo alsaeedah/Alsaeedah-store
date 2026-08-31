@@ -35,8 +35,9 @@ export class SyncCoordinator {
         const favoritesDALWrapper = {
             get initialized() { return window.__favoritesDAL?.initialized || false; },
             get userId() { return window.__favoritesDAL?.userId; },
+            get queue() { return window.__favoritesDAL?.queue; },
             initialize: async () => { if (window.__favoritesDAL) await window.__favoritesDAL.initialize(); },
-            reconcileCache: async (data) => { if (window.__favoritesDAL) await window.__favoritesDAL.reconcileCache(data); }
+            safeReconcileCache: async (data) => { if (window.__favoritesDAL) await window.__favoritesDAL.safeReconcileCache(data); }
         };
         const favoritesAdapter = new FavoritesSyncAdapter(db, favoritesDALWrapper);
         this.registerAdapter(favoritesAdapter);
@@ -65,6 +66,13 @@ export class SyncCoordinator {
 
     registerAdapter(adapter) {
         this.adapters.push(adapter);
+    }
+
+    setFavoritesDAL(dal) {
+        const adapter = this.getAdapter('favorites');
+        if (adapter) {
+            adapter.dal = dal;
+        }
     }
 
     getAdapter(domain) {
