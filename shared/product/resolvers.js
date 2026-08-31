@@ -1,4 +1,5 @@
 import { taxonomyStore, TAXONOMY_TYPES } from '../taxonomy/index.js';
+import { GENDERS } from '../taxonomy/gender.js';
 
 /**
  * Shared resolver to safely map taxonomy IDs to display names for products.
@@ -23,8 +24,8 @@ export const resolveTaxonomyLabel = (product, field) => {
     } else if (field === 'collectionId' && product.collectionId) {
         const match = state.collections?.find(c => c.id === product.collectionId);
         if (match) resolvedName = match.name;
-    } else if (field === 'genderId' && product.genderId) {
-        const match = state.genders?.find(g => g.id === product.genderId);
+    } else if (field === 'gender' && product.gender) {
+        const match = GENDERS.find(g => g.id === product.gender);
         if (match) resolvedName = match.name;
     }
 

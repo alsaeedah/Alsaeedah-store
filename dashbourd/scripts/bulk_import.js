@@ -118,7 +118,7 @@ const generateProduct = (type, categoryId, brandMap, index) => {
         old_price,
         categoryId,
         brandId,
-        genderId: gender,
+        gender: gender,
         category: '', // Legacy
         style: '', // Legacy
         description,

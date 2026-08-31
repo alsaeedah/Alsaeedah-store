@@ -74,7 +74,7 @@ const ProductForm = ({ initialData, onSubmit, title, subTitle }) => {
                 categoryId: initialData.categoryId || '',
                 brandId: initialData.brandId || '',
                 collectionId: initialData.collectionId || '',
-                genderId: initialData.genderId || '',
+                gender: initialData.gender || '',
                 description: initialData.description || '',
                 video: initialData.video || '',
                 imageUrl: initialData.imageUrl || '',
@@ -92,7 +92,7 @@ const ProductForm = ({ initialData, onSubmit, title, subTitle }) => {
             categoryId: '',
             brandId: '',
             collectionId: '',
-            genderId: '',
+            gender: '',
             description: '',
             video: '',
             imageUrl: '',
@@ -132,7 +132,7 @@ const ProductForm = ({ initialData, onSubmit, title, subTitle }) => {
                 categoryId: initialData.categoryId || '',
                 brandId: initialData.brandId || '',
                 collectionId: initialData.collectionId || '',
-                genderId: initialData.genderId || '',
+                gender: initialData.gender || '',
                 description: initialData.description || '',
                 video: initialData.video || '',
                 imageUrl: initialData.imageUrl || '',
@@ -788,8 +788,8 @@ const ProductForm = ({ initialData, onSubmit, title, subTitle }) => {
                         />
                         <TaxonomySelector
                             label="الجنس (اختياري)"
-                            value={formData.genderId}
-                            onChange={(val) => setFormData({ ...formData, genderId: val })}
+                            value={formData.gender}
+                            onChange={(val) => setFormData({ ...formData, gender: val })}
                             entities={GENDERS}
                             isLoading={false}
                         />

@@ -575,137 +575,9 @@ const SpecsStrip = ({ product }) => (
 );
 
 /* ─────────────────────────────────────────────
-   Storytelling Section
+   Info Tabs (Now Just Description)
 ───────────────────────────────────────────── */
-const storyFeatures = [
-  { icon: Gem, title: 'مواد فاخرة', desc: 'مصنوعة من أجود الخامات العالمية المنتقاة بعناية' },
-  { icon: CircleDot, title: 'حركة دقيقة', desc: 'آلية سويسرية عالية الدقة تضمن ثبات التوقيت' },
-  { icon: Sparkles, title: 'زجاج مقاوم', desc: 'كريستال يابايروتيك يقاوم الخدوش والصدمات' },
-  { icon: Clock, title: 'رفاهية يومية', desc: 'صُمِّمت لتزين معصمك في كل لحظة مميزة' },
-];
-
-const StorytellingSection = ({ product }) => (
-  <motion.section
-    className="story-section"
-    variants={fadeIn}
-    initial="hidden"
-    whileInView="visible"
-    viewport={{ once: true, margin: '-60px' }}
-  >
-    <div className="story-layout">
-      {/* Large lifestyle image */}
-      <motion.div
-        className="story-image-wrap"
-        variants={scaleIn}
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true }}
-      >
-        <div className="story-image-inner">
-          <img
-            src={product.imageUrl || product.image}
-            alt={product.name}
-            className="story-lifestyle-img"
-            loading="lazy"
-          />
-          <div className="story-img-overlay" />
-          <div className="story-img-label">
-            <Sparkles size={14} />
-            <span>تصميم استثنائي</span>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Text content */}
-      <div className="story-text-side">
-        <motion.span
-          className="story-eyebrow"
-          variants={fadeUp} custom={0} initial="hidden" whileInView="visible" viewport={{ once: true }}
-        >
-          — حكاية الرفاهية
-        </motion.span>
-
-        <motion.h2
-          className="story-headline"
-          variants={fadeUp} custom={1} initial="hidden" whileInView="visible" viewport={{ once: true }}
-        >
-          حين يصبح الوقت <span>تحفة فنية</span>
-        </motion.h2>
-
-        <motion.p
-          className="story-paragraph"
-          variants={fadeUp} custom={2} initial="hidden" whileInView="visible" viewport={{ once: true }}
-        >
-          كل ساعة في مجموعتنا تحكي قصة من الأناقة والدقة. ليست مجرد أداة لقياس الوقت، بل هي تعبير عن شخصيتك وأسلوبك الفريد.
-        </motion.p>
-
-        <div className="story-features-grid">
-          {storyFeatures.map((feat, i) => (
-            <motion.div
-              key={i}
-              className="story-feat-card"
-              custom={i + 3}
-              variants={fadeUp}
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true }}
-              whileHover={{ y: -4 }}
-              transition={{ duration: 0.25 }}
-            >
-              <div className="story-feat-icon">
-                <feat.icon size={20} strokeWidth={1.5} />
-              </div>
-              <div>
-                <h4 className="story-feat-title">{feat.title}</h4>
-                <p className="story-feat-desc">{feat.desc}</p>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </div>
-  </motion.section>
-);
-
-/* ─────────────────────────────────────────────
-   Info Tabs
-───────────────────────────────────────────── */
-const tabList = [
-  { id: 'description', label: 'الوصف', icon: FileText },
-  { id: 'specs', label: 'المواصفات', icon: Watch },
-];
-
-const SpecsTable = ({ product }) => {
-  const rows = [
-    ['العلامة التجارية', 'السعيدة ستور'],
-    ['الموديل', product.name],
-    ['الحركة', 'كوارتز ياباني'],
-    ['مادة الهيكل', 'ستانلس ستيل 316L'],
-    ['مادة السوار', 'جلد طبيعي / ستانلس ستيل'],
-    ['الزجاج', 'كريستال مقاوم للخدش'],
-    ['مقاومة الماء', '30 متر (3ATM)'],
-    ['قطر الهيكل', '42 مم'],
-    ['الوزن', 'حوالي 85 جرام'],
-    ['الضمان', 'سنة كاملة'],
-    ['بلد المنشأ', 'ياباني / سويسري'],
-  ];
-  return (
-    <table className="specs-table" aria-label="مواصفات المنتج">
-      <tbody>
-        {rows.map(([key, val], i) => (
-          <tr key={i} className={i % 2 === 0 ? 'even' : 'odd'}>
-            <td className="specs-table-key">{key}</td>
-            <td className="specs-table-val">{val}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-};
-
 const InfoTabs = ({ product }) => {
-  const [active, setActive] = useState('description');
-
   return (
     <motion.section
       className="tabs-section"
@@ -714,57 +586,28 @@ const InfoTabs = ({ product }) => {
       whileInView="visible"
       viewport={{ once: true, margin: '-60px' }}
     >
-      {/* Tab header */}
-      <div className="tabs-header" role="tablist" aria-label="تفاصيل المنتج">
-        {tabList.map(tab => (
-          <button
-            key={tab.id}
-            role="tab"
-            className={`tab-btn ${active === tab.id ? 'active' : ''}`}
-            onClick={() => setActive(tab.id)}
-            aria-selected={active === tab.id}
-            id={`tab-${tab.id}`}
-          >
-            <tab.icon size={16} strokeWidth={1.5} />
-            <span>{tab.label}</span>
-            {active === tab.id && (
-              <motion.div className="tab-underline" layoutId="tab-underline" />
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab panel */}
-      <div className="tab-panel-wrap" role="tabpanel">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={active}
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -14 }}
-            transition={{ duration: 0.3, ease: [0.25, 0.8, 0.25, 1] }}
-          >
-            {active === 'description' && (
-              <div className="tab-content-description">
-                <p className="tab-description-text">
-                  {product.description || 'ساعة فاخرة تجمع بين الأناقة الكلاسيكية والتقنية الحديثة. مصنوعة من أجود المواد وبدقة متناهية لتمنحك تجربة فريدة في قياس الوقت. تتميز بتصميم عصري يناسب جميع المناسبات.'}
-                </p>
-                {product.style && (
-                  <div className="tab-desc-tags">
-                    <span className="desc-tag"><Tag size={13} /> {resolveTaxonomyLabel(product, 'brandId')}</span>
-                    <span className="desc-tag"><Watch size={13} /> {resolveTaxonomyLabel(product, 'categoryId')}</span>
-                  </div>
-                )}
+      <div className="tab-panel-wrap" role="region" aria-label="وصف المنتج">
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: [0.25, 0.8, 0.25, 1] }}
+        >
+          <div className="tab-content-description">
+            <h3 style={{ marginBottom: '16px', fontSize: '1.2rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <FileText size={20} />
+              الوصف
+            </h3>
+            <p className="tab-description-text">
+              {product.description || 'ساعة فاخرة تجمع بين الأناقة الكلاسيكية والتقنية الحديثة. مصنوعة من أجود المواد وبدقة متناهية لتمنحك تجربة فريدة في قياس الوقت. تتميز بتصميم عصري يناسب جميع المناسبات.'}
+            </p>
+            {product.style && (
+              <div className="tab-desc-tags">
+                <span className="desc-tag"><Tag size={13} /> {resolveTaxonomyLabel(product, 'brandId')}</span>
+                <span className="desc-tag"><Watch size={13} /> {resolveTaxonomyLabel(product, 'categoryId')}</span>
               </div>
             )}
-
-            {active === 'specs' && (
-              <div className="tab-content-specs">
-                <SpecsTable product={product} />
-              </div>
-            )}
-          </motion.div>
-        </AnimatePresence>
+          </div>
+        </motion.div>
       </div>
     </motion.section>
   );
@@ -1060,9 +903,6 @@ const ProductDetails = () => {
         {/* ── TRUST CARDS ── */}
         <TrustCardsSection />
 
-        {/* ── STORYTELLING ── */}
-        <StorytellingSection product={product} />
-
         {/* ── INFO TABS ── */}
         <InfoTabs product={product} />
 
@@ -1111,7 +951,7 @@ const ProductDetails = () => {
           display: flex;
           align-items: center;
           gap: 8px;
-          padding: 100px 60px 0;
+          padding: 30px 60px 0;
           font-size: 0.88rem;
           color: var(--text-dim);
           position: relative;
@@ -1146,7 +986,7 @@ const ProductDetails = () => {
           display: grid;
           grid-template-columns: minmax(0, 60fr) minmax(0, 40fr);
           min-height: 90vh;
-          padding: 40px 60px 80px;
+          padding: 16px 60px 80px;
           gap: 4vw;
           align-items: start;
           position: relative;
@@ -2164,7 +2004,7 @@ const ProductDetails = () => {
           display: grid;
           grid-template-columns: 60% 40%;
           gap: 60px;
-          padding: 120px 60px 80px;
+          padding: 66px 60px 80px;
           min-height: 90vh;
           align-items: start;
         }
@@ -2261,10 +2101,10 @@ const ProductDetails = () => {
         @media (max-width: 1200px) {
           .pdp-hero {
             grid-template-columns: minmax(0, 55fr) minmax(0, 45fr);
-            padding: 32px 50px 60px;
+            padding: 16px 50px 60px;
             gap: 3vw;
           }
-          .pdp-breadcrumb { padding: 90px 50px 0; }
+          .pdp-breadcrumb { padding: 26px 50px 0; }
           .trust-section { padding: 0 50px 40px; }
           .story-section { padding: 70px 50px; }
           .tabs-section { padding: 60px 50px; }
@@ -2277,10 +2117,10 @@ const ProductDetails = () => {
         @media (max-width: 1024px) {
           .pdp-hero {
             grid-template-columns: minmax(0, 52fr) minmax(0, 48fr);
-            padding: 30px 40px 60px;
+            padding: 16px 40px 60px;
             gap: 40px;
           }
-          .pdp-breadcrumb { padding: 90px 40px 0; }
+          .pdp-breadcrumb { padding: 26px 40px 0; }
           .trust-section { padding: 0 40px 40px; }
           .story-layout { gap: 50px; }
           .story-section { padding: 60px 40px; }
@@ -2295,11 +2135,11 @@ const ProductDetails = () => {
           .pdp-hero {
             display: flex;
             flex-direction: column;
-            padding: 30px 30px 80px;
+            padding: 16px 30px 80px;
             gap: 40px;
             min-height: unset;
           }
-          .pdp-breadcrumb { padding: 90px 30px 0; }
+          .pdp-breadcrumb { padding: 20px 30px 0; }
           
           /* Gallery takes full width when stacked */
           .hero-gallery {
@@ -2323,13 +2163,13 @@ const ProductDetails = () => {
         ════════════════════════════════ */
         @media (max-width: 768px) {
           .pdp-breadcrumb {
-            padding: 88px 20px 0;
+            padding: 16px 20px 0;
             font-size: 0.82rem;
           }
           .breadcrumb-current { max-width: 160px; }
 
           .pdp-hero {
-            padding: 20px 20px 100px;
+            padding: 12px 20px 100px;
             gap: 32px;
           }
 

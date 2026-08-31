@@ -93,7 +93,7 @@ export const executeMigration = async (isDryRun = true) => {
                 categoryId: mapped.categoryId || null,
                 brandId: mapped.brandId || null,
                 collectionId: mapped.collectionId || null,
-                genderId: mapped.genderId || null
+                gender: mapped.gender || null
             };
 
             batch.update(doc.ref, updateData);

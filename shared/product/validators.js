@@ -33,9 +33,11 @@ export const validateProductTaxonomy = (product) => {
         throw new Error("Collection ID must be a string or null.");
     }
 
-    const genderId = product[PRODUCT_TAXONOMY_FIELDS.GENDER];
-    if (genderId !== undefined && genderId !== null && typeof genderId !== 'string') {
-        throw new Error("Gender ID must be a string or null.");
+    const gender = product.gender;
+    if (gender !== undefined && gender !== null) {
+        if (typeof gender !== 'string' || !['men', 'women', 'kids'].includes(gender)) {
+            throw new Error("Invalid gender value. Must be 'men', 'women', or 'kids'.");
+        }
     }
 
     return true;

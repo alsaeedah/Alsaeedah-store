@@ -11,8 +11,11 @@
 export const PRODUCT_TAXONOMY_FIELDS = {
     CATEGORY: 'categoryId',
     BRAND: 'brandId',
-    COLLECTION: 'collectionId',
-    GENDER: 'genderId'
+    COLLECTION: 'collectionId'
+};
+
+export const STATIC_PRODUCT_FIELDS = {
+    GENDER: 'gender'
 };
 
 /**

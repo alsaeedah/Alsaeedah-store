@@ -28,7 +28,7 @@ export const analyzeProducts = async () => {
         const data = doc.data();
         
         const hasLegacy = !!(data.category || data.style);
-        const hasTaxonomy = !!(data.categoryId || data.brandId || data.collectionId || data.genderId);
+        const hasTaxonomy = !!(data.categoryId || data.brandId || data.collectionId || data.gender);
         
         if (hasLegacy && hasTaxonomy) {
             report.mixed++;

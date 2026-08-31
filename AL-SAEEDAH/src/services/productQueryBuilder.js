@@ -26,13 +26,13 @@ const normalizeIdArray = (value) => {
 /**
  * Resolves taxonomy IDs from legacy string filters using the cached taxonomy store.
  * @param {Object} filters 
- * @returns {Object} { categoryIds, brandIds, collectionId, genderId, legacyCategory, legacyStyle }
+ * @returns {Object} { categoryIds, brandIds, collectionId, gender, legacyCategory, legacyStyle }
  */
 export const resolveFilters = (filters) => {
     let categoryIds = normalizeIdArray(filters.categoryIds || filters.categoryId);
     let brandIds = normalizeIdArray(filters.brandIds || filters.brandId);
     let collectionId = normalizeFilterValue(filters.collectionId);
-    let genderId = normalizeFilterValue(filters.genderId);
+    let gender = normalizeFilterValue(filters.gender);
     const category = normalizeFilterValue(filters.category);
     const style = normalizeFilterValue(filters.style);
 
@@ -56,7 +56,7 @@ export const resolveFilters = (filters) => {
         categoryIds,
         brandIds,
         collectionId,
-        genderId,
+        gender,
         legacyCategory: category || null,
         legacyStyle: style || null,
         minPrice: filters.minPrice,

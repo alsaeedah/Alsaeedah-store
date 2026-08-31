@@ -34,7 +34,7 @@ const AddProduct = () => {
                 categoryId: formData.categoryId || null,
                 brandId: formData.brandId || null,
                 collectionId: formData.collectionId || null,
-                genderId: formData.genderId || null,
+                gender: formData.gender || null,
                 category: formData.category || '',
                 style: formData.style || '',
                 description: formData.description,

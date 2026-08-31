@@ -15,7 +15,7 @@ export const runMappingEngine = (productData, context) => {
     let categoryId = productData.categoryId || null;
     let brandId = productData.brandId || null;
     const collectionId = productData.collectionId || null;
-    const genderId = productData.genderId || null;
+    const gender = productData.gender || null;
 
     if (!categoryId && category) {
         // Map category string to categoryId
@@ -48,6 +48,6 @@ export const runMappingEngine = (productData, context) => {
         categoryId,
         brandId,
         collectionId,
-        genderId
+        gender
     };
 };

@@ -99,7 +99,7 @@ export class FirestoreProductRepository extends ProductRepository {
     }
 
     async executeDualQuery(filters) {
-        const { categoryId, brandId, collectionId, genderId, legacyCategory, legacyStyle } = filters;
+        const { categoryId, brandId, collectionId, gender, legacyCategory, legacyStyle } = filters;
         const productsMap = new Map();
 
         const fetchQuery = async (constraints) => {
@@ -117,7 +117,7 @@ export class FirestoreProductRepository extends ProductRepository {
         if (this._isValidFilterValue(categoryId)) taxonomyConstraints.push(where('categoryId', '==', categoryId));
         if (this._isValidFilterValue(brandId)) taxonomyConstraints.push(where('brandId', '==', brandId));
         if (this._isValidFilterValue(collectionId)) taxonomyConstraints.push(where('collectionId', '==', collectionId));
-        if (this._isValidFilterValue(genderId)) taxonomyConstraints.push(where('genderId', '==', genderId));
+        if (this._isValidFilterValue(gender)) taxonomyConstraints.push(where('gender', '==', gender));
 
         if (taxonomyConstraints.length > 0) {
             await fetchQuery(taxonomyConstraints);
@@ -147,7 +147,7 @@ export class FirestoreProductRepository extends ProductRepository {
     async getPaginated(filters, limitCount, cursor = null) {
         const baseConstraints = [];
         if (this._isValidFilterValue(filters.collectionId)) baseConstraints.push(where('collectionId', '==', filters.collectionId));
-        if (this._isValidFilterValue(filters.genderId)) baseConstraints.push(where('genderId', '==', filters.genderId));
+        if (this._isValidFilterValue(filters.gender)) baseConstraints.push(where('gender', '==', filters.gender));
 
         const searchStr = filters.search ? String(filters.search).trim() : '';
         const isNumericSearch = searchStr && /^\d+$/.test(searchStr);
@@ -485,7 +485,7 @@ export class FirestoreProductRepository extends ProductRepository {
 
         const baseConstraints = [];
         if (this._isValidFilterValue(filters.collectionId)) baseConstraints.push(where('collectionId', '==', filters.collectionId));
-        if (this._isValidFilterValue(filters.genderId))     baseConstraints.push(where('genderId',     '==', filters.genderId));
+        if (this._isValidFilterValue(filters.gender))     baseConstraints.push(where('gender',     '==', filters.gender));
 
         const searchStr     = filters.search ? String(filters.search).trim() : '';
         const isNumericSearch = searchStr && /^\d+$/.test(searchStr);
