@@ -74,21 +74,11 @@ export class FavoritesSyncAdapter extends BaseSyncAdapter {
 
         console.log(`[FavoritesSyncAdapter] syncInbound lastSyncAt=${lastSyncAt} boundary=${syncBoundary}`);
         try {
-            let q;
-            if (lastSyncAt) {
-                q = query(
-                    collection(this.db, 'favorites'),
-                    where('user_id', '==', this.dal.userId),
-                    where('updated_at', '>', lastSyncAt),
-                    where('updated_at', '<=', syncBoundary)
-                );
-            } else {
-                q = query(
-                    collection(this.db, 'favorites'),
-                    where('user_id', '==', this.dal.userId),
-                    where('updated_at', '<=', syncBoundary)
-                );
-            }
+            // Use simple query to avoid Firestore composite index errors
+            const q = query(
+                collection(this.db, 'favorites'),
+                where('user_id', '==', this.dal.userId)
+            );
 
             const snapshot = await getDocs(q);
             
@@ -102,6 +92,11 @@ export class FavoritesSyncAdapter extends BaseSyncAdapter {
 
             snapshot.forEach((docSnap) => {
                 const item = docSnap.data();
+                
+                // Local filtering to replace complex queries
+                if (item.updated_at && item.updated_at > syncBoundary) return;
+                if (lastSyncAt && item.updated_at && item.updated_at <= lastSyncAt) return;
+
                 const fav = {
                     ...item.product_data,
                     id: item.product_id,
@@ -118,16 +113,19 @@ export class FavoritesSyncAdapter extends BaseSyncAdapter {
             });
 
             if (lastSyncAt) {
+                // Fetch tombstones with simple query
                 const deletesQ = query(
                     collection(this.db, 'favorite_changes'),
-                    where('userId', '==', this.dal.userId),
-                    where('updated_at', '>', lastSyncAt),
-                    where('updated_at', '<=', syncBoundary),
-                    where('type', '==', 'DELETED')
+                    where('userId', '==', this.dal.userId)
                 );
                 const deletesSnap = await getDocs(deletesQ);
                 deletesSnap.forEach(docSnap => {
                     const data = docSnap.data();
+                    
+                    if (data.type !== 'DELETED') return;
+                    if (data.updated_at && data.updated_at > syncBoundary) return;
+                    if (data.updated_at && data.updated_at <= lastSyncAt) return;
+
                     cache = cache.filter(f => String(f.id) !== String(data.productId));
                     changed = true;
                     newItemsCount++;
