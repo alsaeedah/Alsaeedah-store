@@ -33,11 +33,11 @@ export default function DesktopNavigation() {
 
     return (
         <nav className="store-nav-glass nav-desktop" style={{
-            padding: '10px 60px',
+            padding: '10px clamp(20px, 4vw, 60px)',
             gridTemplateColumns: 'auto 1fr auto',
             alignItems: 'center',
             height: '90px',
-            gap: '40px'
+            gap: 'clamp(15px, 2vw, 40px)'
         }}>
             {/* Logo */}
             <div 
@@ -48,8 +48,8 @@ export default function DesktopNavigation() {
                     src={logo} 
                     alt="متجر السعيدة" 
                     style={{ 
-                        width: '58px', 
-                        height: '58px', 
+                        width: 'clamp(44px, 4vw, 58px)', 
+                        height: 'clamp(44px, 4vw, 58px)', 
                         objectFit: 'cover',
                         filter: 'drop-shadow(0 2px 4px rgba(212,175,55,0.2))'
                     }} 
@@ -57,12 +57,13 @@ export default function DesktopNavigation() {
                     transition={{ type: 'spring', stiffness: 300 }}
                 />
                 <h1 style={{ 
-                    fontSize: '1.9rem', 
+                    fontSize: 'clamp(1.2rem, 1.5vw + 0.2rem, 1.9rem)', 
                     fontWeight: '800', 
                     margin: 0, 
                     fontFamily: 'var(--font-heading)',
                     color: 'var(--primary)',
                     letterSpacing: '0.5px',
+                    whiteSpace: 'nowrap',
                     textShadow: theme === 'dark' ? '0 2px 8px rgba(0,0,0,0.5)' : 'none'
                 }}>
                     متجر السعيدة
@@ -259,7 +260,7 @@ function DesktopSearch() {
                     border: isFocused ? '1px solid var(--primary)' : '1px solid rgba(212,175,55,0.4)',
                     borderRadius: '24px',
                     padding: '6px 16px',
-                    width: isFocused ? '320px' : '240px',
+                    width: isFocused ? 'clamp(220px, 25vw, 320px)' : 'clamp(160px, 15vw, 240px)',
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                     boxShadow: isFocused ? '0 4px 15px rgba(212,175,55,0.2)' : '0 2px 8px rgba(0,0,0,0.05)'
                 }}

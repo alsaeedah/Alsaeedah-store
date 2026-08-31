@@ -11,7 +11,6 @@ import ErrorBoundary from './components/ErrorBoundary';
 
 import HeroCarousel from './components/HeroCarousel';
 import StoreNavigation from './components/navigation/StoreNavigation';
-import Features from './components/Features';
 import BestSellers from './components/BestSellers';
 import LatestProducts from './components/LatestProducts';
 import ProductList from './components/ProductList';
@@ -81,7 +80,6 @@ const PageWrapper = ({ children }) => (
 const Home = () => (
   <PageWrapper>
     <HeroCarousel />
-    <Features />
     <BestSellers />
     <LatestProducts />
     <ProductList />

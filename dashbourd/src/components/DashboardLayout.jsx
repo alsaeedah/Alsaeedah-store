@@ -175,25 +175,26 @@ const DashboardLayout = ({ children }) => {
             {/* Sidebar */}
             <aside className={`glass-panel sidebar ${isSidebarOpen ? 'open' : ''}`}>
                 {/* Brand Layer */}
-                <div style={{ paddingBottom: '2rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1rem', position: 'relative' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ position: 'relative' }}>
+                <div style={{ paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)', marginBottom: '0.5rem', position: 'relative' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ position: 'relative', flexShrink: 0 }}>
                             <img
                                 src={logo} alt="متجر السعيدة" style={{
-                                    width: '60px',
-                                    height: '60px',
+                                    width: '48px',
+                                    height: '48px',
                                     borderRadius: '12px',
-                                    boxShadow: '0 0 15px rgba(212, 175, 55, 0.2)',
-                                    border: '1px solid var(--primary)',
-                                    transition: '0.3s'
+                                    boxShadow: '0 0 12px rgba(212, 175, 55, 0.15)',
+                                    border: '1px solid rgba(212, 175, 55, 0.25)',
+                                    transition: '0.3s',
+                                    objectFit: 'cover'
                                 }}
                             />
                         </div>
-                        <div className="brand-name" style={{ transition: '0.3s' }}>
-                            <h2 style={{ fontSize: '1.2rem', color: '#fff', fontWeight: '800', letterSpacing: '0.5px' }}>
+                        <div className="brand-name" style={{ transition: '0.3s', minWidth: 0 }}>
+                            <h2 style={{ fontSize: '1.05rem', color: '#fff', fontWeight: '700', letterSpacing: '0.3px', lineHeight: 1.2 }}>
                                 <span style={{ color: 'var(--primary)' }}>متجر</span> السعيدة
                             </h2>
-                            <p className="brand-desc" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '500' }}>
+                            <p className="brand-desc" style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: '400', marginTop: '2px' }}>
                                 نظام إدارة المتجر
                             </p>
                         </div>
@@ -211,18 +212,18 @@ const DashboardLayout = ({ children }) => {
                                 onClick={() => setIsSidebarOpen(false)}
                                 className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
                             >
-                                <item.icon size={22} className="nav-icon" />
-                                <span className="nav-text" style={{ transition: '0.3s' }}>{item.label}</span>
+                                <item.icon size={20} className="nav-icon" />
+                                <span className="nav-text" style={{ fontSize: 'var(--nav-font-size)', flex: 1 }}>{item.label}</span>
                                 {item.badge && (
                                     <span style={{
                                         background: '#ef4444',
                                         color: '#fff',
-                                        fontSize: '0.65rem',
-                                        fontWeight: 'bold',
-                                        padding: '2px 6px',
-                                        borderRadius: '10px',
-                                        marginRight: 'auto',
-                                        transition: '0.2s'
+                                        fontSize: '0.6rem',
+                                        fontWeight: '700',
+                                        padding: '2px 5px',
+                                        borderRadius: '8px',
+                                        lineHeight: 1.4,
+                                        letterSpacing: '0.02em'
                                     }}>
                                         {item.badge}
                                     </span>
@@ -235,36 +236,36 @@ const DashboardLayout = ({ children }) => {
                 {/* User Section */}
                 <div style={{
                     marginTop: 'auto',
-                    paddingTop: '1rem',
+                    paddingTop: '0.875rem',
                     borderTop: '1px solid var(--border-color)',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '10px'
+                    gap: '6px'
                 }}>
                     <div style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '12px',
-                        padding: '10px 8px'
+                        gap: '10px',
+                        padding: '8px 6px'
                     }}>
                         <div style={{
-                            width: '40px',
-                            height: '40px',
-                            minWidth: '40px',
-                            borderRadius: '12px',
-                            background: 'rgba(212, 175, 55, 0.1)',
+                            width: '36px',
+                            height: '36px',
+                            minWidth: '36px',
+                            borderRadius: '10px',
+                            background: 'rgba(212, 175, 55, 0.08)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            border: '1px solid rgba(212, 175, 55, 0.2)'
+                            border: '1px solid rgba(212, 175, 55, 0.15)'
                         }}>
-                            <User size={18} color="var(--primary)" />
+                            <User size={16} color="var(--primary)" />
                         </div>
-                        <div className="user-details" style={{ transition: '0.3s', overflow: 'hidden' }}>
-                            <p style={{ fontSize: '0.85rem', fontWeight: '700', color: '#fff', whiteSpace: 'nowrap' }}>
+                        <div className="user-details" style={{ overflow: 'hidden' }}>
+                            <p style={{ fontSize: '0.8rem', fontWeight: '600', color: '#fff', whiteSpace: 'nowrap' }}>
                                 {user?.role === 'super_admin' ? 'المدير العام' : (user?.name || 'مدير قسم')}
                             </p>
-                            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px' }}>{user?.email}</p>
+                            <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '130px' }}>{user?.email}</p>
                         </div>
                     </div>
 
@@ -273,22 +274,23 @@ const DashboardLayout = ({ children }) => {
                         style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: 'var(--nav-item-gap)',
-                            padding: 'var(--nav-item-padding)',
+                            gap: '8px',
+                            padding: '9px 12px',
                             color: '#ef4444',
-                            background: 'rgba(239, 68, 68, 0.05)',
-                            border: 'none',
+                            background: 'rgba(239, 68, 68, 0.04)',
+                            border: '1px solid rgba(239, 68, 68, 0.08)',
                             cursor: 'pointer',
-                            borderRadius: 'var(--radius-md)',
+                            borderRadius: '10px',
                             width: '100%',
                             fontWeight: '600',
-                            transition: '0.3s',
+                            transition: 'all 0.2s ease',
                             justifyContent: 'flex-start',
-                            marginBottom: '0.5rem'
+                            marginBottom: '0.25rem',
+                            fontSize: '0.85rem'
                         }}
                     >
-                        <LogOut size={20} />
-                        <span style={{ fontSize: '0.9rem' }}>تسجيل الخروج</span>
+                        <LogOut size={18} />
+                        <span>تسجيل الخروج</span>
                     </button>
                 </div>
             </aside>

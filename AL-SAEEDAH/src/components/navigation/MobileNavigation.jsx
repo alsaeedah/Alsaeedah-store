@@ -26,8 +26,7 @@ export default function MobileNavigation() {
                 padding: 'calc(10px + env(safe-area-inset-top, 0px)) 15px 10px 15px',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                height: 'calc(75px + env(safe-area-inset-top, 0px))',
-                position: 'relative'
+                height: 'calc(75px + env(safe-area-inset-top, 0px))'
             }}>
                 <AnimatePresence>
                     {!isSearchOpen && (
@@ -64,10 +63,10 @@ export default function MobileNavigation() {
                                     whileHover={{ scale: 1.05 }}
                                 />
                                 <h1 style={{ 
-                                    fontSize: '1.25rem', fontWeight: '800', margin: 0, 
-                                    fontFamily: 'var(--font-heading)', color: 'var(--primary)'
+                                    fontSize: 'clamp(1.05rem, 4vw, 1.25rem)', fontWeight: '800', margin: 0, 
+                                    fontFamily: 'var(--font-heading)', color: 'var(--primary)', whiteSpace: 'nowrap'
                                 }}>
-                                    السعيدة
+                                    متجر السعيدة
                                 </h1>
                             </div>
 

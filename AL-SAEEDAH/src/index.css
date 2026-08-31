@@ -135,7 +135,7 @@ input, textarea, [contenteditable="true"] {
 /* Mobile: Navbar is slightly thinner */
 @media (max-width: 1023px) {
   .app-container {
-    padding-top: calc(70px + var(--safe-area-top));
+    padding-top: calc(75px + var(--safe-area-top));
   }
 }
 
