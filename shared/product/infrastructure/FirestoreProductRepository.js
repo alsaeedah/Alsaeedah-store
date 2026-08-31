@@ -469,4 +469,209 @@ export class FirestoreProductRepository extends ProductRepository {
 
         await batch.commit();
     }
+
+    /**
+     * Returns the IDs of all products matching the given filters.
+     * Reuses the same bounded batch-scan strategy as getPaginated, but collects
+     * document IDs only — no full product data is loaded.
+     * Stops when all queries are exhausted or the hard cap is reached.
+     *
+     * @param {Object} filters
+     * @param {number} [cap=500]
+     * @returns {Promise<{ ids: string[], capped: boolean }>}
+     */
+    async getFilteredIds(filters = {}, cap = 500) {
+        const FILTER_IDS_BATCH = 30; // same batch size used by getPaginated scanning
+
+        const baseConstraints = [];
+        if (this._isValidFilterValue(filters.collectionId)) baseConstraints.push(where('collectionId', '==', filters.collectionId));
+        if (this._isValidFilterValue(filters.genderId))     baseConstraints.push(where('genderId',     '==', filters.genderId));
+
+        const searchStr     = filters.search ? String(filters.search).trim() : '';
+        const isNumericSearch = searchStr && /^\d+$/.test(searchStr);
+
+        // --- Numeric (displayId) fast-path ---
+        if (isNumericSearch) {
+            const numericConstraints = [...baseConstraints];
+            let catIds = this._isValidFilterArray(filters.categoryIds) ? filters.categoryIds : (this._isValidFilterValue(filters.categoryId) ? [filters.categoryId] : null);
+            let brdIds = this._isValidFilterArray(filters.brandIds)    ? filters.brandIds    : (this._isValidFilterValue(filters.brandId)    ? [filters.brandId]    : null);
+
+            if (catIds && catIds.length > 0) numericConstraints.push(where('categoryId', 'in', catIds.slice(0, 30)));
+            if (brdIds && brdIds.length === 1) numericConstraints.push(where('brandId', '==', brdIds[0]));
+            numericConstraints.push(where('displayId', '==', Number(searchStr)));
+
+            const q = query(collection(this.db, 'products'), ...numericConstraints);
+            const snapshot = await this._safeGetDocs(q);
+
+            let ids = snapshot.docs.map(d => d.id);
+
+            if (filters.minPrice !== undefined && filters.minPrice !== null) {
+                const min = filters.minPrice;
+                const snapshotData = snapshot.docs.reduce((m, d) => { m.set(d.id, d.data()); return m; }, new Map());
+                ids = ids.filter(id => Number(snapshotData.get(id)?.price) >= min);
+            }
+            if (filters.maxPrice !== undefined && filters.maxPrice !== null) {
+                const max = filters.maxPrice;
+                const snapshotData = snapshot.docs.reduce((m, d) => { m.set(d.id, d.data()); return m; }, new Map());
+                ids = ids.filter(id => Number(snapshotData.get(id)?.price) <= max);
+            }
+
+            const capped = ids.length > cap;
+            return { ids: ids.slice(0, cap), capped };
+        }
+
+        // --- General path: mirror getPaginated scan logic ---
+        const queriesParams = this._buildDecomposedQueries(filters, baseConstraints);
+        queriesParams.forEach(qp => {
+            qp.constraints.push(orderBy('created_at', 'desc'));
+            qp.constraints.push(orderBy(documentId(), 'desc'));
+        });
+
+        const needsClientFilter = !!(searchStr ||
+            (filters.minPrice !== undefined && filters.minPrice !== null) ||
+            (filters.maxPrice !== undefined && filters.maxPrice !== null));
+
+        const collectedIds = new Set();
+        const perQueryState = {};
+        let keepFetching = true;
+        let capped = false;
+
+        while (keepFetching) {
+            const queryPromises = queriesParams.map(async (qp) => {
+                // Skip exhausted sub-queries
+                if (perQueryState[qp.key] && perQueryState[qp.key].done) {
+                    return { key: qp.key, docs: [], done: true };
+                }
+
+                const batchConstraints = [...qp.constraints];
+                const qCursor = perQueryState[qp.key];
+                if (qCursor && qCursor.value !== undefined && qCursor.id !== undefined) {
+                    batchConstraints.push(startAfter(qCursor.value, qCursor.id));
+                }
+                batchConstraints.push(limit(FILTER_IDS_BATCH));
+
+                const q = query(collection(this.db, 'products'), ...batchConstraints);
+                const snap = await this._safeGetDocs(q);
+                return { key: qp.key, docs: snap.docs, done: snap.docs.length < FILTER_IDS_BATCH };
+            });
+
+            const results = await Promise.all(queryPromises);
+            let anyNew = false;
+
+            for (const res of results) {
+                // Update cursor / exhaustion state
+                if (res.done) {
+                    perQueryState[res.key] = { done: true };
+                } else if (res.docs.length > 0) {
+                    const lastDoc = res.docs[res.docs.length - 1];
+                    perQueryState[res.key] = {
+                        value: lastDoc.data().created_at !== undefined ? lastDoc.data().created_at : '',
+                        id: lastDoc.id,
+                        done: false
+                    };
+                }
+
+                for (const d of res.docs) {
+                    if (collectedIds.has(d.id)) continue;
+
+                    // Client-side filters (search, price range)
+                    if (needsClientFilter) {
+                        const data = d.data();
+                        if (filters.minPrice !== undefined && filters.minPrice !== null && Number(data.price) < filters.minPrice) continue;
+                        if (filters.maxPrice !== undefined && filters.maxPrice !== null && Number(data.price) > filters.maxPrice) continue;
+                        if (searchStr) {
+                            const term = searchStr.toLowerCase();
+                            const nameMatch = data.name && data.name.toLowerCase().includes(term);
+                            const idMatch   = data.displayId && String(data.displayId).toLowerCase().includes(term);
+                            if (!nameMatch && !idMatch) continue;
+                        }
+                    }
+
+                    collectedIds.add(d.id);
+                    anyNew = true;
+
+                    if (collectedIds.size >= cap) {
+                        capped = true;
+                        keepFetching = false;
+                        break;
+                    }
+                }
+
+                if (!keepFetching) break;
+            }
+
+            // Stop if all sub-queries are exhausted or nothing new came in
+            if (!capped) {
+                const allDone = results.every(r => r.done || (perQueryState[r.key] && perQueryState[r.key].done));
+                if (!anyNew || allDone) {
+                    keepFetching = false;
+                }
+            }
+        }
+
+        return { ids: Array.from(collectedIds), capped };
+    }
+
+    /**
+     * Deletes multiple products using Firestore writeBatch operations.
+     * Chunks of 249 products per batch (498 ops: 1 delete + 1 product_changes per product).
+     * Each chunk is committed independently so a single failed chunk does not
+     * abort the remaining chunks (partial-failure support).
+     *
+     * @param {string[]} ids
+     * @returns {Promise<{ deletedIds: string[], failedIds: string[], errors: Array<{ id: string, message: string }> }>}
+     */
+    async deleteMany(ids) {
+        if (!ids || ids.length === 0) {
+            return { deletedIds: [], failedIds: [], errors: [] };
+        }
+
+        const PRODUCTS_PER_BATCH = 249; // 249 × 2 ops = 498 ops < 500 Firestore limit
+        const timestamp = new Date().toISOString();
+
+        const deletedIds = [];
+        const failedIds  = [];
+        const errors     = [];
+
+        // Chunk IDs
+        const chunks = [];
+        for (let i = 0; i < ids.length; i += PRODUCTS_PER_BATCH) {
+            chunks.push(ids.slice(i, i + PRODUCTS_PER_BATCH));
+        }
+
+        for (const chunk of chunks) {
+            try {
+                const batch = writeBatch(this.db);
+
+                for (const id of chunk) {
+                    // Delete the product document
+                    batch.delete(doc(this.db, 'products', String(id)));
+
+                    // Write a product_changes entry for sync
+                    const changeLogRef = doc(collection(this.db, 'product_changes'));
+                    batch.set(changeLogRef, {
+                        productId: String(id),
+                        type: 'DELETED',
+                        timestamp
+                    });
+                }
+
+                await batch.commit();
+
+                // Mark all IDs in this chunk as successfully deleted
+                for (const id of chunk) {
+                    deletedIds.push(id);
+                }
+            } catch (err) {
+                // Chunk-level failure: mark all IDs in chunk as failed
+                for (const id of chunk) {
+                    failedIds.push(id);
+                    errors.push({ id, message: err?.message || 'Unknown Firestore error' });
+                }
+            }
+        }
+
+        return { deletedIds, failedIds, errors };
+    }
 }
+

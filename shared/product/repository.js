@@ -136,4 +136,30 @@ export class ProductRepository {
     async delete(id) {
         throw new Error('Method not implemented.');
     }
+
+    /**
+     * Get the IDs of all products matching the given filters.
+     * Uses the same bounded batch-scan logic as getPaginated but returns IDs only.
+     * Applies a hard cap to prevent unbounded reads.
+     *
+     * @param {Object} filters  - Same filter shape as getPaginated
+     * @param {number} [cap]    - Maximum number of IDs to return (default 500)
+     * @returns {Promise<{ ids: string[], capped: boolean }>}
+     */
+    async getFilteredIds(filters, cap = 500) {
+        throw new Error('Method not implemented.');
+    }
+
+    /**
+     * Delete multiple products in Firestore batches.
+     * Each product generates one delete op and one product_changes entry.
+     * Batches are chunked at 249 products (498 ops) to stay within Firestore limits.
+     * Continues processing remaining chunks when one chunk fails (partial-failure support).
+     *
+     * @param {string[]} ids
+     * @returns {Promise<{ deletedIds: string[], failedIds: string[], errors: Array<{ id: string, message: string }> }>}
+     */
+    async deleteMany(ids) {
+        throw new Error('Method not implemented.');
+    }
 }

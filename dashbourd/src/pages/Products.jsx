@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLoading } from '../context/LoadingContext';
-import { productRepository } from '../services/productService';
+import { productRepository, getFilteredIds, deleteProducts } from '../services/productService';
 import Swal from 'sweetalert2';
-import { 
-    Plus, Trash2, Edit, Loader2, Search, Layers, Users, 
-    Activity, ShoppingBag, Clock, Filter, LayoutGrid, 
+import {
+    Plus, Trash2, Edit, Loader2, Search, Layers, Users,
+    Activity, ShoppingBag, Clock, Filter, LayoutGrid,
     LayoutList, Check, MoreVertical, Package, ArrowUpRight,
     TrendingUp, Star, Box, Tag, Flame
 } from 'lucide-react';
@@ -41,6 +41,10 @@ const Products = () => {
     const [selectedProducts, setSelectedProducts] = useState(new Set());
     const [totalMatchingCount, setTotalMatchingCount] = useState(0);
 
+    // Bulk-selection state
+    const [isSelectAllLoading, setIsSelectAllLoading] = useState(false);
+    const [selectAllCapped, setSelectAllCapped] = useState(false);
+
     const observer = useRef();
     const lastProductRef = useCallback(node => {
         if (loading || loadingMore) return;
@@ -65,6 +69,19 @@ const Products = () => {
     const nextCursorRef = useRef(null);
     const LIMIT = 20;
 
+    /**
+     * Builds the filter object from current FilterBar state.
+     * Single source of truth used by both fetchProducts() and toggleAll().
+     */
+    const buildFilters = () => ({
+        legacyCategory: filterType !== 'all' ? filterType : null,
+        legacyStyle: filterStyle !== 'all' ? filterStyle : null,
+        minPrice: minPrice !== '' ? Number(minPrice) : null,
+        maxPrice: maxPrice !== '' ? Number(maxPrice) : null,
+        search: searchQuery,
+        sortPrice: sortPrice
+    });
+
     const fetchProducts = async (pageNum, isInitial = false) => {
         if (isInitial) {
             startLoading();
@@ -77,22 +94,15 @@ const Products = () => {
         }
 
         try {
-            const resolvedFilters = {
-                legacyCategory: filterType !== 'all' ? filterType : null,
-                legacyStyle: filterStyle !== 'all' ? filterStyle : null,
-                minPrice: minPrice !== '' ? Number(minPrice) : null,
-                maxPrice: maxPrice !== '' ? Number(maxPrice) : null,
-                search: searchQuery,
-                sortPrice: sortPrice
-            };
-            
+            const resolvedFilters = buildFilters();
+
             const currentCursor = isInitial ? null : nextCursorRef.current;
             const response = await productRepository.getPaginated(resolvedFilters, pageNum, LIMIT, currentCursor);
-            
+
             if (response && response._isStaleCache) {
                 console.log("[Products] Using LKG data, background revalidation started.");
             }
-            
+
             const newProducts = response?.products || [];
             nextCursorRef.current = response?.nextCursor || null;
 
@@ -135,9 +145,11 @@ const Products = () => {
         }
     };
 
-    // Filter changes
+    // Filter changes — reset page, clear selection, and reload
     useEffect(() => {
         setPage(0);
+        setSelectedProducts(new Set());
+        setSelectAllCapped(false);
         fetchProducts(0, true);
         fetchStats();
     }, [filterType, filterStyle, sortPrice, minPrice, maxPrice, searchQuery]);
@@ -170,7 +182,7 @@ const Products = () => {
             try {
                 // Fetch product to get images and video
                 const productToDelete = await productRepository.getById(id);
-                
+
                 if (productToDelete) {
                     if (productToDelete.video && productToDelete.video.includes('cloudinary')) {
                         await deleteFromCloudinary(productToDelete.video, 'video');
@@ -206,9 +218,9 @@ const Products = () => {
         startLoading();
         try {
             await productRepository.update(id, { is_best_seller: !currentStatus });
-            
+
             setProducts(prev => prev.map(p => p.id === id ? { ...p, is_best_seller: !currentStatus } : p));
-            
+
             Swal.fire({
                 icon: 'success',
                 title: !currentStatus ? 'تمت الإضافة' : 'تمت الإزالة',
@@ -236,9 +248,9 @@ const Products = () => {
         startLoading();
         try {
             await productRepository.update(id, { is_latest: !currentStatus });
-            
+
             setProducts(prev => prev.map(p => p.id === id ? { ...p, is_latest: !currentStatus } : p));
-            
+
             Swal.fire({
                 icon: 'success',
                 title: !currentStatus ? 'تمت الإضافة' : 'تمت الإزالة',
@@ -272,45 +284,97 @@ const Products = () => {
         setSelectedProducts(newSelected);
     };
 
+    /**
+     * Select All / Deselect All.
+     *
+     * When deselecting: clears the selection immediately.
+     * When selecting: calls getFilteredIds with the current FilterBar state to
+     *   collect ALL matching product IDs across every pagination page — without
+     *   introducing an unbounded Firestore read.
+     *
+     * Does NOT overwrite totalMatchingCount when the 500-ID cap is hit; the cap
+     * only affects the selection set, not the displayed total.
+     */
     const toggleAll = async () => {
-        if (selectedProducts.size === totalMatchingCount && totalMatchingCount > 0) {
+        // --- Deselect All ---
+        if (selectedProducts.size > 0) {
             setSelectedProducts(new Set());
-        } else {
-            startLoading();
-            try {
-                if (allFilteredProductsRef.current.length > 0) {
-                    setSelectedProducts(new Set(allFilteredProductsRef.current.map(p => p.id)));
-                    Swal.fire({
-                        title: 'تم تحديد الكل',
-                        text: `تم تحديد ${allFilteredProductsRef.current.length} منتج`,
-                        icon: 'success',
-                        toast: true,
-                        position: 'top-end',
-                        showConfirmButton: false,
-                        timer: 2000,
-                        background: '#141414',
-                        color: '#fff'
-                    });
-                }
-            } catch (error) {
-                console.error("Select all error:", error);
+            setSelectAllCapped(false);
+            return;
+        }
+
+        // --- Select All ---
+        setIsSelectAllLoading(true);
+        try {
+            const filters = buildFilters();
+            const { ids, capped } = await getFilteredIds(filters);
+
+            setSelectedProducts(new Set(ids));
+            setSelectAllCapped(capped);
+            // NOTE: totalMatchingCount is intentionally NOT overwritten here.
+            // If the cap was reached, the true count is unknown; preserving the
+            // existing displayed total is more accurate than showing the cap number.
+
+            if (capped) {
                 Swal.fire({
-                    icon: 'error',
-                    title: 'خطأ',
-                    text: 'فشل تحديد جميع المنتجات',
+                    icon: 'warning',
+                    title: 'تحديد جزئي',
+                    text: `تم تحديد أول ${ids.length} منتج فقط. عدد المنتجات المطابقة يتجاوز الحد الأقصى المسموح به.`,
+                    background: '#141414',
+                    color: '#fff',
+                    confirmButtonColor: 'var(--primary)'
+                });
+            } else {
+                Swal.fire({
+                    title: 'تم تحديد الكل',
+                    text: `تم تحديد ${ids.length} منتج`,
+                    icon: 'success',
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 2000,
                     background: '#141414',
                     color: '#fff'
                 });
-            } finally {
-                stopLoading();
             }
+        } catch (error) {
+            console.error("Select all error:", error);
+            Swal.fire({
+                icon: 'error',
+                title: 'خطأ',
+                text: 'فشل تحديد جميع المنتجات',
+                background: '#141414',
+                color: '#fff'
+            });
+        } finally {
+            setIsSelectAllLoading(false);
         }
     };
 
+    /**
+     * Bulk Delete.
+     *
+     * Uses the IDs in selectedProducts as the sole source of truth.
+     * Delegates all asset cleanup, Firestore batching, cache invalidation,
+     * and sync to deleteProducts() in productService.js.
+     *
+     * Supports partial failures:
+     *  - Successfully deleted products are removed from the UI.
+     *  - Failed products remain visible and stay in the selection set.
+     *  - The result toast accurately reflects the outcome.
+     *
+     * Offline: deleteProducts() will throw an OfflineError before touching
+     * Firestore; the selection is preserved and an error toast is shown.
+     */
     const handleBulkDelete = async () => {
-        const result = await Swal.fire({
+        if (selectedProducts.size === 0) return;
+
+        const idsToDelete = [...selectedProducts];
+        const count = idsToDelete.length;
+
+        const confirmation = await Swal.fire({
             title: 'هل أنت متأكد؟',
-            text: `سيتم حذف ${selectedProducts.size} من المنتجات نهائياً!`,
+            text: `هل تريد حذف ${count} ${count === 1 ? 'منتج' : 'منتجات'} نهائياً؟`,
             icon: 'warning',
             showCancelButton: true,
             confirmButtonText: 'نعم، احذف المحدد',
@@ -321,40 +385,70 @@ const Products = () => {
             cancelButtonColor: 'rgba(255,255,255,0.1)'
         });
 
-        if (result.isConfirmed) {
-            startLoading();
-            try {
-                // Find products to delete from in-memory cache to skip fetching
-                const productsToDelete = allFilteredProductsRef.current.filter(p => selectedProducts.has(p.id));
+        if (!confirmation.isConfirmed) return;
 
-                for (const product of productsToDelete) {
-                    if (product.video && product.video.includes('cloudinary')) {
-                        await deleteFromCloudinary(product.video, 'video');
-                    }
-                    const imagesToDelete = new Set(product.images || []);
-                    if (product.imageUrl) imagesToDelete.add(product.imageUrl);
-                    for (const img of imagesToDelete) {
-                        if (img && img.includes('cloudinary')) {
-                            await deleteFromCloudinary(img, 'image');
-                        }
-                    }
-                    await productRepository.delete(product.id);
-                }
+        startLoading();
+        try {
+            const result = await deleteProducts(idsToDelete);
 
-                setProducts(prev => prev.filter(p => !selectedProducts.has(p.id)));
-                setSelectedProducts(new Set());
-                fetchStats();
-                Swal.fire({ title: 'تم الحذف بنجاح', icon: 'success', background: '#141414', color: '#fff' });
-            } catch (error) {
-                console.error(error);
-                if (error.name === 'OfflineError') {
-                    Swal.fire({ icon: 'error', title: 'خطأ', text: error.message, background: '#141414', color: '#fff' });
-                    return;
-                }
-                Swal.fire({ icon: 'error', title: 'خطأ', text: 'فشل الحذف الجماعي', background: '#141414', color: '#fff' });
-            } finally {
-                stopLoading();
+            const { deletedIds, failedIds } = result;
+
+            // Remove successfully deleted products from the UI
+            if (deletedIds.length > 0) {
+                const deletedSet = new Set(deletedIds);
+                setProducts(prev => prev.filter(p => !deletedSet.has(p.id)));
             }
+
+            // Update selection: clear deleted, keep failed
+            if (failedIds.length > 0) {
+                setSelectedProducts(new Set(failedIds));
+            } else {
+                setSelectedProducts(new Set());
+                setSelectAllCapped(false);
+            }
+
+            // Refresh stats
+            fetchStats();
+
+            // Show accurate result toast
+            if (result.success) {
+                Swal.fire({
+                    title: 'تم الحذف بنجاح',
+                    text: `تم حذف ${deletedIds.length} ${deletedIds.length === 1 ? 'منتج' : 'منتجات'} بنجاح`,
+                    icon: 'success',
+                    background: '#141414',
+                    color: '#fff'
+                });
+            } else {
+                const successMsg = deletedIds.length > 0
+                    ? `تم حذف ${deletedIds.length} منتج بنجاح.`
+                    : 'لم يتم حذف أي منتج.';
+                const failMsg = `فشل حذف ${failedIds.length} منتج.`;
+                Swal.fire({
+                    title: 'اكتمل الحذف جزئياً',
+                    html: `<p>${successMsg}</p><p style="color:#ef4444">${failMsg}</p>`,
+                    icon: 'warning',
+                    background: '#141414',
+                    color: '#fff',
+                    confirmButtonColor: 'var(--primary)'
+                });
+            }
+        } catch (error) {
+            console.error(error);
+            if (error.name === 'OfflineError') {
+                // Preserve selection — user can retry when online
+                Swal.fire({
+                    icon: 'error',
+                    title: 'غير متصل بالإنترنت',
+                    text: error.message,
+                    background: '#141414',
+                    color: '#fff'
+                });
+                return;
+            }
+            Swal.fire({ icon: 'error', title: 'خطأ', text: 'فشل الحذف الجماعي', background: '#141414', color: '#fff' });
+        } finally {
+            stopLoading();
         }
     };
 
@@ -365,25 +459,32 @@ const Products = () => {
         { label: 'ساعات أطفال', value: totalStats.kids, icon: <Activity size={22} />, color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' },
     ];
 
+    // Determine Select All button label
+    const selectAllLabel = (() => {
+        if (isSelectAllLoading) return <Loader2 size={14} className="animate-spin" />;
+        if (selectedProducts.size > 0) return selectAllCapped ? 'إلغاء (محدود)' : 'إلغاء تحديد الكل';
+        return 'تحديد الكل';
+    })();
+
     return (
         <div style={{ direction: 'rtl', padding: '10px' }}>
             {/* Header Section */}
-            <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: isMobile ? 'flex-start' : 'flex-end', 
-                marginBottom: isMobile ? '2rem' : '3rem', 
-                flexWrap: 'wrap', 
+            <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: isMobile ? 'flex-start' : 'flex-end',
+                marginBottom: isMobile ? '2rem' : '3rem',
+                flexWrap: 'wrap',
                 flexDirection: isMobile ? 'column' : 'row',
-                gap: '24px' 
+                gap: '24px'
             }}>
                 <div>
-                    <h1 style={{ 
-                        fontSize: isMobile ? '1.8rem' : '2.8rem', 
-                        fontWeight: '900', 
-                        color: '#fff', 
-                        marginBottom: '8px', 
-                        letterSpacing: '-1.5px' 
+                    <h1 style={{
+                        fontSize: isMobile ? '1.8rem' : '2.8rem',
+                        fontWeight: '900',
+                        color: '#fff',
+                        marginBottom: '8px',
+                        letterSpacing: '-1.5px'
                     }}>
                         إدارة المخزون <span style={{ color: 'var(--primary)', fontSize: isMobile ? '0.9rem' : '1.2rem', verticalAlign: 'middle', opacity: 0.8 }}>| مركز المنتجات</span>
                     </h1>
@@ -392,42 +493,87 @@ const Products = () => {
                 <div style={{ display: 'flex', gap: '12px', width: isMobile ? '100%' : 'auto' }}>
                     {selectedProducts.size > 0 ? (
                         <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} style={{ display: 'flex', gap: '12px', width: '100%' }}>
-                            <button onClick={toggleAll} style={{ flex: 1, padding: '12px 10px', borderRadius: '14px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)', color: '#fff', fontWeight: '700', cursor: 'pointer', fontSize: '0.85rem' }}>
-                                {selectedProducts.size === totalMatchingCount ? 'إلغاء' : 'تحديد الكل'}
+                            <button
+                                onClick={toggleAll}
+                                disabled={isSelectAllLoading}
+                                style={{
+                                    flex: 1, padding: '12px 10px', borderRadius: '14px',
+                                    background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)',
+                                    color: '#fff', fontWeight: '700', cursor: isSelectAllLoading ? 'not-allowed' : 'pointer',
+                                    fontSize: '0.85rem', opacity: isSelectAllLoading ? 0.6 : 1,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                                }}
+                            >
+                                {selectAllLabel}
                             </button>
-                            <button onClick={handleBulkDelete} style={{ flex: 1.5, padding: '12px 10px', borderRadius: '14px', background: '#ef4444', border: 'none', color: '#fff', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.85rem' }}>
+                            <button
+                                onClick={handleBulkDelete}
+                                style={{
+                                    flex: 1.5, padding: '12px 10px', borderRadius: '14px',
+                                    background: '#ef4444', border: 'none', color: '#fff', fontWeight: '800',
+                                    cursor: 'pointer', display: 'flex', alignItems: 'center',
+                                    justifyContent: 'center', gap: '8px', fontSize: '0.85rem'
+                                }}
+                            >
                                 <Trash2 size={16} /> حذف ({selectedProducts.size})
                             </button>
                         </motion.div>
                     ) : (
-                        <Link to="/products/add" style={{ textDecoration: 'none', width: '100%' }}>
-                            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} style={{ width: '100%', padding: '14px 20px', borderRadius: '16px', background: 'var(--primary)', color: '#000', border: 'none', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', boxShadow: '0 10px 25px rgba(212, 175, 55, 0.2)', fontSize: '0.9rem' }}>
-                                <Plus size={20} /> إضافة ساعة جديدة
-                            </motion.button>
-                        </Link>
+                        <>
+                            <button
+                                onClick={toggleAll}
+                                disabled={isSelectAllLoading}
+                                style={{
+                                    padding: '12px 16px', borderRadius: '14px',
+                                    background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)',
+                                    color: '#fff', fontWeight: '700', cursor: isSelectAllLoading ? 'not-allowed' : 'pointer',
+                                    fontSize: '0.85rem', opacity: isSelectAllLoading ? 0.6 : 1,
+                                    display: 'flex', alignItems: 'center', gap: '6px',
+                                    whiteSpace: 'nowrap'
+                                }}
+                            >
+                                {isSelectAllLoading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                                تحديد الكل
+                            </button>
+                            <Link to="/products/add" style={{ textDecoration: 'none', width: isMobile ? '100%' : 'auto' }}>
+                                <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    style={{
+                                        width: '100%', padding: '14px 20px', borderRadius: '16px',
+                                        background: 'var(--primary)', color: '#000', border: 'none',
+                                        fontWeight: '800', cursor: 'pointer', display: 'flex',
+                                        alignItems: 'center', justifyContent: 'center', gap: '10px',
+                                        boxShadow: '0 10px 25px rgba(212, 175, 55, 0.2)', fontSize: '0.9rem'
+                                    }}
+                                >
+                                    <Plus size={20} /> إضافة ساعة جديدة
+                                </motion.button>
+                            </Link>
+                        </>
                     )}
                 </div>
             </div>
 
             {/* Stats Section */}
-            <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fit, minmax(240px, 1fr))', 
-                gap: isMobile ? '12px' : '20px', 
-                marginBottom: isMobile ? '2rem' : '3rem' 
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fit, minmax(240px, 1fr))',
+                gap: isMobile ? '12px' : '20px',
+                marginBottom: isMobile ? '2rem' : '3rem'
             }}>
                 {summaryStats.map((stat, idx) => (
                     <motion.div key={idx} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.1 }}
-                        style={{ 
-                            padding: isMobile ? '15px' : '24px', 
-                            borderRadius: '20px', 
-                            background: 'rgba(255,255,255,0.02)', 
-                            border: '1px solid var(--border-color)', 
-                            display: 'flex', 
+                        style={{
+                            padding: isMobile ? '15px' : '24px',
+                            borderRadius: '20px',
+                            background: 'rgba(255,255,255,0.02)',
+                            border: '1px solid var(--border-color)',
+                            display: 'flex',
                             flexDirection: isMobile ? 'column' : 'row',
-                            alignItems: isMobile ? 'center' : 'center', 
+                            alignItems: isMobile ? 'center' : 'center',
                             textAlign: isMobile ? 'center' : 'right',
-                            gap: isMobile ? '10px' : '20px' 
+                            gap: isMobile ? '10px' : '20px'
                         }}>
                         <div style={{ width: isMobile ? '40px' : '56px', height: isMobile ? '40px' : '56px', borderRadius: '12px', background: stat.bg, color: stat.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                             {React.cloneElement(stat.icon, { size: isMobile ? 18 : 22 })}
@@ -465,11 +611,11 @@ const Products = () => {
                     <p style={{ fontWeight: '800', fontSize: '1.1rem', letterSpacing: '1px' }}>جاري استحضار المجموعة الملكية...</p>
                 </div>
             ) : (
-                <div style={{ 
-                    display: 'grid', 
-                    gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(340px, 1fr))', 
-                    gap: isMobile ? '20px' : '30px', 
-                    paddingBottom: '60px' 
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(340px, 1fr))',
+                    gap: isMobile ? '20px' : '30px',
+                    paddingBottom: '60px'
                 }}>
                     <AnimatePresence mode="popLayout">
                         {products.length === 0 ? (
@@ -479,7 +625,7 @@ const Products = () => {
                             </motion.div>
                         ) : (
                             products.map((product, index) => (
-                                <ProductCard 
+                                <ProductCard
                                     key={product.id}
                                     product={product}
                                     index={index}
@@ -547,7 +693,7 @@ const ProductCard = ({ product, index, isSelected, onToggle, onDelete, onToggleL
                     style={{ width: '100%', height: '100%', objectFit: 'cover', transition: '0.5s' }}
                 />
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.4), transparent 40%, transparent 60%, rgba(0,0,0,0.8))' }} />
-                
+
                 {/* ID Badge */}
                 <div style={{ position: 'absolute', top: '16px', right: '16px', background: 'rgba(212, 175, 55, 0.9)', color: '#000', padding: '6px 14px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: '900', backdropFilter: 'blur(5px)' }}>
                     #{product.displayId || '---'}
@@ -556,13 +702,13 @@ const ProductCard = ({ product, index, isSelected, onToggle, onDelete, onToggleL
                 {/* Selection Checkbox & Latest Toggle */}
                 <div style={{ position: 'absolute', top: '16px', left: '16px', display: 'flex', gap: '8px' }}>
                     <input type="checkbox" checked={isSelected} onChange={onToggle} className="custom-checkbox" />
-                    <motion.button 
+                    <motion.button
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
                         onClick={(e) => { e.stopPropagation(); onToggleLatest(); }}
-                        style={{ 
-                            width: '26px', height: '26px', borderRadius: '8px', 
-                            background: product.is_latest ? 'var(--primary)' : 'rgba(0,0,0,0.4)', 
+                        style={{
+                            width: '26px', height: '26px', borderRadius: '8px',
+                            background: product.is_latest ? 'var(--primary)' : 'rgba(0,0,0,0.4)',
                             border: '2px solid ' + (product.is_latest ? 'var(--primary)' : 'rgba(255,255,255,0.2)'),
                             color: product.is_latest ? '#000' : 'rgba(255,255,255,0.5)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
@@ -571,13 +717,13 @@ const ProductCard = ({ product, index, isSelected, onToggle, onDelete, onToggleL
                     >
                         <Star size={14} fill={product.is_latest ? 'currentColor' : 'transparent'} />
                     </motion.button>
-                    <motion.button 
+                    <motion.button
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
                         onClick={(e) => { e.stopPropagation(); onToggleBestSeller(); }}
-                        style={{ 
-                            width: '26px', height: '26px', borderRadius: '8px', 
-                            background: product.is_best_seller ? '#f97316' : 'rgba(0,0,0,0.4)', 
+                        style={{
+                            width: '26px', height: '26px', borderRadius: '8px',
+                            background: product.is_best_seller ? '#f97316' : 'rgba(0,0,0,0.4)',
                             border: '2px solid ' + (product.is_best_seller ? '#f97316' : 'rgba(255,255,255,0.2)'),
                             color: product.is_best_seller ? '#fff' : 'rgba(255,255,255,0.5)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
@@ -629,7 +775,7 @@ const ProductCard = ({ product, index, isSelected, onToggle, onDelete, onToggleL
                             <Edit size={18} /> تعديل القطعة
                         </motion.button>
                     </Link>
-                    <motion.button 
+                    <motion.button
                         whileHover={{ scale: 1.05, background: '#ef4444', color: '#fff' }}
                         onClick={onDelete}
                         style={{ width: '50px', height: '50px', borderRadius: '14px', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}

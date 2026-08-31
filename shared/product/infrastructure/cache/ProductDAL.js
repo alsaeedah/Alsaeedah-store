@@ -472,6 +472,65 @@ export class ProductDAL {
         syncCoordinator.syncDomain('products');
     }
 
+    /**
+     * Returns the IDs of all products matching the given filters.
+     * Thin pass-through to the repository — not cached because IDs are invalidated
+     * by every mutation and the scan is bounded by design.
+     *
+     * @param {Object} filters
+     * @param {number} [cap=500]
+     * @returns {Promise<{ ids: string[], capped: boolean }>}
+     */
+    async getFilteredIds(filters, cap = 500) {
+        return this.repository.getFilteredIds(filters, cap);
+    }
+
+    /**
+     * Bulk-deletes products identified by the provided IDs.
+     *
+     * Responsibilities:
+     *  1. Require online connectivity (throws OfflineError if offline).
+     *  2. Delegate Firestore deletion to the repository (batched, partial-failure safe).
+     *  3. Remove successfully deleted entities from EntityStore and all cached lists.
+     *  4. Stale affected cache groups and notify subscribers — once for the whole batch.
+     *  5. Trigger a single domain sync.
+     *
+     * @param {string[]} ids
+     * @returns {Promise<{ deletedIds: string[], failedIds: string[], errors: Array<{ id, message }> }>}
+     */
+    async deleteMany(ids) {
+        const { ConnectivityService } = await import('../../../connectivity/ConnectivityService.js');
+        await ConnectivityService.getInstance().requireOnline();
+
+        // Delegate Firestore batch deletion
+        const result = await this.repository.deleteMany(ids);
+        const { deletedIds } = result;
+
+        if (deletedIds.length > 0) {
+            // Bump epoch once for the whole batch
+            this.mutationEpoch++;
+
+            // Remove each successfully deleted entity from EntityStore and cache lists
+            for (const id of deletedIds) {
+                const detailKey = `product_cache_detail_v1_${id}`;
+                try { await QueryIndexStore.remove('product_query', detailKey); } catch (_) {}
+                try { await EntityStore.remove('product', id); } catch (_) {}
+                try { await this.registry.remove('details', detailKey); } catch (_) {}
+                await this._removeIdFromLists(id);
+            }
+
+            // Stale all list / stats caches — once for the whole batch
+            await this._staleGroups(['lists', 'latest', 'bestsellers', 'related', 'stats']);
+
+            // Notify subscribers and trigger sync — once
+            this._notifyAllSubscribers();
+            syncCoordinator.syncDomain('products');
+        }
+
+        return result;
+    }
+
+
     async _executeMutationDirectly(mutation) {
         // Obsolete: Handled by ProductSyncAdapter
     }
