@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ProductCard from './ProductCard';
 import { Loader2, Sliders } from 'lucide-react';
-import { fetchProductsPaginated, subscribeToProducts, fetchAvailableBrandIds } from '../services/productService';
+import { productRepository } from '../services/productService';
+import { fetchAvailableBrandIds } from '../services/productService';
 import { useTaxonomyStore } from '../services/taxonomyService';
 import DesktopFilterPanel from './filters/DesktopFilterPanel';
 import MobileFilterDrawer from './filters/MobileFilterDrawer';
@@ -16,7 +17,13 @@ export default function ProductList({
     subtitle = 'حصرية',
     description = 'اختر ما يناسب ذوقك الرفيع من مجموعتنا المميزة'
 }) {
-    const [products, setProducts] = useState([]);
+    const [productsByPage, setProductsByPage] = useState({});
+    const products = useMemo(() => {
+        return Object.keys(productsByPage)
+            .sort((a, b) => Number(a) - Number(b))
+            .flatMap(k => productsByPage[k] || []);
+    }, [productsByPage]);
+
     const [loading, setLoading] = useState(true);
     const [showLoader, setShowLoader] = useState(false);
     
@@ -33,13 +40,13 @@ export default function ProductList({
     const [page, setPage] = useState(0);
     const [hasMore, setHasMore] = useState(true);
     const nextCursorRef = useRef(null);
-    const requestIdRef = useRef(0); // Race condition protection for rapid filter changes
+    const requestIdRef = useRef(0);
+    const subsRef = useRef({}); // Tracks subscriptions for each page
 
     const store = useTaxonomyStore();
     const activeCategories = store.categories.filter(c => c.active !== false).sort((a, b) => (a.order || 0) - (b.order || 0));
     const activeBrands = store.brands.filter(b => b.active !== false).sort((a, b) => (a.order || 0) - (b.order || 0));
 
-    // Filters state
     const [filterCategoryIds, setFilterCategoryIds] = useState(initialCategory === 'all' ? [] : [initialCategory]);
     const [filterBrandIds, setFilterBrandIds] = useState(initialBrand === 'all' ? [] : [initialBrand]);
     const [sortPrice, setSortPrice] = useState('none');
@@ -50,8 +57,7 @@ export default function ProductList({
     const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
     const [isDesktopFilterOpen, setIsDesktopFilterOpen] = useState(window.innerWidth >= 992);
     
-    // Fixed Filter Panel state
-    const [filterState, setFilterState] = useState('normal'); // 'normal', 'fixed', 'bottom'
+    const [filterState, setFilterState] = useState('normal');
     const layoutRef = useRef(null);
     const fixedPanelRef = useRef(null);
 
@@ -66,7 +72,6 @@ export default function ProductList({
             const layoutRect = layoutRef.current.getBoundingClientRect();
             const panelHeight = fixedPanelRef.current.offsetHeight;
             
-            // 100px is the header threshold
             if (layoutRect.bottom <= (100 + panelHeight)) {
                 setFilterState('bottom');
             } else if (layoutRect.top <= 100) {
@@ -81,12 +86,11 @@ export default function ProductList({
             if (entry.isIntersecting) {
                 window.addEventListener('scroll', checkBounds, { passive: true });
                 window.addEventListener('resize', checkBounds, { passive: true });
-                checkBounds(); // initial check
+                checkBounds(); 
             } else {
                 window.removeEventListener('scroll', checkBounds);
                 window.removeEventListener('resize', checkBounds);
                 
-                // If it's no longer intersecting, determine if we scrolled past it or above it
                 if (entry.boundingClientRect.top < 0) {
                     setFilterState('bottom');
                 } else {
@@ -94,7 +98,7 @@ export default function ProductList({
                 }
             }
         }, {
-            rootMargin: '200px' // Start monitoring slightly before it enters the viewport
+            rootMargin: '200px'
         });
 
         observer.observe(layout);
@@ -106,7 +110,6 @@ export default function ProductList({
         };
     }, []);
 
-    // Contextual Brands state
     const [contextualBrandIds, setContextualBrandIds] = useState(null);
 
     const handleClearFilters = () => {
@@ -134,29 +137,50 @@ export default function ProductList({
         if (node) observer.current.observe(node);
     }, [loading, loadingMore, hasMore]);
 
-    const loadProducts = useCallback(async (pageNum, isInitial = false, currentSeed = randomSeed) => {
-        // Increment request ID for race condition protection
+    // Cleanup all subscriptions
+    const cleanupSubs = useCallback(() => {
+        Object.values(subsRef.current).forEach(unsub => unsub && unsub());
+        subsRef.current = {};
+    }, []);
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return cleanupSubs;
+    }, [cleanupSubs]);
+
+    const loadProducts = useCallback((pageNum, isInitial = false, currentSeed = randomSeed) => {
         const thisRequestId = isInitial ? ++requestIdRef.current : requestIdRef.current;
+        
+        if (isInitial) {
+            setLoading(true);
+            setProductsByPage({});
+        } else {
+            setLoadingMore(true);
+        }
 
-        try {
-            if (isInitial) setLoading(true);
-            else setLoadingMore(true);
+        const filters = {
+            categoryIds: filterCategoryIds,
+            brandIds: filterBrandIds,
+            sortPrice,
+            minPrice: minPrice !== '' ? Number(minPrice) : null,
+            maxPrice: maxPrice !== '' ? Number(maxPrice) : null,
+            search: searchQuery.trim() !== '' ? searchQuery : null
+        };
 
-            const filters = {
-                categoryIds: filterCategoryIds,
-                brandIds: filterBrandIds,
-                sortPrice,
-                minPrice: minPrice !== '' ? Number(minPrice) : null,
-                maxPrice: maxPrice !== '' ? Number(maxPrice) : null,
-                search: searchQuery.trim() !== '' ? searchQuery : null
-            };
+        const currentCursor = isInitial ? null : nextCursorRef.current;
 
-            const currentCursor = isInitial ? null : nextCursorRef.current;
-            const data = await fetchProductsPaginated(pageNum, 6, filters, currentCursor);
+        // Clean up previous subscription for this specific page if any
+        if (subsRef.current[pageNum]) {
+            subsRef.current[pageNum]();
+        }
 
-            // Race condition guard: discard result if a newer request has been issued
-            if (thisRequestId !== requestIdRef.current) {
-                return; // A newer filter change superseded this request
+        const unsub = productRepository.subscribeToPaginatedSWR(filters, pageNum, 6, currentCursor, (data) => {
+            if (thisRequestId !== requestIdRef.current) return;
+
+            if (!data || !data.products) {
+                if (isInitial) setLoading(false);
+                else setLoadingMore(false);
+                return;
             }
 
             const mappedNewProducts = data.products.map(p => ({
@@ -166,39 +190,30 @@ export default function ProductList({
                 video: p.video || ''
             }));
 
-            if (isInitial) {
-                setProducts(mappedNewProducts);
-            } else {
-                setProducts(prev => [...prev, ...mappedNewProducts]);
+            setProductsByPage(prev => ({
+                ...prev,
+                [pageNum]: mappedNewProducts
+            }));
+
+            // Only update cursor and hasMore if it's the latest page requested
+            // (prevents background revalidations of page 0 from clearing page 1's cursor)
+            if (pageNum === page) {
+                setHasMore(data.hasMore);
+                nextCursorRef.current = data.nextCursor;
             }
 
-            setHasMore(data.hasMore);
-            nextCursorRef.current = data.nextCursor;
             setError(null);
-        } catch (err) {
-            // Race condition guard: don't show error if a newer request has been issued
-            if (thisRequestId !== requestIdRef.current) {
-                return;
-            }
-            console.error('[ProductFilter] Loading error:', {
-                operation: 'fetchProducts',
-                filters: { categoryIds: filterCategoryIds, brandIds: filterBrandIds, sortPrice, minPrice, maxPrice, search: searchQuery },
-                errorMessage: err?.message || err,
-                errorCode: err?.code,
-                originalError: err
-            });
-            setError("عذراً، فشل تحميل المنتجات.");
-        } finally {
-            if (thisRequestId === requestIdRef.current) {
-                setLoading(false);
-                setLoadingMore(false);
-            }
-        }
-    }, [filterCategoryIds, filterBrandIds, sortPrice, minPrice, maxPrice, searchQuery, randomSeed]);
+            
+            if (isInitial) setLoading(false);
+            else setLoadingMore(false);
+        });
 
-    // Initial load and filter change load with DEBOUNCE
+        subsRef.current[pageNum] = unsub;
+    }, [filterCategoryIds, filterBrandIds, sortPrice, minPrice, maxPrice, searchQuery, randomSeed, page]);
+
     useEffect(() => {
         const timer = setTimeout(() => {
+            cleanupSubs();
             const newSeed = Math.random().toString(36).substring(7);
             setRandomSeed(newSeed);
             setPage(0);
@@ -208,12 +223,11 @@ export default function ProductList({
         return () => clearTimeout(timer);
     }, [JSON.stringify(filterCategoryIds), JSON.stringify(filterBrandIds), sortPrice, minPrice, maxPrice, searchQuery]);
 
-    // Load more when page changes
     useEffect(() => {
         if (page > 0) {
-            loadProducts(page);
+            loadProducts(page, false, randomSeed);
         }
-    }, [page, loadProducts]);
+    }, [page]);
 
     // Fetch Contextual Brands when category filter changes
     useEffect(() => {

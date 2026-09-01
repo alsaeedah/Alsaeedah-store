@@ -4,6 +4,7 @@ import { QueryIndexStore } from '../../../storage/QueryIndexStore.js';
 import { ProductCacheRegistry } from './ProductCacheRegistry.js';
 import { MutationQueue, MutationOperation } from '../../../sync/mutation/index.js';
 import { syncCoordinator } from '../../../sync/index.js';
+import { lifecycleCoordinator } from '../../../startup/LifecycleCoordinator.js';
 
 const CACHE_VERSION = 'v1';
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -62,16 +63,31 @@ export class ProductDAL {
         this.queue.onQueueChanged(() => {
             this._notifyAllSubscribers();
         });
+
+        // Listen to lifecycle events for automatic background revalidation
+        lifecycleCoordinator.subscribe((reason) => {
+            this._revalidateActiveSubscribers(reason);
+        });
+    }
+
+    async _revalidateActiveSubscribers(reason) {
+        // console.log(`[ProductDAL] Lifecycle event '${reason}' triggered revalidation for active subscribers.`);
+        for (const [key, cacheEntry] of this.cacheSubscribers.entries()) {
+            if (cacheEntry.fetcher && cacheEntry.type) {
+                // Background revalidate skips TTL check
+                this._revalidate(key, cacheEntry.fetcher, cacheEntry.type);
+            }
+        }
     }
     
     _notifyAllSubscribers() {
-        for (const [key, subs] of this.cacheSubscribers.entries()) {
+        for (const [key, cacheEntry] of this.cacheSubscribers.entries()) {
             QueryIndexStore.get('product_query', key).then(async cachedRaw => {
                 const cached = await this._hydrateData(cachedRaw);
                 if (cached && this._isValidCacheEntry(cached)) {
-                    const typePart = key.split('_')[2];
+                    const typePart = cacheEntry.type || key.split('_')[2];
                     const optData = this._applyOptimisticState(cached.data, typePart);
-                    subs.forEach(sub => sub.callback(optData));
+                    cacheEntry.subs.forEach(sub => sub.callback(optData));
                 }
             }).catch(() => {});
         }
@@ -80,7 +96,7 @@ export class ProductDAL {
     _applyOptimisticState(data, type) {
         if (!this.queue || !this.queue.initialized) return data;
         
-        if (type === 'detail') {
+        if (type === 'detail' || type === 'details') {
             const documentId = data ? data.id : null;
             if (!documentId) return data;
 
@@ -107,7 +123,7 @@ export class ProductDAL {
             return deleted ? null : result;
         } 
         
-        if (type === 'list' || type === 'ids' || type === 'latest' || type === 'bestsellers' || type === 'related') {
+        if (type === 'list' || type === 'lists' || type === 'ids' || type === 'latest' || type === 'bestsellers' || type === 'related') {
             if (data && typeof data === 'object' && !Array.isArray(data) && Array.isArray(data.products)) {
                 return {
                     ...data,
@@ -149,17 +165,26 @@ export class ProductDAL {
         return result;
     }
 
-    _subscribeToCache(key, callback) {
+    _subscribeToCache(key, fetcher, type, callback) {
         if (!this.cacheSubscribers.has(key)) {
-            this.cacheSubscribers.set(key, new Set());
+            this.cacheSubscribers.set(key, { subs: new Set(), fetcher, type });
         }
+        const cacheEntry = this.cacheSubscribers.get(key);
         const subObj = { callback };
-        const subs = this.cacheSubscribers.get(key);
-        subs.add(subObj);
+        cacheEntry.subs.add(subObj);
         
+        // Immediately fetch data and pass to callback
+        this._fetchWithCache(key, fetcher, { type }).then(data => {
+            if (cacheEntry.subs.has(subObj)) {
+                callback(data);
+            }
+        }).catch(err => {
+            console.warn(`[ProductDAL] Initial SWR fetch failed for ${key}`, err);
+        });
+
         return () => {
-            subs.delete(subObj);
-            if (subs.size === 0) {
+            cacheEntry.subs.delete(subObj);
+            if (cacheEntry.subs.size === 0) {
                 this.cacheSubscribers.delete(key);
             }
         };
@@ -277,10 +302,10 @@ export class ProductDAL {
                 await this._setCacheSafe(key, freshData, type);
                 this._registerCache(type, key);
 
-                const subs = this.cacheSubscribers.get(key);
-                if (subs) {
+                const cacheEntry = this.cacheSubscribers.get(key);
+                if (cacheEntry && cacheEntry.subs) {
                     const optData = this._applyOptimisticState(freshData, type.substring(0, type.length - 1));
-                    subs.forEach(sub => sub.callback(optData));
+                    cacheEntry.subs.forEach(sub => sub.callback(optData));
                 }
             } catch (err) {
                 console.warn(`[ProductDAL] Background revalidation failed for ${key}:`, err);
@@ -472,45 +497,20 @@ export class ProductDAL {
         syncCoordinator.syncDomain('products');
     }
 
-    /**
-     * Returns the IDs of all products matching the given filters.
-     * Thin pass-through to the repository — not cached because IDs are invalidated
-     * by every mutation and the scan is bounded by design.
-     *
-     * @param {Object} filters
-     * @param {number} [cap=500]
-     * @returns {Promise<{ ids: string[], capped: boolean }>}
-     */
     async getFilteredIds(filters, cap = 500) {
         return this.repository.getFilteredIds(filters, cap);
     }
 
-    /**
-     * Bulk-deletes products identified by the provided IDs.
-     *
-     * Responsibilities:
-     *  1. Require online connectivity (throws OfflineError if offline).
-     *  2. Delegate Firestore deletion to the repository (batched, partial-failure safe).
-     *  3. Remove successfully deleted entities from EntityStore and all cached lists.
-     *  4. Stale affected cache groups and notify subscribers — once for the whole batch.
-     *  5. Trigger a single domain sync.
-     *
-     * @param {string[]} ids
-     * @returns {Promise<{ deletedIds: string[], failedIds: string[], errors: Array<{ id, message }> }>}
-     */
     async deleteMany(ids) {
         const { ConnectivityService } = await import('../../../connectivity/ConnectivityService.js');
         await ConnectivityService.getInstance().requireOnline();
 
-        // Delegate Firestore batch deletion
         const result = await this.repository.deleteMany(ids);
         const { deletedIds } = result;
 
         if (deletedIds.length > 0) {
-            // Bump epoch once for the whole batch
             this.mutationEpoch++;
 
-            // Remove each successfully deleted entity from EntityStore and cache lists
             for (const id of deletedIds) {
                 const detailKey = `product_cache_detail_v1_${id}`;
                 try { await QueryIndexStore.remove('product_query', detailKey); } catch (_) {}
@@ -519,10 +519,8 @@ export class ProductDAL {
                 await this._removeIdFromLists(id);
             }
 
-            // Stale all list / stats caches — once for the whole batch
             await this._staleGroups(['lists', 'latest', 'bestsellers', 'related', 'stats']);
 
-            // Notify subscribers and trigger sync — once
             this._notifyAllSubscribers();
             syncCoordinator.syncDomain('products');
         }
@@ -530,9 +528,7 @@ export class ProductDAL {
         return result;
     }
 
-
     async _executeMutationDirectly(mutation) {
-        // Obsolete: Handled by ProductSyncAdapter
     }
 
     async _addIdToLists(id) {
@@ -592,7 +588,7 @@ export class ProductDAL {
                 for (const key of keys) {
                     const cached = await QueryIndexStore.get('product_query', key);
                     if (cached) {
-                        cached.timestamp = 0; // mark stale to trigger background fetch
+                        cached.timestamp = 0; 
                         await QueryIndexStore.set('product_query', key, cached);
                     }
                 }
@@ -633,8 +629,6 @@ export class ProductDAL {
 
     async _onMutationConflict(documentId) {
         this.mutationEpoch++;
-        // On conflict, we should just stale everything so it re-fetches from server,
-        // but we should fetch the specific document immediately to fix detail view.
         try {
             const fresh = await this.repository.getById(documentId);
             if (fresh) {
@@ -651,27 +645,32 @@ export class ProductDAL {
 
     subscribeToLatestSWR(limitCount, callback) {
         const key = `product_cache_latest_${CACHE_VERSION}_${limitCount}`;
-        return this._subscribeToCache(key, callback);
+        return this._subscribeToCache(key, () => this.repository.getLatest(limitCount), 'latest', callback);
     }
 
     subscribeToBestSellersSWR(limitCount, callback) {
         const key = `product_cache_bestsellers_${CACHE_VERSION}_${limitCount}`;
-        return this._subscribeToCache(key, callback);
+        return this._subscribeToCache(key, () => this.repository.getBestSellers(limitCount), 'bestsellers', callback);
     }
 
     subscribeToRelatedSWR(id, limitCount, callback) {
         const key = `product_cache_related_${CACHE_VERSION}_${id}_${limitCount}`;
-        return this._subscribeToCache(key, callback);
+        return this._subscribeToCache(key, () => this.repository.getRelated(id, limitCount), 'related', callback);
     }
 
     subscribeToStatsSWR(callback) {
         const key = `product_cache_stats_${CACHE_VERSION}`;
-        return this._subscribeToCache(key, callback);
+        return this._subscribeToCache(key, () => this.repository.getStats(), 'stats', callback);
     }
 
     subscribeToPaginatedSWR(filters, page, limit, cursor, callback) {
         const serialized = deterministicStringify({ filters, page, limit });
         const key = `product_cache_list_${CACHE_VERSION}_${hashString(serialized)}`;
-        return this._subscribeToCache(key, callback);
+        return this._subscribeToCache(key, () => this.repository.getPaginated(filters, limit, cursor), 'lists', callback);
+    }
+
+    subscribeToDetailSWR(id, callback) {
+        const key = `product_cache_detail_${CACHE_VERSION}_${id}`;
+        return this._subscribeToCache(key, () => this.repository.getById(id), 'details', callback);
     }
 }

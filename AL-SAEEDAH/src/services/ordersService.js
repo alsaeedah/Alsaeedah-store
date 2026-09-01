@@ -8,6 +8,61 @@ export const ordersService = {
    * @param {string} userId - The authenticated user's ID
    * @returns {Promise<Array>}
    */
+  subscribeToUserOrders(userId, callback) {
+    if (!userId) throw new Error('User ID is required');
+
+    let isCancelled = false;
+    const cacheKey = `order_history_${userId}`;
+
+    const fetchAndNotify = async () => {
+      try {
+        const { StorageEngine } = await import('../../../shared/storage/StorageEngine');
+        
+        let cached = await StorageEngine.get(cacheKey);
+        if (cached && Array.isArray(cached) && !isCancelled) {
+          cached.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+          callback(cached);
+        }
+
+        try {
+          const q = query(collection(db, 'orders'), where('user_id', '==', userId));
+          const snapshot = await getDocs(q);
+          const freshOrders = [];
+          snapshot.forEach(doc => {
+              freshOrders.push({ id: doc.id, ...doc.data() });
+          });
+
+          freshOrders.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+          await StorageEngine.set(cacheKey, freshOrders);
+          
+          if (!isCancelled) {
+              callback(freshOrders);
+          }
+        } catch (networkErr) {
+          console.warn('[ordersService] Network failed, using cache if available');
+        }
+      } catch (e) {
+        console.error('Error fetching user orders:', e);
+      }
+    };
+
+    fetchAndNotify();
+
+    // Revalidate on lifecycle events (like resume/focus)
+    let unsubscribeLifecycle;
+    import('../../../shared/startup/LifecycleCoordinator.js').then(({ lifecycleCoordinator }) => {
+      unsubscribeLifecycle = lifecycleCoordinator.subscribe(() => {
+        if (!isCancelled) fetchAndNotify();
+      });
+    });
+
+    return () => {
+      isCancelled = true;
+      if (unsubscribeLifecycle) unsubscribeLifecycle();
+    };
+  },
+
   async getAllUserOrders(userId) {
     if (!userId) {
       throw new Error('User ID is required to fetch orders.');
@@ -19,7 +74,6 @@ export const ordersService = {
       
       let userOrders = [];
       
-      // 1. Try local cache first
       try {
           const cached = await StorageEngine.get(cacheKey);
           if (cached && Array.isArray(cached)) {
@@ -27,10 +81,6 @@ export const ordersService = {
           }
       } catch (err) {}
 
-      // 2. Try network — Firestore is the source of truth on success.
-      //    A successful response (including an empty array) always replaces
-      //    the local cache.  Only a network failure leaves the existing cache
-      //    intact so offline-first behaviour is preserved.
       let firestoreSucceeded = false;
       try {
           const q = query(collection(db, 'orders'), where('user_id', '==', userId));
@@ -40,14 +90,12 @@ export const ordersService = {
               freshOrders.push({ id: doc.id, ...doc.data() });
           });
 
-          // Sort client-side by created_at descending
           freshOrders.sort((a, b) => {
               const dateA = new Date(a.created_at || 0).getTime();
               const dateB = new Date(b.created_at || 0).getTime();
               return dateB - dateA;
           });
 
-          // Always replace — even when freshOrders is []
           userOrders = freshOrders;
           await StorageEngine.set(cacheKey, freshOrders);
           firestoreSucceeded = true;
@@ -55,7 +103,6 @@ export const ordersService = {
           console.warn('[ordersService] Network failed, using cache if available');
       }
 
-      // 3. Fallback sort for the cached result when Firestore was unreachable
       if (!firestoreSucceeded && userOrders.length > 0) {
           userOrders.sort((a, b) => {
               const dateA = new Date(a.created_at || 0).getTime();

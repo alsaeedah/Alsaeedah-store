@@ -78,6 +78,27 @@ export const StartupProvider = ({
     };
 
     boot();
+
+    let unsubscribeLifecycle;
+    import('./LifecycleCoordinator.js').then(({ lifecycleCoordinator }) => {
+        unsubscribeLifecycle = lifecycleCoordinator.subscribe(() => {
+           runBackgroundValidation(
+             auth, 
+             db, 
+             appName, 
+                 (updatedSession) => {
+                   if (onSessionUpdated) onSessionUpdated(updatedSession);
+                 },
+                 () => {
+                   if (onForceLogout) onForceLogout();
+                 }
+               );
+        });
+    });
+
+    return () => {
+        if (unsubscribeLifecycle) unsubscribeLifecycle();
+    }
   }, [auth, db, appName, onSessionResolved, onSessionUpdated, onForceLogout]);
 
   return (

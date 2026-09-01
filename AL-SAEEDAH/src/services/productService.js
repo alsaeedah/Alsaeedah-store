@@ -77,8 +77,16 @@ export const subscribeToHero = (callback) => {
 
     fetchHeroLocalFirst();
 
+    let unsubscribeLifecycle;
+    import('../../../shared/startup/LifecycleCoordinator.js').then(({ lifecycleCoordinator }) => {
+        unsubscribeLifecycle = lifecycleCoordinator.subscribe(() => {
+            if (!isCancelled) fetchHeroLocalFirst();
+        });
+    });
+
     return () => {
         isCancelled = true;
+        if (unsubscribeLifecycle) unsubscribeLifecycle();
     };
 };
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-
+import { useProductDetail, useRelatedProducts } from '../hooks/useProductSWR';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { createPortal } from 'react-dom';
 
@@ -748,9 +748,9 @@ const ProductDetails = () => {
   const { showLoader, hideLoader } = useLoader();
   const { activeVideoId, setActiveVideoId, isVideoPlaying, setIsVideoPlaying } = useVideo();
 
-  const [product, setProduct] = useState(null);
-  const [relatedProducts, setRelatedProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { product, loading } = useProductDetail(id);
+  const { data: relatedProducts } = useRelatedProducts(id, 12);
+  
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [mediaMode, setMediaMode] = useState('image');
   const [activeImage, setActiveImage] = useState('');
@@ -769,59 +769,22 @@ const ProductDetails = () => {
     const timer = setTimeout(() => {
       if (isMounted && loading) setShowSkeleton(true);
     }, 150);
+    
+    if (!loading && isMounted) {
+      setShowSkeleton(false);
+    }
+    
     return () => { isMounted = false; clearTimeout(timer); };
   }, [loading]);
 
-  /* ── Load product ── */
+  /* ── Sync active image when product loads ── */
   useEffect(() => {
-    let isMounted = true;
-    setLoading(true);
-    
-    fetchProductById(id).then(data => {
-      if (!isMounted) return;
-      if (data) {
-        setProduct(data);
-        if (data.video && data.imageUrl?.includes('placehold.co')) setMediaMode('video');
-        const firstImage = data.imageUrl || (data.images?.length > 0 ? data.images[0] : '');
+    if (product) {
+        if (product.video && product.imageUrl?.includes('placehold.co')) setMediaMode('video');
+        const firstImage = product.imageUrl || (product.images?.length > 0 ? product.images[0] : '');
         setActiveImage(firstImage);
-      } else {
-        setProduct(null);
-      }
-      setLoading(false);
-    });
-    
-    return () => { isMounted = false; };
-  }, [id]);
-
-  /* ── Load related products ── */
-  useEffect(() => {
-    const fetchRelated = async () => {
-      const data = await fetchRelatedProducts(id, 12);
-      if (data) {
-        setRelatedProducts(data.map(p => ({
-          ...p,
-          price: Number(p.price) || 0,
-          image: p.imageUrl || p.image || 'https://placehold.co/400x500/1a1a1a/ffffff?text=No+Image',
-          video: p.video || ''
-        })));
-      }
-    };
-    
-    const unsubscribeSWR = subscribeToRelatedSWR(id, (freshData) => {
-      if (freshData) {
-        setRelatedProducts(freshData.map(p => ({
-          ...p,
-          price: Number(p.price) || 0,
-          image: p.imageUrl || p.image || 'https://placehold.co/400x500/1a1a1a/ffffff?text=No+Image',
-          video: p.video || ''
-        })));
-      }
-    }, 12);
-
-    fetchRelated();
-
-    return () => unsubscribeSWR();
-  }, [id]);
+    }
+  }, [product]);
 
   const handleBuyNow = () => setShowModal(true);
   const handleAddToCart = () => setShowModal(true);

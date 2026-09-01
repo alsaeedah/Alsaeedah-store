@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, useMotionValue, useTransform } from 'framer-motion';
-import { fetchLatestProducts, subscribeToProducts } from '../services/productService';
+import { useLatestProducts } from '../hooks/useProductSWR';
 import { useNavigate } from 'react-router-dom';
 import MinimalProductCard from './MinimalProductCard';
 
@@ -93,8 +93,7 @@ const SkeletonLoader = () => (
 );
 
 const LatestProducts = () => {
-    const [products, setProducts] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const { data: products, loading } = useLatestProducts(6);
     const [showSkeleton, setShowSkeleton] = useState(false);
 
     useEffect(() => {
@@ -103,26 +102,15 @@ const LatestProducts = () => {
             if (isMounted && loading) setShowSkeleton(true);
         }, 150);
 
-        import('../services/productService').then(({ fetchLatestProducts }) => {
-            fetchLatestProducts().then((data) => {
-                if (isMounted) {
-                    setProducts(data || []);
-                    setLoading(false);
-                    setShowSkeleton(false);
-                }
-            }).catch(() => {
-                if (isMounted) {
-                    setLoading(false);
-                    setShowSkeleton(false);
-                }
-            });
-        });
+        if (!loading && isMounted) {
+            setShowSkeleton(false);
+        }
 
         return () => {
             isMounted = false;
             clearTimeout(timer);
         };
-    }, []);
+    }, [loading]);
 
     if (!loading && products.length === 0) return null;
 

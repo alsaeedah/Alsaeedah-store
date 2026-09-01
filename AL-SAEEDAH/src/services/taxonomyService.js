@@ -4,11 +4,20 @@ import { TaxonomyDAL } from '../../../shared/taxonomy/infrastructure/cache/Taxon
 import { CachedTaxonomyRepository } from '../../../shared/taxonomy/infrastructure/CachedTaxonomyRepository.js';
 import { useStore } from 'zustand';
 import { db } from '../firebase/config.js';
+import { lifecycleCoordinator } from '../../../shared/startup/LifecycleCoordinator.js';
 
 // Initialize the caching layer and repository
 const firestoreRepository = new FirestoreTaxonomyRepository(db);
 const dal = new TaxonomyDAL(firestoreRepository);
 const repository = new CachedTaxonomyRepository(dal, firestoreRepository);
+
+// Auto-revalidate taxonomy on lifecycle events
+lifecycleCoordinator.subscribe(() => {
+    // Only refresh if already initialized to avoid duplicate initial fetches
+    if (taxonomyStore.getState().initialized) {
+        refreshTaxonomies();
+    }
+});
 
 /**
  * Ensures taxonomy cache is fully initialized exactly once.

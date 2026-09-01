@@ -12,50 +12,37 @@ export function useOrders(pageSize = 10) {
   const [hasMore, setHasMore] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Monotonically-increasing counter used to discard responses from stale
-  // in-flight requests.  Each fetchOrders call increments the counter and
-  // captures its own generation; the state-update block is only executed
-  // when the captured generation still matches the latest one.
-  const fetchGeneration = useRef(0);
-
-  const fetchOrders = useCallback(async () => {
+  useEffect(() => {
     if (!currentUser) {
       setLoading(false);
       return;
     }
 
-    // Claim this generation before any async work begins.
-    const generation = ++fetchGeneration.current;
+    setLoading(true);
+    setError(null);
 
-    try {
-      setLoading(true);
-      setError(null);
+    const unsubscribe = ordersService.subscribeToUserOrders(
+      currentUser.uid || currentUser.id,
+      (result) => {
+        setAllOrders(result);
+        
+        setOrders(prev => {
+           // We need to keep the loaded pages
+           // If we were on page 1, show pageSize.
+           // If we were on page 3, show 3*pageSize.
+           // But since state might not be up-to-date in the closure, we can use a functional update or just rely on currentPage from the outer scope if we add it to deps.
+           return result.slice(0, currentPage * pageSize);
+        });
 
-      const result = await ordersService.getAllUserOrders(currentUser.uid || currentUser.id);
+        setHasMore(result.length > currentPage * pageSize);
+        setLoading(false);
+      }
+    );
 
-      // Discard if a newer request has already claimed the slot.
-      if (generation !== fetchGeneration.current) return;
+    return () => unsubscribe();
+  }, [currentUser, pageSize, currentPage]);
 
-      setAllOrders(result);
-      setOrders(result.slice(0, pageSize));
-      setHasMore(result.length > pageSize);
-      setCurrentPage(1);
-
-      setLoading(false);
-    } catch (err) {
-      // Only surface the error if this is still the latest request.
-      if (generation !== fetchGeneration.current) return;
-
-      console.error('Failed to fetch orders:', err);
-      setError(err.message || 'Unable to load your orders');
-      setLoading(false);
-    }
-  }, [currentUser, pageSize]);
-
-  const refreshOrders = useCallback(() => {
-    return fetchOrders();
-  }, [fetchOrders]);
-
+  // Keep loadMoreOrders exactly the same
   const loadMoreOrders = useCallback(() => {
     if (hasMore && !loadingMore) {
       setLoadingMore(true);
@@ -67,9 +54,15 @@ export function useOrders(pageSize = 10) {
         setCurrentPage(nextPage);
         setHasMore(allOrders.length > nextOrders.length);
         setLoadingMore(false);
-      }, 400); // Small artificial delay to show loader feedback
+      }, 400); 
     }
   }, [allOrders, currentPage, hasMore, pageSize, loadingMore]);
+
+  // We no longer need refreshOrders, or we can just make it a no-op 
+  // since lifecycleCoordinator handles visibilitychange
+  const refreshOrders = useCallback(() => {
+     // Optional: could manually trigger lifecycleCoordinator if we wanted a pull-to-refresh
+  }, []);
 
   return {
     orders,
