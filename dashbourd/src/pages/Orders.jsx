@@ -6,10 +6,11 @@ import { db } from '../firebase/config';
 import Swal from 'sweetalert2';
 import { StorageEngine } from '../../../shared/storage/StorageEngine.js';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Download, Trash2, CheckCircle, XCircle, RotateCcw, Loader2, ShoppingCart, TrendingUp, Clock, Users as UsersIcon, Box, ShoppingBag } from 'lucide-react';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import { Search, Download, Trash2, CheckCircle, XCircle, RotateCcw, Loader2, ShoppingCart, TrendingUp, Clock, Users as UsersIcon, Box, ShoppingBag, Printer } from 'lucide-react';
+import InvoiceActionMenu from '../components/InvoiceActionMenu';
 import { dashboardOrdersRepository } from '../services/DashboardOrdersRepository';
+import { downloadInvoice } from '../services/invoice/invoiceDownload';
+import { printInvoice } from '../services/invoice/invoicePrint';
 
 const Orders = () => {
 
@@ -25,6 +26,7 @@ const Orders = () => {
     const location = useLocation();
     const [highlightOrderId, setHighlightOrderId] = useState(null);
     const [deletingOrderId, setDeletingOrderId] = useState(null);
+    const [invoiceLoadingId, setInvoiceLoadingId] = useState(null);
     const orderRefs = useRef({});  // { [orderId]: DOM element }
 
     const lastDocRef = useRef(null);
@@ -242,188 +244,38 @@ const Orders = () => {
         }
     };
 
-    const generateInvoice = async (order, paymentType) => {
-        startLoading('جاري إنشاء الفاتورة وتحميل البيانات...');
-        const invoiceId = `ORD${order.order_number}`;
-        const dateStr = new Date(order.created_at).toLocaleDateString('ar-SA');
-        const customerUser = order.users || {};
-        const logo = '/logo.png';
-
-        const invoiceDiv = document.createElement('div');
-        invoiceDiv.id = 'temp-invoice';
-        invoiceDiv.style.position = 'absolute';
-        invoiceDiv.style.left = '-9999px';
-        invoiceDiv.style.top = '-9999px';
-        invoiceDiv.style.width = '800px';
-        invoiceDiv.style.padding = '40px';
-        invoiceDiv.style.background = '#ffffff';
-        invoiceDiv.style.color = '#000';
-        invoiceDiv.style.fontFamily = "'Cairo', sans-serif";
-        invoiceDiv.style.direction = 'rtl';
-
-        const items = Array.isArray(order.items) ? order.items : [];
-        const addressData = order.customer_address;
-        const addressText = addressData && typeof addressData === 'object'
-            ? `${addressData.governorate || ''} - ${addressData.district || ''}`.replace(/^ - | - $/g, '') || 'غير محدد'
-            : (addressData || 'غير محدد');
-
-
-        const cashSelected = paymentType === 'cash';
-        const creditSelected = paymentType === 'credit';
-
-        invoiceDiv.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #d4af37; padding-bottom: 20px; margin-bottom: 20px;">
-                <div style="flex: 1; text-align: right;">
-                    <h1 style="color: #d4af37; font-size: 28px; margin: 0 0 10px 0; font-weight: 700;">متجر السعيدة</h1>
-                    <div style="font-size: 13px; color: #444; line-height: 1.8;">
-                         <p style="margin: 0;"><strong>تواصل : </strong> 772754414, 775055319</p>
-                         <p style="margin: 0;"><strong>الإيميل : </strong> alsaeedah8@gmail.com</p>
-                         <p style="margin: 0; direction: ltr; text-align: right;"><strong>العنوان : </strong>حضرموت / المكلا / الشرج </p>
-                    </div>
-                </div>
-                <div style="flex: 1; text-align: center; justify-content: center;">
-                    <img src="${logo}" style="width: 100px; height: 100px;" />
-                </div>
-                <div style="flex: 1; text-align: left; display: flex; flex-direction: column; justify-content: space-between; height: 100px;">
-                    <div>
-                        <p style="margin: 0; font-size: 15px; color: #d4af37; font-weight: bold; font-style: italic;">"الفخامة ... في كل ثانية"</p>
-                        <p style="margin: 5px 0 0; color: #888; font-size: 11px;">نصنع التميز، لنهديه إليكم</p>
-                    </div>
-                    <div style="font-size: 12px; color: #666;">
-                        <span style="display: block; margin-bottom: 3px;">رقم الفاتورة: <strong>${invoiceId}</strong></span>
-                        <span>التاريخ: ${dateStr}</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ═══ PAYMENT TYPE SELECTOR ═══ -->
-            <div data-segment="payment-type" style="display: flex; justify-content: center; margin-bottom: 14px;">
-                <div style="display: inline-flex; align-items: center; border: 1.5px solid #e0d5b5; border-radius: 10px; padding: 8px 28px; gap: 0; background: #fff;">
-                    <!-- نوع الدفع label -->
-                    <span style="font-size: 14px; font-weight: 700; color: #333; padding-inline-end: 16px;">نوع الدفع:</span>
-                    <!-- نقد option -->
-                    <div style="display: flex; align-items: center; gap: 8px; padding-inline-end: 18px;">
-                        <div style="width: 18px; height: 18px; border-radius: 50%; border: 2px solid #d4af37; display: flex; align-items: center; justify-content: center; background: #fff;">
-                            ${cashSelected ? '<div style="width: 10px; height: 10px; border-radius: 50%; background: #d4af37;"></div>' : ''}
-                        </div>
-                        <span style="font-size: 14px; font-weight: 600; color: #333;">نقد</span>
-                    </div>
-                    <!-- Divider -->
-                    <div style="width: 1px; height: 20px; background: #e0d5b5;"></div>
-                    <!-- أجل option -->
-                    <div style="display: flex; align-items: center; gap: 8px; padding-inline-start: 18px;">
-                        <div style="width: 18px; height: 18px; border-radius: 50%; border: 2px solid #d4af37; display: flex; align-items: center; justify-content: center; background: #fff;">
-                            ${creditSelected ? '<div style="width: 10px; height: 10px; border-radius: 50%; background: #d4af37;"></div>' : ''}
-                        </div>
-                        <span style="font-size: 14px; font-weight: 600; color: #333;">أجل</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ═══ CUSTOMER INFO (Compact) ═══ -->
-            <div data-segment="customer-info" style="margin-bottom: 10px; font-size: 14px; color: #333;">
-                <!-- Row 1: Customer Name -->
-                <div style="display: flex; align-items: baseline; gap: 8px; padding: 8px 0; border-bottom: 1px solid #eee;">
-                    <strong style="color: #555; white-space: nowrap;">الاسم:</strong>
-                    <span style="font-weight: 600;">${order.customer_name || customerUser.name || 'غير معروف'}</span>
-                </div>
-                <!-- Row 2: Address + Phone -->
-                <div style="display: flex; justify-content: space-between; align-items: baseline; padding: 8px 0;">
-                    <div style="display: flex; align-items: baseline; gap: 8px;">
-                        <strong style="color: #555; white-space: nowrap;">العنوان:</strong>
-                        <span>${addressText}</span>
-                    </div>
-                    <div style="display: flex; align-items: baseline; gap: 8px;">
-                        <strong style="color: #555; white-space: nowrap;">رقم الجوال:</strong>
-                        <span style="direction: ltr; display: inline-block;">${order.customer_phone || customerUser.phone || 'غير متوفر'}</span>
-                    </div>
-                </div>
-            </div>
-
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
-                <thead>
-                    <tr style="background: rgba(212, 175, 55, 0.1); color: #000;">
-                        <th style="padding: 15px; text-align: right; border-bottom: 2px solid #d4af37;">رقم الموديل</th>
-                        <th style="padding: 15px; text-align: right; border-bottom: 2px solid #d4af37;">المنتج</th>
-                        <th style="padding: 15px; text-align: center; border-bottom: 2px solid #d4af37;">السعر</th>
-                        <th style="padding: 15px; text-align: center; border-bottom: 2px solid #d4af37;">الكمية</th>
-                        <th style="padding: 15px; text-align: left; border-bottom: 2px solid #d4af37;">الإجمالي</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${items.map(item => `
-                        <tr data-segment="row" style="border-bottom: 1px solid #eee;">
-                            <td style="padding: 15px; text-align: right; color: #555; font-size: 13px; font-weight: bold;">#${item.displayId || '---'}</td>
-                            <td style="padding: 15px; text-align: right; color: #000; font-weight: 600;">${item.name || item.title}</td>
-                            <td style="padding: 15px; text-align: center; color: #333;">${(item.price || 0).toLocaleString()} ر.س</td>
-                            <td style="padding: 15px; text-align: center; color: #333;">${item.dp_qty || item.quantity || 1}</td>
-                            <td style="padding: 15px; text-align: left; color: #d4af37; font-weight: bold;">${((item.price || 0) * (item.dp_qty || item.quantity || 1)).toLocaleString()} ر.س</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-
-            <div data-segment="total" style="display: flex; flex-direction: column; align-items: flex-start; margin-top: 30px; padding: 20px; background: #fcfcfc; border: 1px solid #eee; border-radius: 8px;">
-                <div style="width: 100%; display: flex; justify-content: space-between; font-size: 22px; font-weight: bold;">
-                    <span style="color: #000;">الإجمالي الكلي:</span>
-                    <span style="color: #d4af37;">${order.total_amount.toLocaleString()} ر.س</span>
-                </div>
-            </div>
-
-            <div style="margin-top: 60px; text-align: center; color: #888; font-size: 13px;">
-                <p style="margin-bottom: 5px;">نشكركم على اختياركم متجر السعيدة - الفخامة في كل ثانية</p>
-            </div>
-        `;
-
-        document.body.appendChild(invoiceDiv);
-
-        const PAGE_HEIGHT_PX = 1120;
-        const segments = invoiceDiv.querySelectorAll('tbody tr, [data-segment]');
-        segments.forEach(el => {
-            const elBottom = el.offsetTop + el.offsetHeight;
-            const currentPageBottom = Math.ceil(el.offsetTop / PAGE_HEIGHT_PX) * PAGE_HEIGHT_PX;
-            if (elBottom > currentPageBottom && el.offsetTop < currentPageBottom) {
-                const spacer = document.createElement('div');
-                spacer.style.height = `${currentPageBottom - el.offsetTop + 2}px`;
-                el.parentNode.insertBefore(spacer, el);
-            }
-        });
-
+    const handleDownloadInvoice = async (order, paymentType) => {
+        setInvoiceLoadingId({ id: order.id, action: 'download' });
         try {
-            const canvas = await html2canvas(invoiceDiv, {
-                backgroundColor: '#ffffff',
-                scale: 2,
-                useCORS: true,
-                logging: false
-            });
-            const imgData = canvas.toDataURL('image/png');
-
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const pageWidth = pdf.internal.pageSize.getWidth();
-            const pageHeight = pdf.internal.pageSize.getHeight();
-            const imgWidth = pageWidth;
-            const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-            let heightLeft = imgHeight;
-            let position = 0;
-
-            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-            heightLeft -= pageHeight;
-
-            while (heightLeft > 0) {
-                position -= 297;
-                pdf.addPage();
-                pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-                heightLeft -= pageHeight;
+            const result = await downloadInvoice(order, paymentType);
+            if (result && result.message) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'تم الحفظ',
+                    text: result.message,
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 3000,
+                    background: '#141414',
+                    color: '#fff'
+                });
             }
-
-            pdf.save(`invoice_${invoiceId}.pdf`);
         } catch (error) {
-            console.error('Invoice Generation Error:', error);
-            Swal.fire({ icon: 'error', title: 'خطأ', text: 'فشل إنشاء الفاتورة', background: '#141414', color: '#fff' });
+            Swal.fire({ icon: 'error', title: 'خطأ', text: error.message || 'فشل تحميل الفاتورة', background: '#141414', color: '#fff' });
         } finally {
-            if (document.body.contains(invoiceDiv)) document.body.removeChild(invoiceDiv);
-            stopLoading();
+            setInvoiceLoadingId(null);
+        }
+    };
+
+    const handlePrintInvoice = async (order, paymentType) => {
+        setInvoiceLoadingId({ id: order.id, action: 'print' });
+        try {
+            await printInvoice(order, paymentType);
+        } catch (error) {
+            Swal.fire({ icon: 'error', title: 'خطأ', text: error.message || 'فشل طباعة الفاتورة', background: '#141414', color: '#fff' });
+        } finally {
+            setInvoiceLoadingId(null);
         }
     };
 
@@ -529,7 +381,10 @@ const Orders = () => {
                                     lastOrderRef={orders.length === index + 1 ? lastOrderRef : null} 
                                     onUpdateStatus={handleUpdateStatus} 
                                     onDelete={handleDeleteOrder} 
-                                    onInvoice={generateInvoice} 
+                                    onDownloadInvoice={handleDownloadInvoice} 
+                                    onPrintInvoice={handlePrintInvoice}
+                                    isInvoiceLoading={invoiceLoadingId?.id === order.id}
+                                    invoiceAction={invoiceLoadingId?.id === order.id ? invoiceLoadingId.action : null} 
                                     onImageClick={setSelectedImage}
                                     isHighlighted={highlightOrderId === order.id}
                                     isDeleting={deletingOrderId === order.id}
@@ -617,7 +472,7 @@ const ImagePreviewModal = ({ imageUrl, onClose }) => {
     );
 };
 
-const OrderCard = ({ order, index, lastOrderRef, onUpdateStatus, onDelete, onInvoice, onImageClick, isHighlighted, isDeleting, setRef }) => {
+const OrderCard = ({ order, index, lastOrderRef, onUpdateStatus, onDelete, onDownloadInvoice, onPrintInvoice, isInvoiceLoading, invoiceAction, onImageClick, isHighlighted, isDeleting, setRef }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const [invoiceType, setInvoiceType] = useState('cash');
     const isMobile = window.innerWidth < 768;
@@ -772,13 +627,15 @@ const OrderCard = ({ order, index, lastOrderRef, onUpdateStatus, onDelete, onInv
                                 أجل
                             </button>
                         </div>
-                        <motion.button 
-                            whileHover={{ scale: 1.02 }} 
-                            whileTap={{ scale: 0.98 }} 
-                            onClick={() => onInvoice(order, invoiceType)} 
-                            style={{ flex: 1, padding: isMobile ? '0 6px' : '0 15px', height: isMobile ? '38px' : '44px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid var(--border-color)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isMobile ? '4px' : '8px', fontSize: isMobile ? '0.7rem' : '0.85rem', fontWeight: '700', whiteSpace: 'nowrap' }}>
-                            <Download size={isMobile ? 14 : 16} /> فاتورة
-                        </motion.button>
+                        <InvoiceActionMenu 
+                            order={order}
+                            invoiceType={invoiceType}
+                            onDownloadInvoice={onDownloadInvoice}
+                            onPrintInvoice={onPrintInvoice}
+                            isInvoiceLoading={isInvoiceLoading}
+                            invoiceAction={invoiceAction}
+                            isMobile={isMobile}
+                        />
                     </div>
                     
                     <div style={{ display: 'flex', gap: isMobile ? '6px' : '10px', flexDirection: 'row', width: isMobile ? '100%' : 'auto', flexWrap: 'nowrap', flex: isMobile ? 1 : 'none' }}>
