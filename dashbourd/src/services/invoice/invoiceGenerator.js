@@ -7,18 +7,6 @@ export const generateInvoicePdf = async (order, paymentType) => {
     const customerUser = order.users || {};
     const logo = '/logo.png';
 
-    const invoiceDiv = document.createElement('div');
-    invoiceDiv.id = 'temp-invoice';
-    invoiceDiv.style.position = 'absolute';
-    invoiceDiv.style.left = '-9999px';
-    invoiceDiv.style.top = '-9999px';
-    invoiceDiv.style.width = '800px';
-    invoiceDiv.style.padding = '40px';
-    invoiceDiv.style.background = '#ffffff';
-    invoiceDiv.style.color = '#000';
-    invoiceDiv.style.fontFamily = "'Cairo', sans-serif";
-    invoiceDiv.style.direction = 'rtl';
-
     const items = Array.isArray(order.items) ? order.items : [];
     const addressData = order.customer_address;
     const addressText = addressData && typeof addressData === 'object'
@@ -28,7 +16,7 @@ export const generateInvoicePdf = async (order, paymentType) => {
     const cashSelected = paymentType === 'cash';
     const creditSelected = paymentType === 'credit';
 
-    invoiceDiv.innerHTML = `
+    const headerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #d4af37; padding-bottom: 20px; margin-bottom: 20px;">
             <div style="flex: 1; text-align: right;">
                 <h1 style="color: #d4af37; font-size: 28px; margin: 0 0 10px 0; font-weight: 700;">متجر السعيدة</h1>
@@ -53,8 +41,7 @@ export const generateInvoicePdf = async (order, paymentType) => {
             </div>
         </div>
 
-        <!-- ═══ PAYMENT TYPE SELECTOR ═══ -->
-        <div data-segment="payment-type" style="display: flex; justify-content: center; margin-bottom: 14px;">
+        <div style="display: flex; justify-content: center; margin-bottom: 14px;">
             <div style="display: inline-flex; align-items: center; border: 1.5px solid #e0d5b5; border-radius: 10px; padding: 8px 28px; gap: 0; background: #fff;">
                 <span style="font-size: 14px; font-weight: 700; color: #333; padding-inline-end: 16px;">نوع الدفع:</span>
                 <div style="display: flex; align-items: center; gap: 8px; padding-inline-end: 18px;">
@@ -73,8 +60,7 @@ export const generateInvoicePdf = async (order, paymentType) => {
             </div>
         </div>
 
-        <!-- ═══ CUSTOMER INFO (Compact) ═══ -->
-        <div data-segment="customer-info" style="margin-bottom: 10px; font-size: 14px; color: #333;">
+        <div style="margin-bottom: 10px; font-size: 14px; color: #333;">
             <div style="display: flex; align-items: baseline; gap: 8px; padding: 8px 0; border-bottom: 1px solid #eee;">
                 <strong style="color: #555; white-space: nowrap;">الاسم:</strong>
                 <span style="font-weight: 600;">${order.customer_name || customerUser.name || 'غير معروف'}</span>
@@ -90,31 +76,28 @@ export const generateInvoicePdf = async (order, paymentType) => {
                 </div>
             </div>
         </div>
+    `;
 
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
-            <thead>
-                <tr style="background: rgba(212, 175, 55, 0.1); color: #000;">
-                    <th style="padding: 15px; text-align: right; border-bottom: 2px solid #d4af37;">رقم الموديل</th>
-                    <th style="padding: 15px; text-align: right; border-bottom: 2px solid #d4af37;">المنتج</th>
-                    <th style="padding: 15px; text-align: center; border-bottom: 2px solid #d4af37;">السعر</th>
-                    <th style="padding: 15px; text-align: center; border-bottom: 2px solid #d4af37;">الكمية</th>
-                    <th style="padding: 15px; text-align: left; border-bottom: 2px solid #d4af37;">الإجمالي</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${items.map(item => `
-                    <tr data-segment="row" style="border-bottom: 1px solid #eee;">
-                        <td style="padding: 15px; text-align: right; color: #555; font-size: 13px; font-weight: bold;">#${item.displayId || '---'}</td>
-                        <td style="padding: 15px; text-align: right; color: #000; font-weight: 600;">${item.name || item.title}</td>
-                        <td style="padding: 15px; text-align: center; color: #333;">${(item.price || 0).toLocaleString()} ر.س</td>
-                        <td style="padding: 15px; text-align: center; color: #333;">${item.dp_qty || item.quantity || 1}</td>
-                        <td style="padding: 15px; text-align: left; color: #d4af37; font-weight: bold;">${((item.price || 0) * (item.dp_qty || item.quantity || 1)).toLocaleString()} ر.س</td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
+    const tableHeaderHTML = `
+        <tr style="background: rgba(212, 175, 55, 0.1); color: #000;">
+            <th style="padding: 15px; text-align: right; border-bottom: 2px solid #d4af37;">رقم الموديل</th>
+            <th style="padding: 15px; text-align: right; border-bottom: 2px solid #d4af37;">المنتج</th>
+            <th style="padding: 15px; text-align: center; border-bottom: 2px solid #d4af37;">السعر</th>
+            <th style="padding: 15px; text-align: center; border-bottom: 2px solid #d4af37;">الكمية</th>
+            <th style="padding: 15px; text-align: left; border-bottom: 2px solid #d4af37;">الإجمالي</th>
+        </tr>
+    `;
 
-        <div data-segment="total" style="display: flex; flex-direction: column; align-items: flex-start; margin-top: 30px; padding: 20px; background: #fcfcfc; border: 1px solid #eee; border-radius: 8px;">
+    const generateRowHTML = (item) => `
+        <td style="padding: 15px; text-align: right; color: #555; font-size: 13px; font-weight: bold;">#${item.displayId || '---'}</td>
+        <td style="padding: 15px; text-align: right; color: #000; font-weight: 600;">${item.name || item.title}</td>
+        <td style="padding: 15px; text-align: center; color: #333;">${(item.price || 0).toLocaleString()} ر.س</td>
+        <td style="padding: 15px; text-align: center; color: #333;">${item.dp_qty || item.quantity || 1}</td>
+        <td style="padding: 15px; text-align: left; color: #d4af37; font-weight: bold;">${((item.price || 0) * (item.dp_qty || item.quantity || 1)).toLocaleString()} ر.س</td>
+    `;
+
+    const footerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: flex-start; margin-top: 30px; padding: 20px; background: #fcfcfc; border: 1px solid #eee; border-radius: 8px;">
             <div style="width: 100%; display: flex; justify-content: space-between; font-size: 22px; font-weight: bold;">
                 <span style="color: #000;">الإجمالي الكلي:</span>
                 <span style="color: #d4af37;">${order.total_amount.toLocaleString()} ر.س</span>
@@ -126,53 +109,130 @@ export const generateInvoicePdf = async (order, paymentType) => {
         </div>
     `;
 
-    document.body.appendChild(invoiceDiv);
+    const PAGE_WIDTH = 800;
+    const PAGE_HEIGHT = 1131.43; // 800 * (297 / 210)
+    const CONTENT_HEIGHT = Math.floor(PAGE_HEIGHT) - 80; // 40px padding top and bottom
 
-    const PAGE_HEIGHT_PX = 1120;
-    const segments = invoiceDiv.querySelectorAll('tbody tr, [data-segment]');
-    segments.forEach(el => {
-        const elBottom = el.offsetTop + el.offsetHeight;
-        const currentPageBottom = Math.ceil(el.offsetTop / PAGE_HEIGHT_PX) * PAGE_HEIGHT_PX;
-        if (elBottom > currentPageBottom && el.offsetTop < currentPageBottom) {
-            const spacer = document.createElement('div');
-            spacer.style.height = `${currentPageBottom - el.offsetTop + 2}px`;
-            el.parentNode.insertBefore(spacer, el);
+    const invoiceContainer = document.createElement('div');
+    invoiceContainer.id = 'temp-invoice-container';
+    invoiceContainer.style.position = 'absolute';
+    invoiceContainer.style.left = '-9999px';
+    invoiceContainer.style.top = '-9999px';
+    invoiceContainer.style.width = `${PAGE_WIDTH}px`;
+    invoiceContainer.style.background = '#f0f0f0';
+    document.body.appendChild(invoiceContainer);
+
+    const createPage = () => {
+        const page = document.createElement('div');
+        page.className = 'pdf-page';
+        page.style.width = `${PAGE_WIDTH}px`;
+        page.style.height = `${PAGE_HEIGHT}px`;
+        page.style.padding = '40px';
+        page.style.boxSizing = 'border-box';
+        page.style.background = '#ffffff';
+        page.style.color = '#000';
+        page.style.fontFamily = "'Cairo', sans-serif";
+        page.style.direction = 'rtl';
+        page.style.position = 'relative';
+        page.style.overflow = 'hidden';
+        invoiceContainer.appendChild(page);
+        return page;
+    };
+
+    let currentPage = createPage();
+    let currentContentContainer = document.createElement('div');
+    currentContentContainer.style.display = 'flow-root'; // Prevent margin collapse out of this container
+    currentPage.appendChild(currentContentContainer);
+
+    // 1. Add Header
+    currentContentContainer.innerHTML = headerHTML;
+    
+    // 2. Add Table wrapper
+    let currentTable = document.createElement('table');
+    currentTable.style.width = '100%';
+    currentTable.style.borderCollapse = 'collapse';
+    currentTable.style.marginBottom = '30px';
+    currentTable.innerHTML = `<thead>${tableHeaderHTML}</thead><tbody></tbody>`;
+    currentContentContainer.appendChild(currentTable);
+    
+    let currentTbody = currentTable.querySelector('tbody');
+
+    const isOverflowing = () => {
+        return currentContentContainer.offsetHeight > CONTENT_HEIGHT;
+    };
+
+    // 3. Add Rows
+    for (const item of items) {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #eee';
+        tr.innerHTML = generateRowHTML(item);
+        currentTbody.appendChild(tr);
+
+        if (isOverflowing()) {
+            currentTbody.removeChild(tr);
+            
+            currentPage = createPage();
+            currentContentContainer = document.createElement('div');
+            currentContentContainer.style.display = 'flow-root'; // Prevent margin collapse out of this container
+            currentPage.appendChild(currentContentContainer);
+            
+            currentTable = document.createElement('table');
+            currentTable.style.width = '100%';
+            currentTable.style.borderCollapse = 'collapse';
+            currentTable.style.marginBottom = '30px';
+            currentTable.innerHTML = `<thead>${tableHeaderHTML}</thead><tbody></tbody>`;
+            currentContentContainer.appendChild(currentTable);
+            currentTbody = currentTable.querySelector('tbody');
+            
+            currentTbody.appendChild(tr);
         }
-    });
+    }
+
+    // 4. Add Footer
+    const footerDiv = document.createElement('div');
+    footerDiv.innerHTML = footerHTML;
+    currentContentContainer.appendChild(footerDiv);
+
+    if (isOverflowing()) {
+        currentContentContainer.removeChild(footerDiv);
+        
+        currentPage = createPage();
+        currentContentContainer = document.createElement('div');
+        currentContentContainer.style.display = 'flow-root'; // Prevent margin collapse out of this container
+        currentPage.appendChild(currentContentContainer);
+        currentContentContainer.appendChild(footerDiv);
+    }
 
     try {
-        const canvas = await html2canvas(invoiceDiv, {
-            backgroundColor: '#ffffff',
-            scale: 2,
-            useCORS: true,
-            logging: false
-        });
-        const imgData = canvas.toDataURL('image/png');
-
         const pdf = new jsPDF('p', 'mm', 'a4');
-        const pageWidth = pdf.internal.pageSize.getWidth();
-        const pageHeight = pdf.internal.pageSize.getHeight();
-        const imgWidth = pageWidth;
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
 
-        let heightLeft = imgHeight;
-        let position = 0;
-
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-
-        while (heightLeft > 0) {
-            position -= 297;
-            pdf.addPage();
-            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-            heightLeft -= pageHeight;
+        const pages = invoiceContainer.querySelectorAll('.pdf-page');
+        for (let i = 0; i < pages.length; i++) {
+            const canvas = await html2canvas(pages[i], {
+                backgroundColor: '#ffffff',
+                scale: 2,
+                useCORS: true,
+                logging: false
+            });
+            const imgData = canvas.toDataURL('image/png');
+            
+            if (i > 0) {
+                pdf.addPage();
+            }
+            
+            const imgWidth = pdfWidth;
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+            
+            pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
         }
 
-        const blob = pdf.output('blob');
-        return blob;
+        return pdf.output('blob');
     } finally {
-        if (document.body.contains(invoiceDiv)) {
-            document.body.removeChild(invoiceDiv);
+        if (document.body.contains(invoiceContainer)) {
+            document.body.removeChild(invoiceContainer);
         }
     }
 };
+
