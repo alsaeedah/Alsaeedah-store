@@ -15,6 +15,7 @@ export const FavoritesProvider = ({ children }) => {
     const [favorites, setFavorites] = useState([]);
     const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [loadingFavoriteId, setLoadingFavoriteId] = useState(null);
 
     const openWishlist = () => navigate('/wishlist');
     
@@ -139,9 +140,13 @@ export const FavoritesProvider = ({ children }) => {
     }, [favorites, currentUser]);
 
     const toggleFavorite = async (product) => {
+        // منع الضغط المتعدد إذا كان منتج آخر قيد التحميل لنفس المنتج
+        if (loadingFavoriteId === String(product.id)) return;
+
         const isFav = favorites.some(fav => String(fav.id) === String(product.id));
 
         if (currentUser) {
+            setLoadingFavoriteId(String(product.id));
             try {
                 if (window.__favoritesDAL) {
                     await window.__favoritesDAL.toggleFavorite(product);
@@ -150,13 +155,18 @@ export const FavoritesProvider = ({ children }) => {
             } catch (err) {
                 console.error("Failed to enqueue favorite mutation:", err);
                 // requireOnline handles Swal popup if offline
+            } finally {
+                setLoadingFavoriteId(null);
             }
         } else {
+            setLoadingFavoriteId(String(product.id));
+            // للضيوف: العملية فورية لكن نحاكي تأخير بسيط لإظهار اللودينق
             const newFavs = isFav 
                 ? favorites.filter(fav => String(fav.id) !== String(product.id))
                 : [...favorites, product];
             setFavorites(newFavs);
             localStorage.setItem('time-tick-favorites', JSON.stringify(newFavs));
+            setLoadingFavoriteId(null);
         }
     };
 
@@ -201,6 +211,7 @@ export const FavoritesProvider = ({ children }) => {
             setIsFavoritesOpen,
             openWishlist,
             loading,
+            loadingFavoriteId,
             refreshFavoriteProduct
         }}>
             {children}

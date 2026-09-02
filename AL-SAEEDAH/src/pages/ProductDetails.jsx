@@ -360,10 +360,11 @@ const TrustCardsSection = () => {
    Product Info (Right Column)
 ───────────────────────────────────────────── */
 const ProductInfo = ({ product, discountValue, onAddToCart, onBuyNow }) => {
-  const { toggleFavorite, isFavorite } = useFavorites();
+  const { toggleFavorite, isFavorite, loadingFavoriteId } = useFavorites();
   const [copied, setCopied] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const isFav = isFavorite(product.id);
+  const isFavLoading = loadingFavoriteId === String(product.id);
   const shareUrl = `https://timetick.vercel.app/product/${product.id}`;
 
   const handleShare = () => {
@@ -441,12 +442,16 @@ const ProductInfo = ({ product, discountValue, onAddToCart, onBuyNow }) => {
           <motion.button
             className={`btn-icon-action ${isFav ? 'active-fav' : ''}`}
             onClick={() => toggleFavorite(product)}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            aria-label={isFav ? 'إزالة من المفضلة' : 'إضافة للمفضلة'}
+            whileHover={isFavLoading ? undefined : { scale: 1.1 }}
+            whileTap={isFavLoading ? undefined : { scale: 0.9 }}
+            disabled={isFavLoading}
+            aria-label={isFavLoading ? 'جارٍ التحديث...' : isFav ? 'إزالة من المفضلة' : 'إضافة للمفضلة'}
             id="btn-wishlist"
           >
-            <Heart size={20} fill={isFav ? 'var(--primary)' : 'none'} stroke={isFav ? 'var(--primary)' : 'currentColor'} />
+            {isFavLoading
+              ? <span className="fav-spinner fav-spinner--lg" />
+              : <Heart size={20} fill={isFav ? 'var(--primary)' : 'none'} stroke={isFav ? 'var(--primary)' : 'currentColor'} />
+            }
           </motion.button>
 
           <motion.button
@@ -617,9 +622,10 @@ const InfoTabs = ({ product }) => {
    Related Products Carousel
 ───────────────────────────────────────────── */
 const RelatedCard = ({ product: p }) => {
-  const { toggleFavorite, isFavorite } = useFavorites();
+  const { toggleFavorite, isFavorite, loadingFavoriteId } = useFavorites();
   const navigate = useNavigate();
   const isFav = isFavorite(p.id);
+  const isFavLoading = loadingFavoriteId === String(p.id);
 
   return (
     <motion.div
@@ -646,9 +652,14 @@ const RelatedCard = ({ product: p }) => {
         <button
           className={`rel-card-fav ${isFav ? 'active' : ''}`}
           onClick={() => toggleFavorite(p)}
-          aria-label={isFav ? 'إزالة من المفضلة' : 'إضافة للمفضلة'}
+          disabled={isFavLoading}
+          aria-label={isFavLoading ? 'جارٍ التحديث...' : isFav ? 'إزالة من المفضلة' : 'إضافة للمفضلة'}
+          style={{ cursor: isFavLoading ? 'not-allowed' : 'pointer' }}
         >
-          <Heart size={16} fill={isFav ? 'var(--primary)' : 'none'} stroke={isFav ? 'var(--primary)' : 'currentColor'} />
+          {isFavLoading
+            ? <span className="fav-spinner fav-spinner--sm" />
+            : <Heart size={16} fill={isFav ? 'var(--primary)' : 'none'} stroke={isFav ? 'var(--primary)' : 'currentColor'} />
+          }
         </button>
         <p
           className="rel-card-name"

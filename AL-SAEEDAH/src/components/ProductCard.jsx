@@ -9,9 +9,10 @@ import ProductOptionsModal from './ProductOptionsModal';
 
 const ProductCard = forwardRef(({ product }, ref) => {
     const { addToCart } = useCart();
-    const { toggleFavorite, isFavorite } = useFavorites();
+    const { toggleFavorite, isFavorite, loadingFavoriteId } = useFavorites();
     const navigate = useNavigate();
     const isFav = isFavorite(product.id);
+    const isFavLoading = loadingFavoriteId === String(product.id);
     
     const [mediaMode, setMediaMode] = useState(
         (product.video && product.imageUrl?.includes('placehold.co')) ? 'video' : 'image'
@@ -138,12 +139,17 @@ const ProductCard = forwardRef(({ product }, ref) => {
                 )}
 
                 <motion.button
-                    whileTap={{ scale: 0.8 }}
+                    whileTap={isFavLoading ? undefined : { scale: 0.8 }}
                     onClick={(e) => { e.stopPropagation(); toggleFavorite(product); }}
                     className="wishlist-btn"
+                    disabled={isFavLoading}
                     style={{ color: isFav ? 'var(--primary)' : 'var(--hero-text-color)' }}
+                    aria-label={isFavLoading ? 'جارٍ التحديث...' : isFav ? 'إزالة من المفضلة' : 'إضافة للمفضلة'}
                 >
-                    <Heart size={20} fill={isFav ? "currentColor" : "none"} />
+                    {isFavLoading
+                        ? <span className="fav-spinner" />
+                        : <Heart size={20} fill={isFav ? "currentColor" : "none"} />
+                    }
                 </motion.button>
 
                 {/* Media Toggles (Always Visible) */}

@@ -132,7 +132,7 @@ const Products = () => {
                 }
 
                 setProducts(prev => {
-                    if (isInitial && prev.length === 0) return newProducts;
+                    if (isInitial) return newProducts;
                     
                     const newMap = new Map(newProducts.map(p => [p.id, p]));
                     const finalArray = [];

@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ProductOptionsModal from './ProductOptionsModal';
 
 export default function FavoritesModal() {
-    const { favorites, isFavoritesOpen, setIsFavoritesOpen, toggleFavorite } = useFavorites();
+    const { favorites, isFavoritesOpen, setIsFavoritesOpen, toggleFavorite, loadingFavoriteId } = useFavorites();
     const { addToCart } = useCart();
     const navigate = useNavigate();
 
@@ -264,6 +264,7 @@ export default function FavoritesModal() {
                                                     </button>
                                                     <button
                                                         onClick={() => toggleFavorite(product)}
+                                                        disabled={loadingFavoriteId === String(product.id)}
                                                         style={{
                                                             background: 'rgba(239, 68, 68, 0.1)',
                                                             border: '1px solid rgba(239, 68, 68, 0.2)',
@@ -273,14 +274,17 @@ export default function FavoritesModal() {
                                                             display: 'flex',
                                                             alignItems: 'center',
                                                             justifyContent: 'center',
-                                                            cursor: 'pointer',
+                                                            cursor: loadingFavoriteId === String(product.id) ? 'not-allowed' : 'pointer',
                                                             color: '#ef4444',
                                                             transition: '0.3s'
                                                         }}
                                                         className="delete-btn"
-                                                        title="حذف من المفضلات"
+                                                        title={loadingFavoriteId === String(product.id) ? 'جارٍ التحديث...' : 'حذف من المفضلات'}
                                                     >
-                                                        <Trash2 size={18} />
+                                                        {loadingFavoriteId === String(product.id)
+                                                            ? <span className="fav-spinner fav-spinner--sm" style={{ borderTopColor: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }} />
+                                                            : <Trash2 size={18} />
+                                                        }
                                                     </button>
                                                 </div>
                                             </motion.div>

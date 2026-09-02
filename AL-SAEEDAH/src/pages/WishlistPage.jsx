@@ -7,7 +7,7 @@ import { Heart, ShoppingBag, Trash2, ArrowRight, Sparkles } from 'lucide-react';
 import ProductOptionsModal from '../components/ProductOptionsModal';
 
 export default function WishlistPage() {
-    const { favorites, toggleFavorite, refreshFavoriteProduct, loading } = useFavorites();
+    const { favorites, toggleFavorite, refreshFavoriteProduct, loading, loadingFavoriteId } = useFavorites();
     const { addToCart } = useCart();
     const navigate = useNavigate();
 
@@ -127,17 +127,22 @@ export default function WishlistPage() {
                                             {/* Remove from favorites */}
                                             <button
                                                 onClick={e => { e.stopPropagation(); toggleFavorite(product); }}
+                                                disabled={loadingFavoriteId === String(product.id)}
                                                 style={{
                                                     position: 'absolute', top: '12px', right: '12px',
                                                     width: '36px', height: '36px', borderRadius: '50%',
                                                     background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)',
                                                     border: '1px solid rgba(255,255,255,0.1)',
                                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                    cursor: 'pointer', color: '#ff4b4b', transition: 'all 0.2s'
+                                                    cursor: loadingFavoriteId === String(product.id) ? 'not-allowed' : 'pointer',
+                                                    color: '#ff4b4b', transition: 'all 0.2s'
                                                 }}
-                                                title="إزالة من المفضلة"
+                                                title={loadingFavoriteId === String(product.id) ? 'جارٍ التحديث...' : 'إزالة من المفضلة'}
                                             >
-                                                <Heart size={16} fill="#ff4b4b" />
+                                                {loadingFavoriteId === String(product.id)
+                                                    ? <span className="fav-spinner fav-spinner--sm" style={{ borderTopColor: '#ff4b4b', borderColor: 'rgba(255,75,75,0.3)' }} />
+                                                    : <Heart size={16} fill="#ff4b4b" />
+                                                }
                                             </button>
                                         </div>
 
