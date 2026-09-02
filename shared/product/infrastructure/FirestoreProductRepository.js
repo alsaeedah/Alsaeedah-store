@@ -1,6 +1,13 @@
 import { collection, doc, query, where, getDocs, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, orderBy, getCountFromServer, limit, documentId, startAfter, writeBatch } from 'firebase/firestore';
 import { ProductRepository } from '../repository.js';
 
+export function normalizeGender(value) {
+    if (value === 'men') return 'men';
+    if (value === 'women') return 'women';
+    if (value === 'kids') return 'kids';
+    return null;
+}
+
 export class FirestoreProductRepository extends ProductRepository {
     constructor(db) {
         super();
@@ -144,7 +151,7 @@ export class FirestoreProductRepository extends ProductRepository {
     async getPaginated(filters, limitCount, cursor = null) {
         const baseConstraints = [];
         if (this._isValidFilterValue(filters.collectionId)) baseConstraints.push(where('collectionId', '==', filters.collectionId));
-        if (this._isValidFilterValue(filters.genderId)) baseConstraints.push(where('genderId', '==', filters.genderId));
+        if (this._isValidFilterValue(filters.genderId)) baseConstraints.push(where('gender', '==', filters.genderId));
 
         const searchStr = filters.search ? String(filters.search).trim() : '';
         const isNumericSearch = searchStr && /^\d+$/.test(searchStr);
@@ -411,13 +418,13 @@ export class FirestoreProductRepository extends ProductRepository {
         const productsRef = collection(this.db, 'products');
         const totalSnap = await getCountFromServer(productsRef);
         
-        const menQ = query(productsRef, where('category', '==', 'men'));
+        const menQ = query(productsRef, where('gender', '==', 'men'));
         const menSnap = await getCountFromServer(menQ);
         
-        const womenQ = query(productsRef, where('category', '==', 'women'));
+        const womenQ = query(productsRef, where('gender', '==', 'women'));
         const womenSnap = await getCountFromServer(womenQ);
         
-        const kidsQ = query(productsRef, where('category', '==', 'kids'));
+        const kidsQ = query(productsRef, where('gender', '==', 'kids'));
         const kidsSnap = await getCountFromServer(kidsQ);
 
         return {
@@ -430,21 +437,24 @@ export class FirestoreProductRepository extends ProductRepository {
 
     async create(productData) {
         const timestamp = new Date().toISOString();
-        const data = { ...productData, created_at: productData.created_at || timestamp, updated_at: timestamp };
+        const gender = normalizeGender(productData.genderId || productData.gender);
+        const data = { ...productData, gender, genderId: gender, created_at: productData.created_at || timestamp, updated_at: timestamp };
         const docRef = await addDoc(collection(this.db, 'products'), data);
         return docRef.id;
     }
 
     async createWithId(id, productData) {
         const timestamp = new Date().toISOString();
-        const data = { ...productData, created_at: productData.created_at || timestamp, updated_at: timestamp };
+        const gender = normalizeGender(productData.genderId || productData.gender);
+        const data = { ...productData, gender, genderId: gender, created_at: productData.created_at || timestamp, updated_at: timestamp };
         const docRef = doc(this.db, 'products', String(id));
         await setDoc(docRef, data);
         return id;
     }
 
     async update(id, productData) {
-        const data = { ...productData, updated_at: new Date().toISOString() };
+        const gender = normalizeGender(productData.genderId || productData.gender);
+        const data = { ...productData, gender, genderId: gender, updated_at: new Date().toISOString() };
         const docRef = doc(this.db, 'products', String(id));
         await updateDoc(docRef, data);
     }
@@ -482,7 +492,7 @@ export class FirestoreProductRepository extends ProductRepository {
 
         const baseConstraints = [];
         if (this._isValidFilterValue(filters.collectionId)) baseConstraints.push(where('collectionId', '==', filters.collectionId));
-        if (this._isValidFilterValue(filters.genderId))     baseConstraints.push(where('genderId',     '==', filters.genderId));
+        if (this._isValidFilterValue(filters.genderId))     baseConstraints.push(where('gender',     '==', filters.genderId));
 
         const searchStr     = filters.search ? String(filters.search).trim() : '';
         const isNumericSearch = searchStr && /^\d+$/.test(searchStr);

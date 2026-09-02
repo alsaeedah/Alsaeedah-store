@@ -452,13 +452,18 @@ export class ProductDAL {
         const { ConnectivityService } = await import('../../../connectivity/ConnectivityService.js');
         await ConnectivityService.getInstance().requireOnline();
         
+        // Normalize gender before sending to repository and cache
+        const { normalizeGender } = await import('../FirestoreProductRepository.js');
+        const gender = normalizeGender(productData.genderId || productData.gender);
+        const normalizedPayload = { ...productData, gender, genderId: gender };
+
         this.mutationEpoch++;
-        const documentId = await this.repository.create(productData);
+        const documentId = await this.repository.create(normalizedPayload);
         
         await this._onMutationCompleted({
             operation: MutationOperation.CREATE,
             documentId,
-            payload: productData
+            payload: normalizedPayload
         });
         
         syncCoordinator.syncDomain('products');
@@ -469,13 +474,18 @@ export class ProductDAL {
         const { ConnectivityService } = await import('../../../connectivity/ConnectivityService.js');
         await ConnectivityService.getInstance().requireOnline();
 
+        // Normalize gender before sending to repository and cache
+        const { normalizeGender } = await import('../FirestoreProductRepository.js');
+        const gender = normalizeGender(productData.genderId || productData.gender);
+        const normalizedPayload = { ...productData, gender, genderId: gender };
+
         this.mutationEpoch++;
-        await this.repository.update(id, productData);
+        await this.repository.update(id, normalizedPayload);
         
         await this._onMutationCompleted({
             operation: MutationOperation.UPDATE,
             documentId: id,
-            payload: productData
+            payload: normalizedPayload
         });
         
         syncCoordinator.syncDomain('products');

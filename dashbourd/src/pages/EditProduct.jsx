@@ -99,7 +99,7 @@ const EditProduct = () => {
                 categoryId: formData.categoryId || null,
                 brandId: formData.brandId || null,
                 collectionId: formData.collectionId || null,
-                gender: formData.gender || null,
+                genderId: formData.genderId || null,
                 category: formData.category || '',
                 style: formData.style || '',
                 description: formData.description,
