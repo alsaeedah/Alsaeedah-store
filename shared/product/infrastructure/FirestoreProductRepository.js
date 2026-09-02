@@ -29,9 +29,6 @@ export class FirestoreProductRepository extends ProductRepository {
         let catIds = this._isValidFilterArray(filters.categoryIds) ? filters.categoryIds : (this._isValidFilterValue(filters.categoryId) ? [filters.categoryId] : null);
         let brdIds = this._isValidFilterArray(filters.brandIds) ? filters.brandIds : (this._isValidFilterValue(filters.brandId) ? [filters.brandId] : null);
         
-        if (!catIds && this._isValidFilterValue(filters.legacyCategory)) catIds = [filters.legacyCategory];
-        if (!brdIds && this._isValidFilterValue(filters.legacyStyle)) brdIds = [filters.legacyStyle];
-
         const queriesParams = []; 
 
         if (!catIds && !brdIds) {
@@ -147,7 +144,7 @@ export class FirestoreProductRepository extends ProductRepository {
     async getPaginated(filters, limitCount, cursor = null) {
         const baseConstraints = [];
         if (this._isValidFilterValue(filters.collectionId)) baseConstraints.push(where('collectionId', '==', filters.collectionId));
-        if (this._isValidFilterValue(filters.gender)) baseConstraints.push(where('gender', '==', filters.gender));
+        if (this._isValidFilterValue(filters.genderId)) baseConstraints.push(where('gender', '==', filters.genderId));
 
         const searchStr = filters.search ? String(filters.search).trim() : '';
         const isNumericSearch = searchStr && /^\d+$/.test(searchStr);
@@ -485,7 +482,7 @@ export class FirestoreProductRepository extends ProductRepository {
 
         const baseConstraints = [];
         if (this._isValidFilterValue(filters.collectionId)) baseConstraints.push(where('collectionId', '==', filters.collectionId));
-        if (this._isValidFilterValue(filters.gender))     baseConstraints.push(where('gender',     '==', filters.gender));
+        if (this._isValidFilterValue(filters.genderId))     baseConstraints.push(where('gender',     '==', filters.genderId));
 
         const searchStr     = filters.search ? String(filters.search).trim() : '';
         const isNumericSearch = searchStr && /^\d+$/.test(searchStr);

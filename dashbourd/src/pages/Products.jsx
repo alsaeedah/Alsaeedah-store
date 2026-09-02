@@ -32,8 +32,9 @@ const Products = () => {
     }, []);
 
     // Filter States
-    const [filterType, setFilterType] = useState('all');
-    const [filterStyle, setFilterStyle] = useState('all');
+    const [genderId, setGenderId] = useState('all');
+    const [categoryId, setCategoryId] = useState('all');
+    const [brandId, setBrandId] = useState('all');
     const [sortPrice, setSortPrice] = useState('none');
     const [minPrice, setMinPrice] = useState('');
     const [maxPrice, setMaxPrice] = useState('');
@@ -74,8 +75,9 @@ const Products = () => {
      * Single source of truth used by both fetchProducts() and toggleAll().
      */
     const buildFilters = () => ({
-        legacyCategory: filterType !== 'all' ? filterType : null,
-        legacyStyle: filterStyle !== 'all' ? filterStyle : null,
+        genderId: genderId !== 'all' ? genderId : null,
+        categoryId: categoryId !== 'all' ? categoryId : null,
+        brandId: brandId !== 'all' ? brandId : null,
         minPrice: minPrice !== '' ? Number(minPrice) : null,
         maxPrice: maxPrice !== '' ? Number(maxPrice) : null,
         search: searchQuery,
@@ -120,13 +122,13 @@ const Products = () => {
             setHasMore(response?.hasMore || false);
         } catch (err) {
             console.error("[Products] Product loading failed", err);
-            // Protect LKG: only set error if we don't have existing products
-            if (isInitial && products.length === 0) {
+            if (isInitial) {
+                setProducts([]);
                 setError({
                     code: err?.code || 'unknown',
                     message: err?.message || 'فشل تحميل المنتجات من قاعدة البيانات'
                 });
-            } else if (!isInitial) {
+            } else {
                 Swal.fire({
                     icon: 'error',
                     title: 'خطأ',
@@ -152,7 +154,7 @@ const Products = () => {
         setSelectAllCapped(false);
         fetchProducts(0, true);
         fetchStats();
-    }, [filterType, filterStyle, sortPrice, minPrice, maxPrice, searchQuery]);
+    }, [genderId, categoryId, brandId, sortPrice, minPrice, maxPrice, searchQuery]);
 
     // Page changes
     useEffect(() => {
@@ -588,8 +590,9 @@ const Products = () => {
 
             <FilterBar
                 searchQuery={searchQuery} setSearchQuery={setSearchQuery}
-                filterType={filterType} setFilterType={setFilterType}
-                filterStyle={filterStyle} setFilterStyle={setFilterStyle}
+                genderId={genderId} setGenderId={setGenderId}
+                categoryId={categoryId} setCategoryId={setCategoryId}
+                brandId={brandId} setBrandId={setBrandId}
                 minPrice={minPrice} setMinPrice={setMinPrice}
                 maxPrice={maxPrice} setMaxPrice={setMaxPrice}
                 sortPrice={sortPrice} setSortPrice={setSortPrice}
@@ -741,10 +744,6 @@ const ProductCard = ({ product, index, isSelected, onToggle, onDelete, onToggleL
                     </div>
                 )}
 
-                {/* Style Tag */}
-                <div style={{ position: 'absolute', bottom: '16px', left: '16px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', backdropFilter: 'blur(10px)', color: '#fff', padding: '6px 14px', borderRadius: '50px', fontSize: '0.75rem', fontWeight: '700' }}>
-                    {product.style === 'classic' ? 'كلاسيكي' : product.style === 'formal' ? 'رسمي' : 'عرض خاص'}
-                </div>
             </div>
 
             {/* Card Content */}

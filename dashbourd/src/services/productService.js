@@ -15,6 +15,10 @@ export const fetchStats = async () => {
     return await productRepository.getStats();
 };
 
+export const getAvailableBrandIds = async (categoryIds) => {
+    return await productRepository.getAvailableBrandIds(categoryIds);
+};
+
 export const addProduct = async (productData) => {
     return await productRepository.create(productData);
 };

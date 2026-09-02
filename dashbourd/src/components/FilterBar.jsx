@@ -1,22 +1,65 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Search, ArrowUpDown, DollarSign, RotateCcw } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useStore } from 'zustand';
+import { taxonomyStore, GENDERS } from 'shared/taxonomy';
+import { getAvailableBrandIds } from '../services/productService';
 
 const FilterBar = ({
     searchQuery, setSearchQuery,
-    filterType, setFilterType,
-    filterStyle, setFilterStyle,
+    genderId, setGenderId,
+    categoryId, setCategoryId,
+    brandId, setBrandId,
     minPrice, setMinPrice,
     maxPrice, setMaxPrice,
     sortPrice, setSortPrice
 }) => {
-    const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+    const [availableBrandIds, setAvailableBrandIds] = useState(null);
+    const [loadingBrands, setLoadingBrands] = useState(false);
 
-    React.useEffect(() => {
+    const categories = useStore(taxonomyStore, state => state.categories);
+    const brands = useStore(taxonomyStore, state => state.brands);
+    const initialized = useStore(taxonomyStore, state => state.initialized);
+    const storeStatus = useStore(taxonomyStore, state => state.status);
+
+    useEffect(() => {
+        if (!initialized && storeStatus === 'idle') {
+            taxonomyStore.getState().fetchTaxonomies && taxonomyStore.getState().fetchTaxonomies(taxonomyStore.getState().repository);
+        }
+    }, [initialized, storeStatus]);
+
+    useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
+
+    useEffect(() => {
+        if (categoryId === 'all') {
+            setAvailableBrandIds(null);
+            setBrandId('all');
+        } else {
+            setLoadingBrands(true);
+            setBrandId('all'); // Reset brand when category changes
+            getAvailableBrandIds([categoryId])
+                .then(ids => {
+                    setAvailableBrandIds(ids);
+                })
+                .catch(err => {
+                    console.error("Failed to fetch available brands:", err);
+                    setAvailableBrandIds([]);
+                })
+                .finally(() => {
+                    setLoadingBrands(false);
+                });
+        }
+    }, [categoryId, setBrandId]);
+
+    const activeCategories = categories.filter(c => c.active);
+    const displayedBrands = availableBrandIds 
+        ? brands.filter(b => b.active && availableBrandIds.includes(b.id)) 
+        : [];
 
     return (
         <div
@@ -78,22 +121,35 @@ const FilterBar = ({
                     width: isMobile ? '100%' : 'auto',
                     overflowX: 'auto'
                 }}>
-                    {[
-                        { label: 'الكل', value: 'all' },
-                        { label: 'رجالي', value: 'men' },
-                        { label: 'نسائي', value: 'women' },
-                        { label: 'أطفال', value: 'kids' }
-                    ].map(type => (
+                    <button
+                        onClick={() => setGenderId('all')}
+                        style={{
+                            flex: isMobile ? 1 : 'none',
+                            padding: isMobile ? '8px 12px' : '10px 22px',
+                            borderRadius: '12px',
+                            border: 'none',
+                            background: genderId === 'all' ? 'var(--primary)' : 'transparent',
+                            color: genderId === 'all' ? '#000' : 'var(--text-muted)',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s',
+                            fontSize: isMobile ? '0.8rem' : '0.9rem',
+                            fontWeight: '700',
+                            whiteSpace: 'nowrap'
+                        }}
+                    >
+                        الكل
+                    </button>
+                    {GENDERS.map(gender => (
                         <button
-                            key={type.value}
-                            onClick={() => setFilterType(type.value)}
+                            key={gender.id}
+                            onClick={() => setGenderId(gender.id)}
                             style={{
                                 flex: isMobile ? 1 : 'none',
                                 padding: isMobile ? '8px 12px' : '10px 22px',
                                 borderRadius: '12px',
                                 border: 'none',
-                                background: filterType === type.value ? 'var(--primary)' : 'transparent',
-                                color: filterType === type.value ? '#000' : 'var(--text-muted)',
+                                background: genderId === gender.id ? 'var(--primary)' : 'transparent',
+                                color: genderId === gender.id ? '#000' : 'var(--text-muted)',
                                 cursor: 'pointer',
                                 transition: 'all 0.3s',
                                 fontSize: isMobile ? '0.8rem' : '0.9rem',
@@ -101,7 +157,7 @@ const FilterBar = ({
                                 whiteSpace: 'nowrap'
                             }}
                         >
-                            {type.label}
+                            {gender.name}
                         </button>
                     ))}
                 </div>
@@ -112,9 +168,10 @@ const FilterBar = ({
                     width: isMobile ? '100%' : 'auto',
                     flexDirection: isMobile ? 'row' : 'row'
                 }}>
+                    {/* Category Dropdown */}
                     <select
-                        value={filterStyle}
-                        onChange={(e) => setFilterStyle(e.target.value)}
+                        value={categoryId}
+                        onChange={(e) => setCategoryId(e.target.value)}
                         style={{
                             flex: isMobile ? 1 : 'none',
                             padding: '12px 15px',
@@ -125,13 +182,52 @@ const FilterBar = ({
                             cursor: 'pointer',
                             outline: 'none',
                             fontSize: '0.9rem',
-                            fontWeight: '600'
+                            fontWeight: '600',
+                            minWidth: '130px'
                         }}
                     >
-                        <option value="all" style={{ background: '#141414' }}>النمط</option>
-                        <option value="classic" style={{ background: '#141414' }}>كلاسيكي</option>
-                        <option value="formal" style={{ background: '#141414' }}>رسمي</option>
-                        <option value="wedding" style={{ background: '#141414' }}>عرائسي</option>
+                        <option value="all" style={{ background: '#141414' }}>كل الفئات</option>
+                        {activeCategories.map(cat => (
+                            <option key={cat.id} value={cat.id} style={{ background: '#141414' }}>
+                                {cat.name}
+                            </option>
+                        ))}
+                    </select>
+
+                    {/* Brand Dropdown */}
+                    <select
+                        value={brandId}
+                        onChange={(e) => setBrandId(e.target.value)}
+                        disabled={categoryId === 'all' || loadingBrands}
+                        style={{
+                            flex: isMobile ? 1 : 'none',
+                            padding: '12px 15px',
+                            borderRadius: '14px',
+                            background: 'rgba(255,255,255,0.03)',
+                            border: '1px solid var(--border-color)',
+                            color: categoryId === 'all' ? 'var(--text-muted)' : '#fff',
+                            cursor: categoryId === 'all' || loadingBrands ? 'not-allowed' : 'pointer',
+                            outline: 'none',
+                            fontSize: '0.9rem',
+                            fontWeight: '600',
+                            minWidth: '130px',
+                            opacity: categoryId === 'all' ? 0.5 : 1
+                        }}
+                    >
+                        {categoryId === 'all' ? (
+                            <option value="all" style={{ background: '#141414' }}>الرجاء اختيار القسم أولاً</option>
+                        ) : loadingBrands ? (
+                            <option value="all" style={{ background: '#141414' }}>جاري تحميل الماركات...</option>
+                        ) : (
+                            <>
+                                <option value="all" style={{ background: '#141414' }}>كل الماركات المتاحة</option>
+                                {displayedBrands.map(brand => (
+                                    <option key={brand.id} value={brand.id} style={{ background: '#141414' }}>
+                                        {brand.name}
+                                    </option>
+                                ))}
+                            </>
+                        )}
                     </select>
 
                     <button
@@ -180,14 +276,15 @@ const FilterBar = ({
                 </div>
 
                 {/* Reset Action */}
-                {(searchQuery || filterType !== 'all' || filterStyle !== 'all' || minPrice || maxPrice || sortPrice !== 'none') && (
+                {(searchQuery || genderId !== 'all' || categoryId !== 'all' || brandId !== 'all' || minPrice || maxPrice || sortPrice !== 'none') && (
                     <motion.button
                         initial={{ opacity: 0, scale: 0.8 }}
                         animate={{ opacity: 1, scale: 1 }}
                         onClick={() => {
                             setSearchQuery('');
-                            setFilterType('all');
-                            setFilterStyle('all');
+                            setGenderId('all');
+                            setCategoryId('all');
+                            setBrandId('all');
                             setMinPrice('');
                             setMaxPrice('');
                             setSortPrice('none');
