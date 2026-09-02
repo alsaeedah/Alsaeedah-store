@@ -144,7 +144,7 @@ export class FirestoreProductRepository extends ProductRepository {
     async getPaginated(filters, limitCount, cursor = null) {
         const baseConstraints = [];
         if (this._isValidFilterValue(filters.collectionId)) baseConstraints.push(where('collectionId', '==', filters.collectionId));
-        if (this._isValidFilterValue(filters.genderId)) baseConstraints.push(where('gender', '==', filters.genderId));
+        if (this._isValidFilterValue(filters.genderId)) baseConstraints.push(where('genderId', '==', filters.genderId));
 
         const searchStr = filters.search ? String(filters.search).trim() : '';
         const isNumericSearch = searchStr && /^\d+$/.test(searchStr);
@@ -482,7 +482,7 @@ export class FirestoreProductRepository extends ProductRepository {
 
         const baseConstraints = [];
         if (this._isValidFilterValue(filters.collectionId)) baseConstraints.push(where('collectionId', '==', filters.collectionId));
-        if (this._isValidFilterValue(filters.genderId))     baseConstraints.push(where('gender',     '==', filters.genderId));
+        if (this._isValidFilterValue(filters.genderId))     baseConstraints.push(where('genderId',     '==', filters.genderId));
 
         const searchStr     = filters.search ? String(filters.search).trim() : '';
         const isNumericSearch = searchStr && /^\d+$/.test(searchStr);

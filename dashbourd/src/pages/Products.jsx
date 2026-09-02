@@ -6,12 +6,14 @@ import {
     Plus, Trash2, Edit, Loader2, Search, Layers, Users,
     Activity, ShoppingBag, Clock, Filter, LayoutGrid,
     LayoutList, Check, MoreVertical, Package, ArrowUpRight,
-    TrendingUp, Star, Box, Tag, Flame
+    TrendingUp, Star, Box, Tag, Flame, HardDrive
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { deleteFromCloudinary } from '../utils/cloudinary';
 import { Link } from 'react-router-dom';
 import FilterBar from '../components/FilterBar';
+import { db } from '../firebase/config';
+import { writeBatch, collection, getDocs, doc } from 'firebase/firestore';
 
 const Products = () => {
     const [products, setProducts] = useState([]);
@@ -368,6 +370,50 @@ const Products = () => {
      * Offline: deleteProducts() will throw an OfflineError before touching
      * Firestore; the selection is preserved and an error toast is shown.
      */
+    
+    const handleMigrateGenders = async () => {
+        try {
+            startLoading('جاري تحديث بيانات الجنس لجميع المنتجات...');
+            const querySnapshot = await getDocs(collection(db, 'products'));
+            const batches = [];
+            let currentBatch = writeBatch(db);
+            let opCount = 0;
+            let migratedCount = 0;
+    
+            for (const document of querySnapshot.docs) {
+                const data = document.data();
+                if (data.gender !== undefined) {
+                    currentBatch.update(document.ref, {
+                        genderId: data.gender
+                    });
+                    migratedCount++;
+                    opCount++;
+                }
+    
+                if (opCount === 500) {
+                    batches.push(currentBatch);
+                    currentBatch = writeBatch(db);
+                    opCount = 0;
+                }
+            }
+    
+            if (opCount > 0) {
+                batches.push(currentBatch);
+            }
+    
+            for (let i = 0; i < batches.length; i++) {
+                await batches[i].commit();
+            }
+            
+            stopLoading();
+            Swal.fire('تمت العملية', `تم تحديث ${migratedCount} منتج بنجاح.`, 'success');
+            fetchProducts(0, true);
+        } catch (err) {
+            stopLoading();
+            console.error(err);
+            Swal.fire('خطأ', 'فشل تحديث المنتجات: ' + err.message, 'error');
+        }
+    };
     const handleBulkDelete = async () => {
         if (selectedProducts.size === 0) return;
 
@@ -536,6 +582,15 @@ const Products = () => {
                             >
                                 {isSelectAllLoading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                                 تحديد الكل
+                            </button>
+                            <button 
+                                onClick={handleMigrateGenders}
+                                style={{
+                                    padding: '10px 20px', borderRadius: '12px', background: 'rgba(255, 255, 255, 0.05)',
+                                    border: '1px solid var(--border-color)', color: '#fff', cursor: 'pointer',
+                                    display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '600'
+                                }}>
+                                <HardDrive size={14} /> تحديث قاعدة الجنس
                             </button>
                             <Link to="/products/add" style={{ textDecoration: 'none', width: isMobile ? '100%' : 'auto' }}>
                                 <motion.button
