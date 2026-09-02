@@ -23,6 +23,26 @@ import {
 
 const logo = '/logo.png';
 
+const NOTIFIED_ORDERS_KEY = 'dashboard_notified_order_ids';
+
+const getInitialNotifiedOrders = () => {
+    try {
+        const stored = localStorage.getItem(NOTIFIED_ORDERS_KEY);
+        return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch (e) {
+        console.error('Error reading notified orders from localStorage:', e);
+        return new Set();
+    }
+};
+
+const saveNotifiedOrders = (ordersSet) => {
+    try {
+        localStorage.setItem(NOTIFIED_ORDERS_KEY, JSON.stringify(Array.from(ordersSet)));
+    } catch (e) {
+        console.error('Error saving notified orders to localStorage:', e);
+    }
+};
+
 const playNotificationSound = () => {
     try {
         const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
@@ -40,11 +60,25 @@ const DashboardLayout = ({ children }) => {
     const hasPermission = useAuthStore(state => state.hasPermission);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [pendingCount, setPendingCount] = useState(0);
-    const notifiedOrdersRef = useRef(new Set());
+    
+    const notifiedOrdersRef = useRef(null);
+    if (!notifiedOrdersRef.current) {
+        notifiedOrdersRef.current = getInitialNotifiedOrders();
+    }
+
+    const markOrderAsNotified = (orderId) => {
+        if (!orderId) return;
+        notifiedOrdersRef.current.add(orderId);
+        saveNotifiedOrders(notifiedOrdersRef.current);
+    };
+
+    const hasOrderBeenNotified = (orderId) => {
+        if (!orderId) return true;
+        return notifiedOrdersRef.current.has(orderId);
+    };
 
     const handleNewOrderNotification = (orderId, orderNumber, title, body) => {
-        if (orderId && notifiedOrdersRef.current.has(orderId)) return;
-        if (orderId) notifiedOrdersRef.current.add(orderId);
+        if (!orderId || hasOrderBeenNotified(orderId)) return;
         
         playNotificationSound();
         Swal.fire({
@@ -66,6 +100,8 @@ const DashboardLayout = ({ children }) => {
                 navigate(`/orders?highlight=${orderId}`);
             }
         });
+
+        markOrderAsNotified(orderId);
     };
 
     const handleLogout = () => {
@@ -102,16 +138,34 @@ const DashboardLayout = ({ children }) => {
         fetchPendingCount();
 
         const q = query(collection(db, 'orders'), orderBy('created_at', 'desc'), limit(10));
+        let isInitialSnapshot = true;
+        
         const unsubscribe = onSnapshot(q, (snapshot) => {
             fetchPendingCount();
-            snapshot.docChanges().forEach((change) => {
-                if (change.type === 'added') {
-                    const newOrder = { id: change.doc.id, ...change.doc.data() };
-                    // Handle new order notification (only if it's recently created, though full real-time syncing might re-trigger. 
-                    // In a production app you might check if created_at is recent)
-                    if (newOrder.status === 'pending') {
-                        handleNewOrderNotification(newOrder.id, newOrder.order_number, 'طلب جديد!', 'تم استلام طلب جديد');
+            
+            if (isInitialSnapshot) {
+                // Ignore empty cache snapshots to avoid treating the subsequent server payload as "new"
+                if (snapshot.metadata.fromCache && snapshot.empty) {
+                    return;
+                }
+
+                snapshot.docs.forEach((doc) => {
+                    if (doc.id) {
+                        notifiedOrdersRef.current.add(doc.id);
                     }
+                });
+                
+                isInitialSnapshot = false;
+                return;
+            }
+
+            snapshot.docChanges().forEach((change) => {
+                if (change.type !== 'added') return;
+
+                const newOrder = { id: change.doc.id, ...change.doc.data() };
+                
+                if (newOrder.status === 'pending') {
+                    handleNewOrderNotification(newOrder.id, newOrder.order_number, 'طلب جديد!', 'تم استلام طلب جديد');
                 }
             });
         });

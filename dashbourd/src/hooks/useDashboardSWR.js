@@ -1,5 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { StorageEngine } from '../../../shared/storage/StorageEngine.js';
+import { lifecycleCoordinator } from '../../../shared/startup/LifecycleCoordinator.js';
+
+const activeSubscribers = new Map();
+
+lifecycleCoordinator.subscribe((reason) => {
+    for (const fetchers of activeSubscribers.values()) {
+        fetchers.forEach(execute => {
+            try {
+                execute(false);
+            } catch(e) {}
+        });
+    }
+});
 
 export function useDashboardSWR({
     cacheKey,
@@ -141,8 +154,26 @@ export function useDashboardSWR({
                 executeSWR(true);
             }
         }
+        
+        // Register for lifecycle revalidation
+        if (cacheKey) {
+            if (!activeSubscribers.has(cacheKey)) {
+                activeSubscribers.set(cacheKey, new Set());
+            }
+            activeSubscribers.get(cacheKey).add(executeSWR);
+            
+            return () => {
+                const fetchers = activeSubscribers.get(cacheKey);
+                if (fetchers) {
+                    fetchers.delete(executeSWR);
+                    if (fetchers.size === 0) {
+                        activeSubscribers.delete(cacheKey);
+                    }
+                }
+            };
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [...dependencies, isInitial, executeSWR]);
+    }, [...dependencies, isInitial, executeSWR, cacheKey]);
 
     return {
         data,

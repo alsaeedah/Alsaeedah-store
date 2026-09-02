@@ -11,6 +11,7 @@ import { useDashboardSWR } from '../hooks/useDashboardSWR';
 const Inventory = () => {
     const [products, setProducts] = useState([]);
     const [inventoryData, setInventoryData] = useState({});
+    const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [page, setPage] = useState(0);
     const [hasMore, setHasMore] = useState(true);
@@ -56,60 +57,112 @@ const Inventory = () => {
         return invData;
     };
 
-    const { data: swrData, loading, executeSWR } = useDashboardSWR({
-        cacheKey: `dashboard_inventory_list_p${page}`,
-        fetcher: async () => {
-            const currentCursor = page === 0 ? null : nextCursorRef.current;
-            const response = await productRepository.getPaginated({}, page, LIMIT, currentCursor);
-            
-            const newProducts = response?.products || [];
-            if (newProducts.length > 0) {
-                nextCursorRef.current = response?.nextCursor || null;
-            }
+    const activeSubs = useRef(new Map());
+    
+    useEffect(() => {
+        return () => {
+            activeSubs.current.forEach(unsub => unsub());
+            activeSubs.current.clear();
+        };
+    }, []);
 
-            const fetchedInv = await fetchInventoryData(newProducts.map(p => p.id));
-            
-            return {
-                data: {
-                    products: newProducts,
-                    inventoryData: fetchedInv
-                },
-                hasMore: response?.hasMore || false
-            };
-        },
-        dependencies: [page],
-        isInitial: false // handle merging manually
-    });
+    const fetchInventoryForProducts = async (productIds, pageNum) => {
+        if (!productIds || productIds.length === 0) return;
+        
+        const cacheKey = `dashboard_inventory_p${pageNum}`;
+        
+        // 1. Try LKG cache immediately
+        try {
+            const cachedInv = await StorageEngine.get(cacheKey);
+            if (cachedInv && typeof cachedInv === 'object') {
+                setInventoryData(prev => ({ ...prev, ...cachedInv }));
+            }
+        } catch (e) {}
+
+        // 2. Background revalidate from Firestore
+        try {
+            const fetchedInv = await fetchInventoryData(productIds);
+            if (fetchedInv && Object.keys(fetchedInv).length > 0) {
+                // Check if it actually changed
+                setInventoryData(prev => {
+                    const merged = { ...prev, ...fetchedInv };
+                    return merged;
+                });
+                await StorageEngine.set(cacheKey, fetchedInv);
+            }
+        } catch (e) {
+            console.warn(`[Inventory] Failed to fetch inventory for page ${pageNum}, keeping LKG.`);
+        }
+    };
+
+    const loadPage = (pageNum, isInitial = false) => {
+        if (isInitial) {
+            startLoading();
+            if (products.length === 0) setLoading(true);
+            nextCursorRef.current = null;
+            activeSubs.current.forEach(unsub => unsub());
+            activeSubs.current.clear();
+        } else {
+            setLoadingMore(true);
+        }
+
+        const currentCursor = isInitial ? null : nextCursorRef.current;
+        
+        const unsub = productRepository.subscribeToPaginatedSWR(
+            {}, pageNum, LIMIT, currentCursor,
+            (response) => {
+                const newProducts = response?.products || [];
+                
+                if (!activeSubs.current.has(pageNum)) {
+                    nextCursorRef.current = response?.nextCursor || null;
+                    setHasMore(response?.hasMore || false);
+                }
+
+                setProducts(prev => {
+                    if (isInitial && prev.length === 0) return newProducts;
+                    
+                    const newMap = new Map(newProducts.map(p => [p.id, p]));
+                    const finalArray = [];
+                    const added = new Set();
+                    
+                    prev.forEach(p => {
+                        if (newMap.has(p.id)) {
+                            finalArray.push(newMap.get(p.id));
+                            added.add(p.id);
+                        } else {
+                            finalArray.push(p);
+                            added.add(p.id);
+                        }
+                    });
+                    
+                    newProducts.forEach(p => {
+                        if (!added.has(p.id)) {
+                            finalArray.push(p);
+                            added.add(p.id);
+                        }
+                    });
+                    
+                    return finalArray;
+                });
+
+                // Trigger inventory fetch for these products
+                fetchInventoryForProducts(newProducts.map(p => p.id), pageNum);
+
+                if (isInitial) {
+                    setLoading(false);
+                    stopLoading();
+                } else {
+                    setLoadingMore(false);
+                }
+            }
+        );
+        
+        activeSubs.current.set(pageNum, unsub);
+    };
 
     useEffect(() => {
-        const load = async () => {
-            if (page === 0) {
-                startLoading();
-                nextCursorRef.current = null;
-                const result = await executeSWR(true);
-                if (result && result.data) {
-                    setProducts(result.data.products || []);
-                    setInventoryData(result.data.inventoryData || {});
-                    setHasMore(result.hasMore);
-                }
-                stopLoading();
-            } else {
-                setLoadingMore(true);
-                const result = await executeSWR(false);
-                if (result && result.data) {
-                    setProducts(prev => {
-                        const existingIds = new Set(prev.map(p => p.id));
-                        const uniqueNew = (result.data.products || []).filter(p => !existingIds.has(p.id));
-                        return [...prev, ...uniqueNew];
-                    });
-                    setInventoryData(prev => ({ ...prev, ...(result.data.inventoryData || {}) }));
-                    setHasMore(result.hasMore);
-                }
-                setLoadingMore(false);
-            }
-        };
-        load();
-    }, [page, executeSWR]);
+        loadPage(page, page === 0);
+    }, [page]);
 
     const handleEnableTracking = async (productId) => {
         startLoading();

@@ -40,6 +40,8 @@ const Orders = () => {
 
     useEffect(() => {
         let isMounted = true;
+        let unsubscribe = () => {};
+        
         const loadOrders = async () => {
             if (page === 0) setIsInitialLoading(true);
             const cached = await dashboardOrdersRepository.getCachedOrders(cacheKey);
@@ -67,30 +69,46 @@ const Orders = () => {
                     cacheKey, statusFilter, searchQuery, page, lastDocRef.current, cached
                 );
 
-                if (isMounted && validated) {
+                const handleValidatedData = (val) => {
                     if (page === 0) {
-                        setOrders(validated.data);
+                        setOrders(val.data);
                     } else {
                         setOrders(prev => {
                             const newMap = new Map(prev.map(o => [o.id, o]));
-                            validated.data.forEach(o => newMap.set(o.id, o));
+                            val.data.forEach(o => newMap.set(o.id, o));
                             return Array.from(newMap.values()).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
                         });
                     }
-                    setHasMore(validated.hasMore);
-                    if (validated.lastDocRefObj) {
-                        lastDocRef.current = validated.lastDocRefObj;
+                    setHasMore(val.hasMore);
+                    if (val.lastDocRefObj) {
+                        lastDocRef.current = val.lastDocRefObj;
                     }
                     setIsInitialLoading(false);
                     setRevalidating(false);
                     setLoadingMore(false);
+                };
+
+                if (isMounted && validated) {
+                    handleValidatedData(validated);
+                    
+                    // Subscribe to background lifecycle updates for this cacheKey
+                    unsubscribe = dashboardOrdersRepository.subscribe(
+                        cacheKey, statusFilter, searchQuery, page, lastDocRef.current, cached, (newValidated) => {
+                            if (isMounted) {
+                                handleValidatedData(newValidated);
+                            }
+                        }
+                    );
                 }
             }
         };
 
         loadOrders();
 
-        return () => { isMounted = false; };
+        return () => { 
+            isMounted = false; 
+            unsubscribe();
+        };
     }, [cacheKey, page, refreshTrigger]);
 
     useEffect(() => {

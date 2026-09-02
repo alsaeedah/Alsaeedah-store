@@ -213,6 +213,61 @@ class DashboardOrdersRepository {
             return { success: false, error };
         }
     }
+
+    // Lifecycle subscription management
+    subscribe(cacheKey, statusFilter, searchQuery, page, lastDocRef, cachedOrders, callback) {
+        if (!this.subscribers) this.subscribers = new Map();
+        if (!this.subscribers.has(cacheKey)) {
+            this.subscribers.set(cacheKey, new Set());
+        }
+        
+        const subParams = { statusFilter, searchQuery, page, lastDocRef, cachedOrders, callback };
+        this.subscribers.get(cacheKey).add(subParams);
+        
+        return () => {
+            const subs = this.subscribers.get(cacheKey);
+            if (subs) {
+                subs.delete(subParams);
+                if (subs.size === 0) this.subscribers.delete(cacheKey);
+            }
+        };
+    }
+
+    async _revalidateActiveSubscribers() {
+        if (!this.subscribers) return;
+        
+        for (const [cacheKey, subs] of this.subscribers.entries()) {
+            if (subs.size === 0) continue;
+            
+            // Just take the first sub's params as they share the cacheKey logic
+            const subParams = Array.from(subs)[0];
+            try {
+                const validated = await this.revalidateOrders(
+                    cacheKey, 
+                    subParams.statusFilter, 
+                    subParams.searchQuery, 
+                    subParams.page, 
+                    subParams.lastDocRef, 
+                    subParams.cachedOrders
+                );
+                
+                if (validated) {
+                    for (const s of subs) {
+                        try { s.callback(validated); } catch (e) {}
+                    }
+                }
+            } catch (e) {
+                console.warn(`[DashboardOrdersRepository] Background revalidation failed for ${cacheKey}`, e);
+            }
+        }
+    }
 }
 
 export const dashboardOrdersRepository = new DashboardOrdersRepository();
+
+// Integrate with lifecycle events for active queries
+import { lifecycleCoordinator } from '../../../shared/startup/LifecycleCoordinator.js';
+lifecycleCoordinator.subscribe((reason) => {
+    dashboardOrdersRepository._revalidateActiveSubscribers();
+});
+

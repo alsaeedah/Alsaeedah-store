@@ -6,14 +6,13 @@ import {
     Plus, Trash2, Edit, Loader2, Search, Layers, Users,
     Activity, ShoppingBag, Clock, Filter, LayoutGrid,
     LayoutList, Check, MoreVertical, Package, ArrowUpRight,
-    TrendingUp, Star, Box, Tag, Flame, HardDrive
+    TrendingUp, Star, Box, Tag, Flame
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { deleteFromCloudinary } from '../utils/cloudinary';
 import { Link } from 'react-router-dom';
 import FilterBar from '../components/FilterBar';
-import { db } from '../firebase/config';
-import { writeBatch, collection, getDocs, doc } from 'firebase/firestore';
+
 
 const Products = () => {
     const [products, setProducts] = useState([]);
@@ -60,22 +59,9 @@ const Products = () => {
         if (node) observer.current.observe(node);
     }, [loading, loadingMore, hasMore]);
 
-    const fetchStats = async () => {
-        try {
-            const stats = await productRepository.getStats();
-            setTotalStats(stats);
-        } catch (error) {
-            console.error("Stats fetch error:", error);
-        }
-    };
-
     const nextCursorRef = useRef(null);
     const LIMIT = 20;
 
-    /**
-     * Builds the filter object from current FilterBar state.
-     * Single source of truth used by both fetchProducts() and toggleAll().
-     */
     const buildFilters = () => ({
         genderId: genderId !== 'all' ? genderId : null,
         categoryId: categoryId !== 'all' ? categoryId : null,
@@ -86,67 +72,102 @@ const Products = () => {
         sortPrice: sortPrice
     });
 
-    const fetchProducts = async (pageNum, isInitial = false) => {
+    const activeSubs = useRef(new Map());
+    const statsSub = useRef(null);
+
+    const cleanupSubs = () => {
+        activeSubs.current.forEach(unsub => unsub());
+        activeSubs.current.clear();
+    };
+
+    useEffect(() => {
+        return () => {
+            cleanupSubs();
+            if (statsSub.current) statsSub.current();
+        };
+    }, []);
+
+    // Subscribes to stats via ProductDAL's SWR mechanism:
+    // 1. Serves LKG cached stats immediately.
+    // 2. Revalidates in the background from Firestore.
+    // 3. Automatically re-fires on LifecycleCoordinator events (tab focus, resume, visibility).
+    // 4. Cancels the previous subscription before creating a new one to prevent duplicates.
+    const fetchStats = () => {
+        if (statsSub.current) statsSub.current();
+        statsSub.current = productRepository.subscribeToStatsSWR((stats) => {
+            if (stats) setTotalStats(stats);
+        });
+    };
+
+    const fetchProducts = (pageNum, isInitial = false) => {
         if (isInitial) {
             startLoading();
-            // Only show full-page loader if we have no products at all
             if (products.length === 0) setLoading(true);
             setError(null);
             nextCursorRef.current = null;
+            cleanupSubs();
         } else {
             setLoadingMore(true);
         }
 
-        try {
-            const resolvedFilters = buildFilters();
+        const resolvedFilters = buildFilters();
+        const currentCursor = isInitial ? null : nextCursorRef.current;
 
-            const currentCursor = isInitial ? null : nextCursorRef.current;
-            const response = await productRepository.getPaginated(resolvedFilters, pageNum, LIMIT, currentCursor);
+        const unsub = productRepository.subscribeToPaginatedSWR(
+            resolvedFilters, pageNum, LIMIT, currentCursor,
+            (response) => {
+                if (response && response._isStaleCache) {
+                    console.log("[Products] Using LKG data, background revalidation started.");
+                }
 
-            if (response && response._isStaleCache) {
-                console.log("[Products] Using LKG data, background revalidation started.");
-            }
+                const newProducts = response?.products || [];
+                
+                if (isInitial && !activeSubs.current.has(pageNum)) {
+                    setTotalMatchingCount(response?.total || newProducts.length);
+                }
 
-            const newProducts = response?.products || [];
-            nextCursorRef.current = response?.nextCursor || null;
+                if (!activeSubs.current.has(pageNum)) {
+                    nextCursorRef.current = response?.nextCursor || null;
+                    setHasMore(response?.hasMore || false);
+                }
 
-            if (isInitial) {
-                setProducts(newProducts);
-                setTotalMatchingCount(response?.total || newProducts.length);
-            } else {
                 setProducts(prev => {
-                    const existingIds = new Set(prev.map(p => p.id));
-                    const uniqueNew = newProducts.filter(p => !existingIds.has(p.id));
-                    return [...prev, ...uniqueNew];
+                    if (isInitial && prev.length === 0) return newProducts;
+                    
+                    const newMap = new Map(newProducts.map(p => [p.id, p]));
+                    const finalArray = [];
+                    const added = new Set();
+                    
+                    prev.forEach(p => {
+                        if (newMap.has(p.id)) {
+                            finalArray.push(newMap.get(p.id));
+                            added.add(p.id);
+                        } else {
+                            finalArray.push(p);
+                            added.add(p.id);
+                        }
+                    });
+                    
+                    newProducts.forEach(p => {
+                        if (!added.has(p.id)) {
+                            finalArray.push(p);
+                            added.add(p.id);
+                        }
+                    });
+                    
+                    return finalArray;
                 });
-            }
 
-            setHasMore(response?.hasMore || false);
-        } catch (err) {
-            console.error("[Products] Product loading failed", err);
-            if (isInitial) {
-                setProducts([]);
-                setError({
-                    code: err?.code || 'unknown',
-                    message: err?.message || 'فشل تحميل المنتجات من قاعدة البيانات'
-                });
-            } else {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'خطأ',
-                    text: 'فشل تحميل المزيد من المنتجات',
-                    background: '#141414',
-                    color: '#fff'
-                });
+                if (isInitial) {
+                    setLoading(false);
+                    stopLoading();
+                } else {
+                    setLoadingMore(false);
+                }
             }
-        } finally {
-            if (isInitial) {
-                setLoading(false);
-                stopLoading();
-            } else {
-                setLoadingMore(false);
-            }
-        }
+        );
+
+        activeSubs.current.set(pageNum, unsub);
     };
 
     // Filter changes — reset page, clear selection, and reload
@@ -371,49 +392,6 @@ const Products = () => {
      * Firestore; the selection is preserved and an error toast is shown.
      */
     
-    const handleMigrateGenders = async () => {
-        try {
-            startLoading('جاري تحديث بيانات الجنس لجميع المنتجات...');
-            const querySnapshot = await getDocs(collection(db, 'products'));
-            const batches = [];
-            let currentBatch = writeBatch(db);
-            let opCount = 0;
-            let migratedCount = 0;
-    
-            for (const document of querySnapshot.docs) {
-                const data = document.data();
-                if (data.gender !== undefined) {
-                    currentBatch.update(document.ref, {
-                        genderId: data.gender
-                    });
-                    migratedCount++;
-                    opCount++;
-                }
-    
-                if (opCount === 500) {
-                    batches.push(currentBatch);
-                    currentBatch = writeBatch(db);
-                    opCount = 0;
-                }
-            }
-    
-            if (opCount > 0) {
-                batches.push(currentBatch);
-            }
-    
-            for (let i = 0; i < batches.length; i++) {
-                await batches[i].commit();
-            }
-            
-            stopLoading();
-            Swal.fire('تمت العملية', `تم تحديث ${migratedCount} منتج بنجاح.`, 'success');
-            fetchProducts(0, true);
-        } catch (err) {
-            stopLoading();
-            console.error(err);
-            Swal.fire('خطأ', 'فشل تحديث المنتجات: ' + err.message, 'error');
-        }
-    };
     const handleBulkDelete = async () => {
         if (selectedProducts.size === 0) return;
 
@@ -583,15 +561,7 @@ const Products = () => {
                                 {isSelectAllLoading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                                 تحديد الكل
                             </button>
-                            <button 
-                                onClick={handleMigrateGenders}
-                                style={{
-                                    padding: '10px 20px', borderRadius: '12px', background: 'rgba(255, 255, 255, 0.05)',
-                                    border: '1px solid var(--border-color)', color: '#fff', cursor: 'pointer',
-                                    display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '600'
-                                }}>
-                                <HardDrive size={14} /> تحديث قاعدة الجنس
-                            </button>
+
                             <Link to="/products/add" style={{ textDecoration: 'none', width: isMobile ? '100%' : 'auto' }}>
                                 <motion.button
                                     whileHover={{ scale: 1.05 }}

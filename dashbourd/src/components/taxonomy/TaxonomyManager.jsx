@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { taxonomyStore, TAXONOMY_TYPES } from 'shared/taxonomy';
 import { taxonomyRepository, initTaxonomyStore } from '../../services/taxonomyService';
+import { lifecycleCoordinator } from '../../../../shared/startup/LifecycleCoordinator.js';
 import TaxonomyTabs from './TaxonomyTabs';
 import TaxonomyList from './TaxonomyList';
 import TaxonomyForm from './TaxonomyForm';
@@ -24,6 +25,19 @@ export default function TaxonomyManager() {
       initTaxonomyStore().finally(() => stopLoading());
     }
   }, [initialized, startLoading, stopLoading]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const unsub = lifecycleCoordinator.subscribe((reason) => {
+      if (isMounted) {
+        initTaxonomyStore(); // Background revalidation
+      }
+    });
+    return () => {
+      isMounted = false;
+      unsub();
+    };
+  }, []);
 
   const activeItems = useMemo(() => {
     let items = [];
