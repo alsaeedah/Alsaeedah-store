@@ -1,13 +1,12 @@
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { Capacitor } from '@capacitor/core';
-import { Filesystem, Directory } from '@capacitor/filesystem';
 
 const activeGenerations = new Map();
 const generatedArtifacts = new Map();
 
-// Helper to convert blob to base64
-const blobToBase64 = (blob) => {
+// Helper to convert blob to base64 — exported for use in mobileInvoiceHandler
+export const blobToBase64 = (blob) => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => {
@@ -306,35 +305,8 @@ export const generateInvoicePdf = async (order, paymentType, options = {}) => {
             blob = pdf.output('blob');
             pdf = null; // release jsPDF instance
 
-            let artifactResult;
-
-            if (isAndroid) {
-                // Generate a temporary file to avoid passing Base64 multiple times.
-                let base64Data = await blobToBase64(blob);
-                blob = null; // Free blob early
-                
-                const fileName = `invoice_ORD${order.order_number}.pdf`;
-                // If it's a download action, save to Documents, else Cache
-                const dir = options.saveToDocuments ? Directory.Documents : Directory.Cache;
-
-                const writeResult = await Filesystem.writeFile({
-                    path: fileName,
-                    data: base64Data,
-                    directory: dir,
-                    recursive: true
-                });
-                
-                base64Data = null; // Free Base64 string early
-
-                artifactResult = { 
-                    type: 'uri', 
-                    uri: writeResult.uri, 
-                    directory: dir,
-                    path: fileName 
-                };
-            } else {
-                artifactResult = { type: 'blob', blob: blob };
-            }
+            // Always return a blob — mobile file-saving is handled by mobileInvoiceHandler
+            const artifactResult = { type: 'blob', blob: blob };
 
             generatedArtifacts.set(orderId, artifactResult);
             return artifactResult;

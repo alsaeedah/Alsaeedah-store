@@ -1,13 +1,10 @@
-import { Capacitor } from '@capacitor/core';
 import { printWebPdf } from './WebPrintAdapter';
-import { printAndroidPdf } from './AndroidPrintAdapter';
 
+// PrintService is kept for backward compatibility.
+// Native mobile printing is now handled directly in invoicePrint.js via mobileInvoiceHandler.
 export const PrintService = {
-    print: async (artifact, documentName) => {
-        if (Capacitor.isNativePlatform()) {
-            return await printAndroidPdf(artifact, documentName);
-        } else {
-            return await printWebPdf(artifact.blob);
-        }
+    print: async (artifact) => {
+        return await printWebPdf(artifact.blob);
     }
 };
+
