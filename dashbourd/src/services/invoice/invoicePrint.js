@@ -1,18 +1,30 @@
-import { generateInvoicePdf } from './invoiceGenerator';
+﻿import { generateInvoicePdf } from './invoiceGenerator';
 import { Capacitor } from '@capacitor/core';
-import { handleMobileInvoice } from './mobileInvoiceHandler';
+import { mobilePrintHandler } from './mobilePrintHandler';
 import { printWebPdf } from './WebPrintAdapter';
 
+/**
+ * Prints the invoice for the given order.
+ *
+ * Mobile (native):
+ *   Delegates to mobilePrintHandler which attempts a 1-click native print dialog
+ *   via @capgo/capacitor-printer.  If no print service is available on the device
+ *   it falls back gracefully to the Share Sheet.
+ *
+ * Web (desktop browser):
+ *   Opens the PDF in a new tab using the browser's built-in PDF viewer / print flow.
+ *
+ * @param {object}   order       - The order object.
+ * @param {string}   paymentType - 'cash' | 'credit'.
+ * @param {Function} onProgress  - Optional progress callback.
+ */
 export const printInvoice = async (order, paymentType, onProgress) => {
     const artifact = await generateInvoicePdf(order, paymentType, { onProgress });
 
     if (Capacitor.isNativePlatform()) {
-        // On mobile, "Print" opens the native Share Sheet, which includes
-        // the system's native Print option alongside WhatsApp, Save, etc.
-        return await handleMobileInvoice(artifact.blob, order.order_number);
+        return await mobilePrintHandler(artifact.blob, order.order_number);
     } else {
-        // Web: open the PDF in a new tab to leverage the browser's native print workflow.
+        // Web: open PDF in new tab — the browser's native PDF viewer handles printing.
         return await printWebPdf(artifact.blob);
     }
 };
-

@@ -5,7 +5,7 @@ import { Capacitor } from '@capacitor/core';
 const activeGenerations = new Map();
 const generatedArtifacts = new Map();
 
-// Helper to convert blob to base64 — exported for use in mobileInvoiceHandler
+// Helper to convert blob to base64 — exported for use in mobilePrintHandler and mobileShareHandler
 export const blobToBase64 = (blob) => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
