@@ -5,16 +5,28 @@ import { openDB } from 'idb';
 const DB_NAME = 'AL_SAEEDAH_CACHE';
 const STORE_NAME = 'taxonomy_cache';
 
-let idbPromise = null;
+let _idbPromise = null;
 
-if (!Capacitor.isNativePlatform()) {
-    idbPromise = openDB(DB_NAME, 1, {
-        upgrade(db) {
-            if (!db.objectStoreNames.contains(STORE_NAME)) {
-                db.createObjectStore(STORE_NAME);
+function getDb() {
+    if (Capacitor.isNativePlatform()) return null;
+    
+    if (!_idbPromise) {
+        _idbPromise = openDB(DB_NAME, 1, {
+            upgrade(db) {
+                if (!db.objectStoreNames.contains(STORE_NAME)) {
+                    db.createObjectStore(STORE_NAME);
+                }
+            },
+            terminated() {
+                // Connection was closed by the browser (e.g. user clearing data or another tab upgrading)
+                _idbPromise = null;
             }
-        },
-    });
+        }).catch(err => {
+            _idbPromise = null;
+            throw err;
+        });
+    }
+    return _idbPromise;
 }
 
 /**
@@ -29,12 +41,20 @@ export const StorageEngine = {
      * @param {any} value 
      */
     async set(key, value) {
-        const serialized = JSON.stringify(value);
-        if (Capacitor.isNativePlatform()) {
-            await Preferences.set({ key, value: serialized });
-        } else {
-            const db = await idbPromise;
-            await db.put(STORE_NAME, serialized, key);
+        try {
+            const serialized = JSON.stringify(value);
+            if (Capacitor.isNativePlatform()) {
+                await Preferences.set({ key, value: serialized });
+            } else {
+                const db = await getDb();
+                if (db) await db.put(STORE_NAME, serialized, key);
+            }
+        } catch (error) {
+            console.warn(`[StorageEngine] Failed to set key ${key}`, error);
+            // If the connection is closing/closed, reset the promise to force reconnect next time
+            if (error?.message?.includes('closing')) {
+                _idbPromise = null;
+            }
         }
     },
 
@@ -45,13 +65,22 @@ export const StorageEngine = {
      */
     async get(key) {
         let serialized = null;
-        if (Capacitor.isNativePlatform()) {
-            const { value } = await Preferences.get({ key });
-            serialized = value;
-        } else {
-            const db = await idbPromise;
-            serialized = await db.get(STORE_NAME, key);
+        try {
+            if (Capacitor.isNativePlatform()) {
+                const { value } = await Preferences.get({ key });
+                serialized = value;
+            } else {
+                const db = await getDb();
+                if (db) serialized = await db.get(STORE_NAME, key);
+            }
+        } catch (error) {
+            console.warn(`[StorageEngine] Failed to get key ${key}`, error);
+            if (error?.message?.includes('closing')) {
+                _idbPromise = null;
+            }
+            return null;
         }
+
         if (!serialized) return null;
         try {
             return JSON.parse(serialized);
@@ -67,11 +96,18 @@ export const StorageEngine = {
      * @param {string} key 
      */
     async remove(key) {
-        if (Capacitor.isNativePlatform()) {
-            await Preferences.remove({ key });
-        } else {
-            const db = await idbPromise;
-            await db.delete(STORE_NAME, key);
+        try {
+            if (Capacitor.isNativePlatform()) {
+                await Preferences.remove({ key });
+            } else {
+                const db = await getDb();
+                if (db) await db.delete(STORE_NAME, key);
+            }
+        } catch (error) {
+            console.warn(`[StorageEngine] Failed to remove key ${key}`, error);
+            if (error?.message?.includes('closing')) {
+                _idbPromise = null;
+            }
         }
     }
 };

@@ -1,22 +1,72 @@
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
 
-export const generateInvoicePdf = async (order, paymentType) => {
-    const invoiceId = `ORD${order.order_number}`;
-    const dateStr = new Date(order.created_at).toLocaleDateString('ar-SA');
-    const customerUser = order.users || {};
-    const logo = '/logo.png';
+const activeGenerations = new Map();
+const generatedArtifacts = new Map();
 
-    const items = Array.isArray(order.items) ? order.items : [];
-    const addressData = order.customer_address;
-    const addressText = addressData && typeof addressData === 'object'
-        ? `${addressData.governorate || ''} - ${addressData.district || ''}`.replace(/^ - | - $/g, '') || 'غير محدد'
-        : (addressData || 'غير محدد');
+// Helper to convert blob to base64
+const blobToBase64 = (blob) => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64data = reader.result.split(',')[1];
+            resolve(base64data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+};
 
-    const cashSelected = paymentType === 'cash';
-    const creditSelected = paymentType === 'credit';
+export const clearInvoiceCache = (orderId) => {
+    if (orderId) {
+        generatedArtifacts.delete(orderId);
+    } else {
+        generatedArtifacts.clear();
+    }
+};
 
-    const headerHTML = `
+export const getCachedInvoice = (orderId) => {
+    return generatedArtifacts.get(orderId);
+};
+
+export const generateInvoicePdf = async (order, paymentType, options = {}) => {
+    const orderId = order.id || order.order_number;
+    
+    // Check if we already have a generated artifact
+    if (generatedArtifacts.has(orderId)) {
+        return generatedArtifacts.get(orderId);
+    }
+
+    // Check if generation is already in progress for this order
+    if (activeGenerations.has(orderId)) {
+        return activeGenerations.get(orderId);
+    }
+
+    const generationPromise = (async () => {
+        const invoiceId = `ORD${order.order_number}`;
+        const dateStr = new Date(order.created_at).toLocaleDateString('ar-SA');
+        const customerUser = order.users || {};
+        const logo = '/logo.png';
+        const isAndroid = Capacitor.isNativePlatform();
+        const renderScale = isAndroid ? 1 : 2;
+
+        const { onProgress } = options;
+        if (onProgress) {
+            onProgress({ stage: 'starting', currentPage: 0, totalPages: 0 });
+        }
+
+        const items = Array.isArray(order.items) ? order.items : [];
+        const addressData = order.customer_address;
+        const addressText = addressData && typeof addressData === 'object'
+            ? `${addressData.governorate || ''} - ${addressData.district || ''}`.replace(/^ - | - $/g, '') || 'غير محدد'
+            : (addressData || 'غير محدد');
+
+        const cashSelected = paymentType === 'cash';
+        const creditSelected = paymentType === 'credit';
+
+        const headerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #d4af37; padding-bottom: 20px; margin-bottom: 20px;">
             <div style="flex: 1; text-align: right;">
                 <h1 style="color: #d4af37; font-size: 28px; margin: 0 0 10px 0; font-weight: 700;">متجر السعيدة</h1>
@@ -76,9 +126,9 @@ export const generateInvoicePdf = async (order, paymentType) => {
                 </div>
             </div>
         </div>
-    `;
+        `;
 
-    const tableHeaderHTML = `
+        const tableHeaderHTML = `
         <tr style="background: rgba(212, 175, 55, 0.1); color: #000;">
             <th style="padding: 15px; text-align: right; border-bottom: 2px solid #d4af37;">رقم الموديل</th>
             <th style="padding: 15px; text-align: right; border-bottom: 2px solid #d4af37;">المنتج</th>
@@ -86,17 +136,17 @@ export const generateInvoicePdf = async (order, paymentType) => {
             <th style="padding: 15px; text-align: center; border-bottom: 2px solid #d4af37;">الكمية</th>
             <th style="padding: 15px; text-align: left; border-bottom: 2px solid #d4af37;">الإجمالي</th>
         </tr>
-    `;
+        `;
 
-    const generateRowHTML = (item) => `
+        const generateRowHTML = (item) => `
         <td style="padding: 15px; text-align: right; color: #555; font-size: 13px; font-weight: bold;">#${item.displayId || '---'}</td>
         <td style="padding: 15px; text-align: right; color: #000; font-weight: 600;">${item.name || item.title}</td>
         <td style="padding: 15px; text-align: center; color: #333;">${(item.price || 0).toLocaleString()} ر.س</td>
         <td style="padding: 15px; text-align: center; color: #333;">${item.dp_qty || item.quantity || 1}</td>
         <td style="padding: 15px; text-align: left; color: #d4af37; font-weight: bold;">${((item.price || 0) * (item.dp_qty || item.quantity || 1)).toLocaleString()} ر.س</td>
-    `;
+        `;
 
-    const footerHTML = `
+        const footerHTML = `
         <div style="display: flex; flex-direction: column; align-items: flex-start; margin-top: 30px; padding: 20px; background: #fcfcfc; border: 1px solid #eee; border-radius: 8px;">
             <div style="width: 100%; display: flex; justify-content: space-between; font-size: 22px; font-weight: bold;">
                 <span style="color: #000;">الإجمالي الكلي:</span>
@@ -107,132 +157,195 @@ export const generateInvoicePdf = async (order, paymentType) => {
         <div style="margin-top: 60px; text-align: center; color: #888; font-size: 13px;">
             <p style="margin-bottom: 5px;">نشكركم على اختياركم متجر السعيدة - الفخامة في كل ثانية</p>
         </div>
-    `;
+        `;
 
-    const PAGE_WIDTH = 800;
-    const PAGE_HEIGHT = 1131.43; // 800 * (297 / 210)
-    const CONTENT_HEIGHT = Math.floor(PAGE_HEIGHT) - 80; // 40px padding top and bottom
+        const PAGE_WIDTH = 800;
+        const PAGE_HEIGHT = 1131.43; // 800 * (297 / 210)
+        const CONTENT_HEIGHT = Math.floor(PAGE_HEIGHT) - 80; // 40px padding top and bottom
 
-    const invoiceContainer = document.createElement('div');
-    invoiceContainer.id = 'temp-invoice-container';
-    invoiceContainer.style.position = 'absolute';
-    invoiceContainer.style.left = '-9999px';
-    invoiceContainer.style.top = '-9999px';
-    invoiceContainer.style.width = `${PAGE_WIDTH}px`;
-    invoiceContainer.style.background = '#f0f0f0';
-    document.body.appendChild(invoiceContainer);
+        const invoiceContainer = document.createElement('div');
+        invoiceContainer.id = 'temp-invoice-container';
+        invoiceContainer.style.position = 'absolute';
+        invoiceContainer.style.left = '-9999px';
+        invoiceContainer.style.top = '-9999px';
+        invoiceContainer.style.width = `${PAGE_WIDTH}px`;
+        invoiceContainer.style.background = '#f0f0f0';
+        document.body.appendChild(invoiceContainer);
 
-    const createPage = () => {
-        const page = document.createElement('div');
-        page.className = 'pdf-page';
-        page.style.width = `${PAGE_WIDTH}px`;
-        page.style.height = `${PAGE_HEIGHT}px`;
-        page.style.padding = '40px';
-        page.style.boxSizing = 'border-box';
-        page.style.background = '#ffffff';
-        page.style.color = '#000';
-        page.style.fontFamily = "'Cairo', sans-serif";
-        page.style.direction = 'rtl';
-        page.style.position = 'relative';
-        page.style.overflow = 'hidden';
-        invoiceContainer.appendChild(page);
-        return page;
-    };
+        let pdf = null;
+        let blob = null;
 
-    let currentPage = createPage();
-    let currentContentContainer = document.createElement('div');
-    currentContentContainer.style.display = 'flow-root'; // Prevent margin collapse out of this container
-    currentPage.appendChild(currentContentContainer);
+        try {
+            const createPage = () => {
+                const page = document.createElement('div');
+                page.className = 'pdf-page';
+                page.style.width = `${PAGE_WIDTH}px`;
+                page.style.height = `${PAGE_HEIGHT}px`;
+                page.style.padding = '40px';
+                page.style.boxSizing = 'border-box';
+                page.style.background = '#ffffff';
+                page.style.color = '#000';
+                page.style.fontFamily = "'Cairo', sans-serif";
+                page.style.direction = 'rtl';
+                page.style.position = 'relative';
+                page.style.overflow = 'hidden';
+                invoiceContainer.appendChild(page);
+                return page;
+            };
 
-    // 1. Add Header
-    currentContentContainer.innerHTML = headerHTML;
-    
-    // 2. Add Table wrapper
-    let currentTable = document.createElement('table');
-    currentTable.style.width = '100%';
-    currentTable.style.borderCollapse = 'collapse';
-    currentTable.style.marginBottom = '30px';
-    currentTable.innerHTML = `<thead>${tableHeaderHTML}</thead><tbody></tbody>`;
-    currentContentContainer.appendChild(currentTable);
-    
-    let currentTbody = currentTable.querySelector('tbody');
-
-    const isOverflowing = () => {
-        return currentContentContainer.offsetHeight > CONTENT_HEIGHT;
-    };
-
-    // 3. Add Rows
-    for (const item of items) {
-        const tr = document.createElement('tr');
-        tr.style.borderBottom = '1px solid #eee';
-        tr.innerHTML = generateRowHTML(item);
-        currentTbody.appendChild(tr);
-
-        if (isOverflowing()) {
-            currentTbody.removeChild(tr);
-            
-            currentPage = createPage();
-            currentContentContainer = document.createElement('div');
-            currentContentContainer.style.display = 'flow-root'; // Prevent margin collapse out of this container
+            let currentPage = createPage();
+            let currentContentContainer = document.createElement('div');
+            currentContentContainer.style.display = 'flow-root';
             currentPage.appendChild(currentContentContainer);
+
+            // 1. Add Header
+            currentContentContainer.innerHTML = headerHTML;
             
-            currentTable = document.createElement('table');
+            // 2. Add Table wrapper
+            let currentTable = document.createElement('table');
             currentTable.style.width = '100%';
             currentTable.style.borderCollapse = 'collapse';
             currentTable.style.marginBottom = '30px';
             currentTable.innerHTML = `<thead>${tableHeaderHTML}</thead><tbody></tbody>`;
             currentContentContainer.appendChild(currentTable);
-            currentTbody = currentTable.querySelector('tbody');
             
-            currentTbody.appendChild(tr);
-        }
-    }
+            let currentTbody = currentTable.querySelector('tbody');
 
-    // 4. Add Footer
-    const footerDiv = document.createElement('div');
-    footerDiv.innerHTML = footerHTML;
-    currentContentContainer.appendChild(footerDiv);
+            const isOverflowing = () => {
+                return currentContentContainer.offsetHeight > CONTENT_HEIGHT;
+            };
 
-    if (isOverflowing()) {
-        currentContentContainer.removeChild(footerDiv);
-        
-        currentPage = createPage();
-        currentContentContainer = document.createElement('div');
-        currentContentContainer.style.display = 'flow-root'; // Prevent margin collapse out of this container
-        currentPage.appendChild(currentContentContainer);
-        currentContentContainer.appendChild(footerDiv);
-    }
+            // 3. Add Rows
+            for (const item of items) {
+                const tr = document.createElement('tr');
+                tr.style.borderBottom = '1px solid #eee';
+                tr.innerHTML = generateRowHTML(item);
+                currentTbody.appendChild(tr);
 
-    try {
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
-
-        const pages = invoiceContainer.querySelectorAll('.pdf-page');
-        for (let i = 0; i < pages.length; i++) {
-            const canvas = await html2canvas(pages[i], {
-                backgroundColor: '#ffffff',
-                scale: 2,
-                useCORS: true,
-                logging: false
-            });
-            const imgData = canvas.toDataURL('image/png');
-            
-            if (i > 0) {
-                pdf.addPage();
+                if (isOverflowing()) {
+                    currentTbody.removeChild(tr);
+                    
+                    currentPage = createPage();
+                    currentContentContainer = document.createElement('div');
+                    currentContentContainer.style.display = 'flow-root';
+                    currentPage.appendChild(currentContentContainer);
+                    
+                    currentTable = document.createElement('table');
+                    currentTable.style.width = '100%';
+                    currentTable.style.borderCollapse = 'collapse';
+                    currentTable.style.marginBottom = '30px';
+                    currentTable.innerHTML = `<thead>${tableHeaderHTML}</thead><tbody></tbody>`;
+                    currentContentContainer.appendChild(currentTable);
+                    currentTbody = currentTable.querySelector('tbody');
+                    
+                    currentTbody.appendChild(tr);
+                }
             }
-            
-            const imgWidth = pdfWidth;
-            const imgHeight = (canvas.height * imgWidth) / canvas.width;
-            
-            pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-        }
 
-        return pdf.output('blob');
-    } finally {
-        if (document.body.contains(invoiceContainer)) {
-            document.body.removeChild(invoiceContainer);
+            // 4. Add Footer
+            const footerDiv = document.createElement('div');
+            footerDiv.innerHTML = footerHTML;
+            currentContentContainer.appendChild(footerDiv);
+
+            if (isOverflowing()) {
+                currentContentContainer.removeChild(footerDiv);
+                
+                currentPage = createPage();
+                currentContentContainer = document.createElement('div');
+                currentContentContainer.style.display = 'flow-root';
+                currentPage.appendChild(currentContentContainer);
+                currentContentContainer.appendChild(footerDiv);
+            }
+
+            pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+
+            const pages = invoiceContainer.querySelectorAll('.pdf-page');
+            const totalPages = pages.length;
+
+            for (let i = 0; i < totalPages; i++) {
+                if (onProgress) {
+                    onProgress({ stage: 'rendering', currentPage: i + 1, totalPages });
+                }
+
+                const page = pages[i];
+                let canvas = await html2canvas(page, {
+                    backgroundColor: '#ffffff',
+                    scale: renderScale,
+                    useCORS: true,
+                    logging: false
+                });
+                
+                let imgData = canvas.toDataURL('image/png');
+                
+                if (i > 0) {
+                    pdf.addPage();
+                }
+                
+                const imgWidth = pdfWidth;
+                const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                
+                pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+
+                // Memory Cleanup for current page
+                canvas.width = 0;
+                canvas.height = 0;
+                canvas = null;
+                imgData = null;
+                page.remove(); // Remove DOM node
+
+                // Yield to UI thread
+                await new Promise(r => setTimeout(r, 20));
+            }
+
+            if (onProgress) {
+                onProgress({ stage: 'saving', currentPage: totalPages, totalPages });
+            }
+
+            blob = pdf.output('blob');
+            pdf = null; // release jsPDF instance
+
+            let artifactResult;
+
+            if (isAndroid) {
+                // Generate a temporary file to avoid passing Base64 multiple times.
+                let base64Data = await blobToBase64(blob);
+                blob = null; // Free blob early
+                
+                const fileName = `invoice_ORD${order.order_number}.pdf`;
+                // If it's a download action, save to Documents, else Cache
+                const dir = options.saveToDocuments ? Directory.Documents : Directory.Cache;
+
+                const writeResult = await Filesystem.writeFile({
+                    path: fileName,
+                    data: base64Data,
+                    directory: dir,
+                    recursive: true
+                });
+                
+                base64Data = null; // Free Base64 string early
+
+                artifactResult = { 
+                    type: 'uri', 
+                    uri: writeResult.uri, 
+                    directory: dir,
+                    path: fileName 
+                };
+            } else {
+                artifactResult = { type: 'blob', blob: blob };
+            }
+
+            generatedArtifacts.set(orderId, artifactResult);
+            return artifactResult;
+        } finally {
+            if (document.body.contains(invoiceContainer)) {
+                document.body.removeChild(invoiceContainer);
+            }
+            activeGenerations.delete(orderId);
         }
-    }
+    })();
+
+    activeGenerations.set(orderId, generationPromise);
+    return generationPromise;
 };
-

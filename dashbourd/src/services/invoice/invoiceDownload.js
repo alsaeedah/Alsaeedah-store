@@ -1,34 +1,36 @@
-import { generateInvoicePdf } from './invoiceGenerator';
+import { generateInvoicePdf, getCachedInvoice } from './invoiceGenerator';
 import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
 
-// Helper to convert blob to base64
-const blobToBase64 = (blob) => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            const base64data = reader.result.split(',')[1];
-            resolve(base64data);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-    });
-};
+export const downloadInvoice = async (order, paymentType, onProgress) => {
+    let artifact = getCachedInvoice(order.id || order.order_number);
+    
+    if (!artifact) {
+        artifact = await generateInvoicePdf(order, paymentType, { onProgress, saveToDocuments: true });
+    } else {
+        // If it's cached, we should quickly notify progress is complete for the UI
+        if (onProgress) {
+            onProgress({ stage: 'saving', currentPage: 1, totalPages: 1 });
+        }
+    }
 
-export const downloadInvoice = async (order, paymentType) => {
-    const blob = await generateInvoicePdf(order, paymentType);
     const fileName = `invoice_ORD${order.order_number}.pdf`;
 
     if (Capacitor.isNativePlatform()) {
         try {
-            const { Filesystem, Directory } = await import('@capacitor/filesystem');
-            const base64Data = await blobToBase64(blob);
-
-            await Filesystem.writeFile({
-                path: fileName,
-                data: base64Data,
-                directory: Directory.Documents,
-                recursive: true
-            });
+            if (artifact.type === 'uri') {
+                if (artifact.directory !== Directory.Documents) {
+                    // It was generated for printing (Cache), we must copy it to Documents
+                    await Filesystem.copy({
+                        from: artifact.path,
+                        directory: artifact.directory,
+                        to: fileName,
+                        toDirectory: Directory.Documents
+                    });
+                }
+            } else {
+                throw new Error('Internal Error: Missing PDF URI on Android.');
+            }
 
             return { success: true, message: 'تم حفظ الفاتورة في مجلد المستندات (Documents).' };
         } catch (error) {
@@ -36,6 +38,7 @@ export const downloadInvoice = async (order, paymentType) => {
             throw new Error('تعذر حفظ الفاتورة. يرجى التحقق من أذونات التخزين.');
         }
     } else {
+        const blob = artifact.blob;
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.style.display = 'none';

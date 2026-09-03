@@ -33,6 +33,10 @@ class LifecycleCoordinator {
                     this._trigger('focus');
                 }
             });
+
+            window.addEventListener('online', () => {
+                this._trigger('online');
+            });
         }
 
         // Capacitor native resume

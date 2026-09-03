@@ -3,11 +3,11 @@ import { printWebPdf } from './WebPrintAdapter';
 import { printAndroidPdf } from './AndroidPrintAdapter';
 
 export const PrintService = {
-    print: async (blob, documentName) => {
+    print: async (artifact, documentName) => {
         if (Capacitor.isNativePlatform()) {
-            return await printAndroidPdf(blob, documentName);
+            return await printAndroidPdf(artifact, documentName);
         } else {
-            return await printWebPdf(blob);
+            return await printWebPdf(artifact.blob);
         }
     }
 };

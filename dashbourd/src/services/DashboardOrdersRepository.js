@@ -1,6 +1,6 @@
-import { db } from '../firebase/config';
+import { db } from '../firebase/config.js';
 import { collection, query, where, getDocs, limit, startAfter, orderBy } from 'firebase/firestore';
-import { StorageEngine } from '../../../shared/storage/StorageEngine';
+import { StorageEngine } from '../../../shared/storage/StorageEngine.js';
 
 class DashboardOrdersRepository {
     constructor() {
@@ -16,32 +16,37 @@ class DashboardOrdersRepository {
     async getCachedOrders(cacheKey) {
         try {
             const cached = await StorageEngine.get(cacheKey);
-            if (cached && typeof cached === 'object' && cached.status) {
-                if (cached.data) {
-                    cached.data = cached.data.filter(o => !this.deletedOrderIds.has(o.id));
-                }
-                return cached;
+            if (!cached || typeof cached !== 'object') {
+                return { status: 'UNINITIALIZED', data: [], hasMore: false, lastValidatedAt: null };
             }
-            if (cached && Array.isArray(cached)) {
-                const filtered = cached.filter(o => !this.deletedOrderIds.has(o.id));
-                return { status: 'READY', data: filtered, generation: 0, hasMore: false };
+            if (!Array.isArray(cached.data) && !Array.isArray(cached)) {
+                return { status: 'UNINITIALIZED', data: [], hasMore: false, lastValidatedAt: null };
             }
-            return { status: 'UNINITIALIZED', data: [], generation: 0, hasMore: false };
+            
+            let dataToFilter = Array.isArray(cached.data) ? cached.data : cached;
+            const filtered = dataToFilter.filter(o => !this.deletedOrderIds.has(o.id));
+            
+            return {
+                status: cached.status || 'READY',
+                data: filtered,
+                hasMore: cached.hasMore || false,
+                lastValidatedAt: cached.lastValidatedAt || null
+            };
         } catch (e) {
             console.warn(`[DashboardOrdersRepository] Failed to read cache for ${cacheKey}`, e);
-            return { status: 'UNINITIALIZED', data: [], generation: 0, hasMore: false };
+            return { status: 'UNINITIALIZED', data: [], hasMore: false, lastValidatedAt: null };
         }
     }
 
     async revalidateOrders(cacheKey, statusFilter, searchQuery, page, lastDocRef, cachedOrders) {
-        const currentGeneration = (this.cacheGenerations.get(cacheKey) || 0) + 1;
-        this.cacheGenerations.set(cacheKey, currentGeneration);
-
         if (this.activeRequests.has(cacheKey)) {
             return this.activeRequests.get(cacheKey);
         }
 
-        const requestPromise = this._executeRevalidation(cacheKey, statusFilter, searchQuery, page, lastDocRef, cachedOrders, currentGeneration);
+        const generation = (this.cacheGenerations.get(cacheKey) || 0) + 1;
+        this.cacheGenerations.set(cacheKey, generation);
+
+        const requestPromise = this._executeRevalidation(cacheKey, statusFilter, searchQuery, page, lastDocRef, cachedOrders, generation);
         this.activeRequests.set(cacheKey, requestPromise);
 
         try {
@@ -86,8 +91,13 @@ class DashboardOrdersRepository {
             try {
                 snapshot = await getDocs(finalQuery);
                 serverDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            } catch (e) {
-                console.error("[DashboardOrdersRepository] Full fetch failed, attempting fallback query without indexes:", e);
+            } catch (err) {
+                const isIndexError = err.code === 'failed-precondition' || (err.message && err.message.includes('index'));
+                if (!isIndexError) {
+                    throw err; // Network, permission, or other errors should not trigger fallback
+                }
+                
+                console.warn("[DashboardOrdersRepository] Index missing, attempting fallback query:", err);
                 const fallbackQuery = query(q, limit(50));
                 snapshot = await getDocs(fallbackQuery);
                 let fetchedOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -110,26 +120,59 @@ class DashboardOrdersRepository {
 
             if (this.cacheGenerations.get(cacheKey) !== generation) {
                 console.warn(`[DashboardOrdersRepository] Dropping stale response for ${cacheKey}`);
-                return cachedOrders;
+                return await this.getCachedOrders(cacheKey);
             }
 
-            const reconciledData = this._reconcile(cachedOrders.data || [], serverDocs);
+            if (serverDocs.length === 0 && page === 0) {
+                const emptyState = { status: 'EMPTY', data: [], hasMore: false, lastValidatedAt: new Date().toISOString() };
+                await StorageEngine.set(cacheKey, emptyState);
+                return { ...emptyState, lastDocRefObj: null, error: null };
+            }
+
+            const latestCache = await this.getCachedOrders(cacheKey);
+            const reconciledData = this._reconcile(latestCache.data || [], serverDocs);
+            const hasMore = isFallback ? (snapshot.docs.length > (page + 1) * 6) : (serverDocs.length === 6);
             
-            const newCacheState = {
+            const persistState = {
                 status: 'READY',
                 data: reconciledData,
-                generation,
-                lastValidatedAt: new Date().toISOString(),
-                hasMore: isFallback ? (snapshot.docs.length > (page + 1) * 6) : (serverDocs.length === 6),
-                lastDocRefObj: isFallback ? null : (serverDocs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null)
+                hasMore,
+                lastValidatedAt: new Date().toISOString()
             };
 
-            await StorageEngine.set(cacheKey, newCacheState);
-            return newCacheState;
+            await StorageEngine.set(cacheKey, persistState);
+            
+            return {
+                ...persistState,
+                lastDocRefObj: isFallback ? null : (serverDocs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null),
+                error: null
+            };
 
-        } catch (e) {
-            console.error(`[DashboardOrdersRepository] Validation failed for ${cacheKey}. Preserving LKG cache.`, e);
-            return cachedOrders;
+        } catch (err) {
+            console.error(`[DashboardOrdersRepository] Validation failed for ${cacheKey}.`, err);
+            
+            const latestCache = await this.getCachedOrders(cacheKey);
+            const hasCachedData = latestCache.status !== 'UNINITIALIZED';
+            
+            if (hasCachedData) {
+                return {
+                    status: 'STALE',
+                    data: latestCache.data,
+                    hasMore: latestCache.hasMore,
+                    lastValidatedAt: latestCache.lastValidatedAt,
+                    error: err,
+                    lastDocRefObj: null
+                };
+            }
+            
+            return {
+                status: 'ERROR',
+                data: [],
+                hasMore: false,
+                lastValidatedAt: null,
+                error: err,
+                lastDocRefObj: null
+            };
         }
     }
 
@@ -253,7 +296,7 @@ class DashboardOrdersRepository {
                 
                 if (validated) {
                     for (const s of subs) {
-                        try { s.callback(validated); } catch (e) {}
+                        try { s.callback(validated); } catch { /* ignore */ }
                     }
                 }
             } catch (e) {
@@ -267,7 +310,7 @@ export const dashboardOrdersRepository = new DashboardOrdersRepository();
 
 // Integrate with lifecycle events for active queries
 import { lifecycleCoordinator } from '../../../shared/startup/LifecycleCoordinator.js';
-lifecycleCoordinator.subscribe((reason) => {
+lifecycleCoordinator.subscribe(() => {
     dashboardOrdersRepository._revalidateActiveSubscribers();
 });
 

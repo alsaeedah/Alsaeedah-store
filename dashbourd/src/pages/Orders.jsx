@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { useLoading } from '../context/LoadingContext';
-import { db } from '../firebase/config';
 import Swal from 'sweetalert2';
 import { StorageEngine } from '../../../shared/storage/StorageEngine.js';
+// eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Download, Trash2, CheckCircle, XCircle, RotateCcw, Loader2, ShoppingCart, TrendingUp, Clock, Users as UsersIcon, Box, ShoppingBag, Printer } from 'lucide-react';
 import InvoiceActionMenu from '../components/InvoiceActionMenu';
@@ -30,77 +30,107 @@ const Orders = () => {
     const orderRefs = useRef({});  // { [orderId]: DOM element }
 
     const lastDocRef = useRef(null);
-    const queryConstraintsRef = useRef([]);
 
         const cacheKey = dashboardOrdersRepository.buildCacheKey(statusFilter, searchQuery, page);
-    const [isInitialLoading, setIsInitialLoading] = useState(true);
-    const [revalidating, setRevalidating] = useState(false);
+    const [pageStatus, setPageStatus] = useState('UNINITIALIZED');
+    const [loadError, setLoadError] = useState(null);
+    const [loadMoreError, setLoadMoreError] = useState(false);
 
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+    const currentQueryRef = useRef({ statusFilter, searchQuery, page });
 
     useEffect(() => {
         let isMounted = true;
         let unsubscribe = () => {};
         
         const loadOrders = async () => {
-            if (page === 0) setIsInitialLoading(true);
+            currentQueryRef.current = { statusFilter, searchQuery, page };
+            const qRef = currentQueryRef.current;
+
+            if (page === 0 && pageStatus !== 'STALE' && pageStatus !== 'READY') {
+                setPageStatus('LOADING');
+            }
+            if (page > 0) {
+                setLoadMoreError(false);
+                setLoadingMore(true);
+            }
+
             const cached = await dashboardOrdersRepository.getCachedOrders(cacheKey);
             
-            if (isMounted) {
-                if (cached.status === 'READY') {
-                    if (page === 0) {
-                        setOrders(cached.data);
-                    } else {
-                        setOrders(prev => {
-                            const newMap = new Map(prev.map(o => [o.id, o]));
-                            cached.data.forEach(o => newMap.set(o.id, o));
-                            return Array.from(newMap.values()).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-                        });
-                    }
-                    setHasMore(cached.hasMore);
-                    setIsInitialLoading(false);
-                    setLoadingMore(false);
-                } else if (cached.status === 'UNINITIALIZED') {
-                    if (page === 0) setIsInitialLoading(true);
-                }
-                
-                setRevalidating(true);
-                const validated = await dashboardOrdersRepository.revalidateOrders(
-                    cacheKey, statusFilter, searchQuery, page, lastDocRef.current, cached
-                );
+            if (!isMounted || currentQueryRef.current.statusFilter !== qRef.statusFilter || currentQueryRef.current.searchQuery !== qRef.searchQuery || currentQueryRef.current.page !== qRef.page) return;
 
-                const handleValidatedData = (val) => {
-                    if (page === 0) {
-                        setOrders(val.data);
+            if (cached.status === 'READY') {
+                if (page === 0) {
+                    setOrders(cached.data);
+                    if (cached.data.length === 0) {
+                        setPageStatus('EMPTY');
                     } else {
-                        setOrders(prev => {
-                            const newMap = new Map(prev.map(o => [o.id, o]));
-                            val.data.forEach(o => newMap.set(o.id, o));
-                            return Array.from(newMap.values()).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-                        });
+                        setPageStatus('READY');
                     }
-                    setHasMore(val.hasMore);
-                    if (val.lastDocRefObj) {
-                        lastDocRef.current = val.lastDocRefObj;
-                    }
-                    setIsInitialLoading(false);
-                    setRevalidating(false);
-                    setLoadingMore(false);
-                };
-
-                if (isMounted && validated) {
-                    handleValidatedData(validated);
-                    
-                    // Subscribe to background lifecycle updates for this cacheKey
-                    unsubscribe = dashboardOrdersRepository.subscribe(
-                        cacheKey, statusFilter, searchQuery, page, lastDocRef.current, cached, (newValidated) => {
-                            if (isMounted) {
-                                handleValidatedData(newValidated);
-                            }
-                        }
-                    );
+                } else {
+                    setOrders(prev => {
+                        const newMap = new Map(prev.map(o => [o.id, o]));
+                        cached.data.forEach(o => newMap.set(o.id, o));
+                        return Array.from(newMap.values()).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+                    });
                 }
+                setHasMore(cached.hasMore);
+                setLoadingMore(false);
             }
+            
+            const validated = await dashboardOrdersRepository.revalidateOrders(
+                cacheKey, statusFilter, searchQuery, page, lastDocRef.current, cached
+            );
+
+            if (!isMounted || currentQueryRef.current.statusFilter !== qRef.statusFilter || currentQueryRef.current.searchQuery !== qRef.searchQuery || currentQueryRef.current.page !== qRef.page) return;
+
+            const handleValidatedData = (val) => {
+                if (val.status === 'ERROR' || val.status === 'STALE') {
+                    if (page === 0) {
+                        setPageStatus(orders.length > 0 || (cached.data && cached.data.length > 0) ? 'STALE' : 'ERROR');
+                        if (val.error) setLoadError(val.error);
+                    } else {
+                        setLoadingMore(false);
+                        setLoadMoreError(true);
+                    }
+                    return;
+                }
+
+                if (val.status === 'EMPTY' && page === 0) {
+                    setOrders([]);
+                    setPageStatus('EMPTY');
+                    setHasMore(false);
+                    setLoadingMore(false);
+                    return;
+                }
+
+                if (page === 0) {
+                    setOrders(val.data);
+                    setPageStatus('READY');
+                } else {
+                    setOrders(prev => {
+                        const newMap = new Map(prev.map(o => [o.id, o]));
+                        val.data.forEach(o => newMap.set(o.id, o));
+                        return Array.from(newMap.values()).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+                    });
+                }
+                setHasMore(val.hasMore);
+                if (val.lastDocRefObj) {
+                    lastDocRef.current = val.lastDocRefObj;
+                }
+                setLoadingMore(false);
+            };
+
+            handleValidatedData(validated);
+            
+            unsubscribe = dashboardOrdersRepository.subscribe(
+                cacheKey, statusFilter, searchQuery, page, lastDocRef.current, cached, (newValidated) => {
+                    if (isMounted && currentQueryRef.current.statusFilter === qRef.statusFilter && currentQueryRef.current.searchQuery === qRef.searchQuery && currentQueryRef.current.page === qRef.page) {
+                        handleValidatedData(newValidated);
+                    }
+                }
+            );
         };
 
         loadOrders();
@@ -109,18 +139,8 @@ const Orders = () => {
             isMounted = false; 
             unsubscribe();
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [cacheKey, page, refreshTrigger]);
-
-    useEffect(() => {
-        setPage(0);
-        lastDocRef.current = null;
-    }, [statusFilter, searchQuery]);
-
-    useEffect(() => {
-        if (page > 0) {
-            setLoadingMore(true);
-        }
-    }, [page]);
 
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -132,19 +152,20 @@ const Orders = () => {
         const params = new URLSearchParams(location.search);
         const hId = params.get('highlight');
         if (hId) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setHighlightOrderId(hId);
             window.history.replaceState({}, '', location.pathname);
         }
-    }, [location.search]);
+    }, [location.search, location.pathname]);
 
     useEffect(() => {
-        if (!highlightOrderId || isInitialLoading) return;
+        if (!highlightOrderId || pageStatus === 'LOADING' || pageStatus === 'UNINITIALIZED') return;
         const el = orderRefs.current[highlightOrderId];
         if (el) {
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             setTimeout(() => setHighlightOrderId(null), 3500);
         }
-    }, [highlightOrderId, isInitialLoading, orders]);
+    }, [highlightOrderId, pageStatus, orders]);
 
     const observer = useRef();
     const lastOrderRef = useCallback(node => {
@@ -159,9 +180,28 @@ const Orders = () => {
     }, [loadingMore, hasMore]);
 
     const fetchOrders = () => {
+        if (orders.length === 0) {
+            setPageStatus('LOADING');
+        }
         setPage(0);
         lastDocRef.current = null;
+        setLoadError(null);
         setRefreshTrigger(prev => prev + 1);
+    };
+
+    const handleFilterChange = (newFilter) => {
+        if (newFilter === statusFilter) return;
+        setStatusFilter(newFilter);
+        setPage(0);
+        lastDocRef.current = null;
+        setLoadError(null);
+    };
+
+    const handleSearchChange = (e) => {
+        setSearchQuery(e.target.value);
+        setPage(0);
+        lastDocRef.current = null;
+        setLoadError(null);
     };
 
     const handleUpdateStatus = async (orderId, newStatus) => {
@@ -262,10 +302,35 @@ const Orders = () => {
         }
     };
 
+    const handleInvoiceProgress = (progress) => {
+        if (!Swal.isVisible()) {
+            Swal.fire({
+                title: 'جاري تجهيز الفاتورة...',
+                text: 'يرجى الانتظار...',
+                allowOutsideClick: false,
+                background: '#141414',
+                color: '#fff',
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+        }
+        
+        let text = 'يرجى الانتظار...';
+        if (progress.stage === 'rendering') {
+            text = `تحضير الصفحة ${progress.currentPage} من ${progress.totalPages}`;
+        } else if (progress.stage === 'saving') {
+            text = 'جاري الحفظ...';
+        }
+        
+        Swal.update({ text });
+    };
+
     const handleDownloadInvoice = async (order, paymentType) => {
         setInvoiceLoadingId({ id: order.id, action: 'download' });
         try {
-            const result = await downloadInvoice(order, paymentType);
+            const result = await downloadInvoice(order, paymentType, handleInvoiceProgress);
+            Swal.close();
             if (result && result.message) {
                 Swal.fire({
                     icon: 'success',
@@ -280,6 +345,7 @@ const Orders = () => {
                 });
             }
         } catch (error) {
+            Swal.close();
             Swal.fire({ icon: 'error', title: 'خطأ', text: error.message || 'فشل تحميل الفاتورة', background: '#141414', color: '#fff' });
         } finally {
             setInvoiceLoadingId(null);
@@ -289,8 +355,10 @@ const Orders = () => {
     const handlePrintInvoice = async (order, paymentType) => {
         setInvoiceLoadingId({ id: order.id, action: 'print' });
         try {
-            await printInvoice(order, paymentType);
+            await printInvoice(order, paymentType, handleInvoiceProgress);
+            Swal.close();
         } catch (error) {
+            Swal.close();
             Swal.fire({ icon: 'error', title: 'خطأ', text: error.message || 'فشل طباعة الفاتورة', background: '#141414', color: '#fff' });
         } finally {
             setInvoiceLoadingId(null);
@@ -373,32 +441,42 @@ const Orders = () => {
             }}>
                 <div style={{ position: 'relative', minWidth: isMobile ? '100%' : '320px', flex: 1.5 }}>
                     <Search size={18} style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--primary)', opacity: 0.7 }} />
-                    <input type="text" placeholder="البحث برقم الطلب، الاسم، الواتساب..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ width: '100%', padding: '12px 48px 12px 16px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', borderRadius: '14px', color: '#fff', fontSize: '0.95rem', outline: 'none' }} />
+                    <input type="text" placeholder="البحث برقم الطلب، الاسم، الواتساب..." value={searchQuery} onChange={handleSearchChange} style={{ width: '100%', padding: '12px 48px 12px 16px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', borderRadius: '14px', color: '#fff', fontSize: '0.95rem', outline: 'none' }} />
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', overflowX: 'auto', paddingBottom: isMobile ? '5px' : '0' }}>
-                    <button onClick={() => fetchOrders(0, true)} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '8px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)', color: 'var(--text-muted)', cursor: 'pointer', fontWeight: '700', fontSize: '0.85rem', whiteSpace: 'nowrap' }}><RotateCcw size={16} /> تحديث</button>
+                    <button onClick={fetchOrders} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '8px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)', color: 'var(--text-muted)', cursor: 'pointer', fontWeight: '700', fontSize: '0.85rem', whiteSpace: 'nowrap' }}><RotateCcw size={16} /> تحديث</button>
                     {[{ label: 'الجميع', value: 'all' }, { label: 'انتظار', value: 'pending' }, { label: 'مكتمل', value: 'completed' }, { label: 'ملغي', value: 'cancelled' }].map(status => (
-                        <button key={status.value} onClick={() => setStatusFilter(status.value)} style={{ padding: '8px 16px', borderRadius: '10px', border: '1px solid', borderColor: statusFilter === status.value ? 'var(--primary)' : 'rgba(255,255,255,0.05)', background: statusFilter === status.value ? 'var(--primary)' : 'rgba(255,255,255,0.02)', color: statusFilter === status.value ? '#000' : 'var(--text-muted)', cursor: 'pointer', fontWeight: '700', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{status.label}</button>
+                        <button key={status.value} onClick={() => handleFilterChange(status.value)} style={{ padding: '8px 16px', borderRadius: '10px', border: '1px solid', borderColor: statusFilter === status.value ? 'var(--primary)' : 'rgba(255,255,255,0.05)', background: statusFilter === status.value ? 'var(--primary)' : 'rgba(255,255,255,0.02)', color: statusFilter === status.value ? '#000' : 'var(--text-muted)', cursor: 'pointer', fontWeight: '700', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{status.label}</button>
                     ))}
                 </div>
             </div>
 
-            {isInitialLoading ? (
+            {pageStatus === 'LOADING' || pageStatus === 'UNINITIALIZED' ? (
                 <div style={{ textAlign: 'center', padding: '100px', color: 'var(--primary)' }}><Loader2 className="animate-spin" style={{ margin: '0 auto 20px', width: '50px', height: '50px' }} /><p style={{ fontWeight: '700' }}>جاري تحميل البيانات الفاخرة...</p></div>
+            ) : pageStatus === 'ERROR' ? (
+                <div style={{ textAlign: 'center', padding: '100px', color: '#ef4444' }}>
+                    <XCircle size={60} style={{ margin: '0 auto 20px', display: 'block' }} />
+                    <p style={{ fontWeight: '700', fontSize: '1.2rem', marginBottom: '10px' }}>تعذر تحميل الطلبات</p>
+                    <p style={{ marginBottom: '20px', color: 'var(--text-muted)' }}>{loadError?.message || 'تحقق من الاتصال وحاول مرة أخرى'}</p>
+                    <button onClick={fetchOrders} style={{ padding: '10px 20px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 'bold' }}>إعادة المحاولة</button>
+                </div>
+            ) : pageStatus === 'EMPTY' ? (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ textAlign: 'center', padding: '100px', opacity: 0.5 }}><ShoppingBag size={80} style={{ margin: '0 auto 20px', display: 'block', opacity: 0.2 }} /><p style={{ fontSize: '1.2rem' }}>لا توجد طلبات متوافقة مع هذا البحث</p></motion.div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', paddingBottom: '50px' }}>
+                    {pageStatus === 'STALE' && (
+                        <div style={{ padding: '12px 20px', background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', border: '1px solid rgba(234, 179, 8, 0.2)', borderRadius: '12px', textAlign: 'center', fontWeight: 'bold', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                            <XCircle size={18} /> أنت في وضع عدم الاتصال. يتم عرض البيانات المخزنة مؤقتاً.
+                        </div>
+                    )}
                     <AnimatePresence mode="popLayout">
-                        {orders.length === 0 ? (
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ textAlign: 'center', padding: '100px', opacity: 0.5 }}><ShoppingBag size={80} style={{ marginBottom: '20px', opacity: 0.2 }} /><p style={{ fontSize: '1.2rem' }}>لا توجد طلبات متوافقة مع هذا البحث</p></motion.div>
-                        ) : (
-                            orders.map((order, index) => (
-                                <OrderCard 
-                                    key={order.id} 
-                                    order={order} 
-                                    index={index} 
-                                    lastOrderRef={orders.length === index + 1 ? lastOrderRef : null} 
-                                    onUpdateStatus={handleUpdateStatus} 
-                                    onDelete={handleDeleteOrder} 
+                        {orders.map((order, index) => (
+                            <OrderCard 
+                                key={order.id} 
+                                order={order} 
+                                lastOrderRef={orders.length === index + 1 ? lastOrderRef : null} 
+                                onUpdateStatus={handleUpdateStatus} 
+                                onDelete={handleDeleteOrder} 
                                     onDownloadInvoice={handleDownloadInvoice} 
                                     onPrintInvoice={handlePrintInvoice}
                                     isInvoiceLoading={invoiceLoadingId?.id === order.id}
@@ -408,10 +486,15 @@ const Orders = () => {
                                     isDeleting={deletingOrderId === order.id}
                                     setRef={(el) => { if (el) orderRefs.current[order.id] = el; }}
                                 />
-                            ))
-                        )}
+                            ))}
                     </AnimatePresence>
                     {loadingMore && <div style={{ textAlign: 'center', padding: '20px' }}><Loader2 className="animate-spin" style={{ width: '40px', height: '40px', color: 'var(--primary)', margin: '0 auto' }} /></div>}
+                    {loadMoreError && (
+                        <div style={{ textAlign: 'center', padding: '20px' }}>
+                            <p style={{ color: '#ef4444', fontSize: '0.9rem', marginBottom: '10px' }}>فشل تحميل المزيد من الطلبات</p>
+                            <button onClick={() => setPage(prev => prev)} style={{ padding: '6px 14px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '700' }}>إعادة المحاولة</button>
+                        </div>
+                    )}
                 </div>
             )}
             <ImagePreviewModal imageUrl={selectedImage} onClose={() => setSelectedImage(null)} />
@@ -490,7 +573,7 @@ const ImagePreviewModal = ({ imageUrl, onClose }) => {
     );
 };
 
-const OrderCard = ({ order, index, lastOrderRef, onUpdateStatus, onDelete, onDownloadInvoice, onPrintInvoice, isInvoiceLoading, invoiceAction, onImageClick, isHighlighted, isDeleting, setRef }) => {
+const OrderCard = ({ order, lastOrderRef, onUpdateStatus, onDelete, onDownloadInvoice, onPrintInvoice, isInvoiceLoading, invoiceAction, onImageClick, isHighlighted, isDeleting, setRef }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const [invoiceType, setInvoiceType] = useState('cash');
     const isMobile = window.innerWidth < 768;
