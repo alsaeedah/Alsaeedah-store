@@ -7,6 +7,8 @@ import {
   ShieldCheck, Zap, Star, Sun, Moon, X, CheckCircle2
 } from 'lucide-react';
 import { NotificationService, EVENTS } from '../notifications';
+import { LocalNotifications } from '@capacitor/local-notifications';
+import { Capacitor } from '@capacitor/core';
 import './LoginPage.css';
 
 // ─── CONFIG ────────────────────────────────────────────────────────────────
@@ -178,6 +180,23 @@ export default function LoginPage() {
     return () => clearTimeout(t);
   }, [error]);
 
+  // Early Notification Permission Request
+  useEffect(() => {
+    const requestPerms = async () => {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const status = await LocalNotifications.checkPermissions();
+          if (status.display === 'prompt') {
+            await LocalNotifications.requestPermissions();
+          }
+        } catch (e) {
+          console.error("Error requesting permission:", e);
+        }
+      }
+    };
+    requestPerms();
+  }, []);
+
   const handlePhoneChange = (e) => {
     setPhone(e.target.value.replace(/[^0-9]/g, ''));
   };
@@ -205,8 +224,21 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       await login(phone, password);
-      // Fire login success notification
-      NotificationService.show(EVENTS.LOGIN_SUCCESS, { name: phone });
+      // Fire login success notification safely
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const status = await LocalNotifications.checkPermissions();
+          if (status.display === 'granted') {
+            setTimeout(() => {
+              NotificationService.show(EVENTS.LOGIN_SUCCESS, { name: phone });
+            }, 500); // 500ms delay to allow AuthGate to complete routing
+          }
+        } catch(e) {
+          console.error(e);
+        }
+      } else {
+        NotificationService.show(EVENTS.LOGIN_SUCCESS, { name: phone });
+      }
     } catch (err) {
       setError(err.message || 'حدث خطأ أثناء تسجيل الدخول');
       triggerShake();

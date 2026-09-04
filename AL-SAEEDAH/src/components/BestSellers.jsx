@@ -3,6 +3,7 @@ import { motion, useMotionValue, useTransform } from 'framer-motion';
 import { useBestSellers } from '../hooks/useProductSWR';
 import { useNavigate } from 'react-router-dom';
 import MinimalProductCard from './MinimalProductCard';
+import HorizontalProductCarousel from './HorizontalProductCarousel';
 
 const FeaturedProduct = ({ product }) => {
     const navigate = useNavigate();
@@ -152,7 +153,7 @@ const BestSellers = () => {
 
                         {/* Remaining Products Carousel */}
                         {carouselProducts.length > 0 && (
-                            <motion.div 
+                            <HorizontalProductCarousel 
                                 className="collection-grid-carousel"
                                 initial="hidden"
                                 whileInView="visible"
@@ -176,7 +177,7 @@ const BestSellers = () => {
                                         <MinimalProductCard product={product} />
                                     </motion.div>
                                 ))}
-                            </motion.div>
+                            </HorizontalProductCarousel>
                         )}
                     </>
                 ) : null}

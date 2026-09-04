@@ -1150,14 +1150,71 @@ input, textarea, [contenteditable="true"] {
 }
 
 /* Responsive Carousel */
+.product-carousel-wrapper {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.product-carousel-wrapper .carousel-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--bg-card, #1c1c1e);
+  color: var(--text-main, #ffffff);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.2s ease;
+  opacity: 0.9;
+}
+
+.product-carousel-wrapper .carousel-nav-btn:hover {
+  opacity: 1;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+  transform: translateY(-50%) scale(1.05);
+}
+
+.product-carousel-wrapper .carousel-nav-btn.hidden {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.product-carousel-wrapper .carousel-nav-btn.right {
+  right: -10px;
+}
+
+.product-carousel-wrapper .carousel-nav-btn.left {
+  left: -10px;
+}
+
+@media (max-width: 768px) {
+  .product-carousel-wrapper .carousel-nav-btn {
+    display: none; /* Native swipe is better on mobile */
+  }
+}
+
 .collection-grid-carousel {
   display: flex;
   gap: 20px;
   overflow-x: auto;
+  overflow-y: hidden;
   scroll-snap-type: x mandatory;
   padding: 20px 0;
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE/Edge */
+  scroll-behavior: smooth;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .collection-grid-carousel::-webkit-scrollbar {

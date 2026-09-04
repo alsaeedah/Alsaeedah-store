@@ -316,9 +316,23 @@ function NotificationSetup() {
   useEffect(() => {
     // Non-blocking Push Notification Initialization
     // Runs independently of local notifications and Product SyncEngine
-    if (currentUser?.uid) {
-      PushNotificationService.initialize(currentUser.uid).catch(console.error);
-    }
+    const initPush = async () => {
+      if (currentUser?.uid && Capacitor.isNativePlatform()) {
+        try {
+          const { LocalNotifications } = await import('@capacitor/local-notifications');
+          const status = await LocalNotifications.checkPermissions();
+          if (status.display === 'granted') {
+            PushNotificationService.initialize(currentUser.uid).catch(console.error);
+          }
+        } catch (e) {
+          console.error("Push init error:", e);
+        }
+      } else if (currentUser?.uid) {
+         // Optionally fallback for non-native platforms
+         PushNotificationService.initialize(currentUser.uid).catch(console.error);
+      }
+    };
+    initPush();
   }, [currentUser]);
 
   return null;
