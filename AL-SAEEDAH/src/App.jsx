@@ -300,11 +300,33 @@ function NotificationSetup() {
           setTimeout(() => navigate('/orders'), 100);
         }
       }
-    }).then(() => {
+    }).then(async () => {
       const hasLaunched = localStorage.getItem('app_first_launch_completed');
       if (!hasLaunched) {
         localStorage.setItem('app_first_launch_completed', 'true');
-        NotificationService.show(EVENTS.FIRST_LAUNCH);
+        
+        // SAFE NOTIFICATION DISPATCH FOR ANDROID 13+
+        if (Capacitor.isNativePlatform()) {
+          try {
+            const { LocalNotifications } = await import('@capacitor/local-notifications');
+            let status = await LocalNotifications.checkPermissions();
+            
+            // Request permission if not determined yet
+            if (status.display === 'prompt') {
+              status = await LocalNotifications.requestPermissions();
+            }
+            
+            // Only show the First Launch notification if permission is explicitly granted
+            if (status.display === 'granted') {
+              NotificationService.show(EVENTS.FIRST_LAUNCH);
+            }
+          } catch (error) {
+            console.error("Permission check failed during first launch:", error);
+          }
+        } else {
+          // Web fallback
+          NotificationService.show(EVENTS.FIRST_LAUNCH);
+        }
       }
     });
 
