@@ -23,16 +23,16 @@ try {
 
   if (!getApps().length) {
     app = initializeApp(firebaseConfig);
+    // Explicit Auth Initialization for Capacitor Android
+    if (Capacitor.isNativePlatform()) {
+      auth = initializeAuth(app, {
+        persistence: indexedDBLocalPersistence
+      });
+    } else {
+      auth = getAuth(app);
+    }
   } else {
     app = getApp();
-  }
-
-  // Explicit Auth Initialization for Capacitor Android
-  if (Capacitor.isNativePlatform()) {
-    auth = initializeAuth(app, {
-      persistence: indexedDBLocalPersistence
-    });
-  } else {
     auth = getAuth(app);
   }
 
