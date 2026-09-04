@@ -32,13 +32,7 @@ export class ProductCacheRegistry {
                     }
                 }
                 
-                for (let i = 0; i < keysToRemove.length; i++) {
-                    await this.storage.remove(keysToRemove[i]).catch(() => {});
-                    if (i > 0 && i % 10 === 0) {
-                        await new Promise(r => setTimeout(r, 0));
-                    }
-                }
-                
+                await Promise.all(keysToRemove.map(k => this.storage.remove(k).catch(() => {})));
                 await this.storage.remove(this.legacyRegistryKey);
                 console.log(`[ProductCacheRegistry] Successfully cleared ${keysToRemove.length} legacy v1 cache entries.`);
             }

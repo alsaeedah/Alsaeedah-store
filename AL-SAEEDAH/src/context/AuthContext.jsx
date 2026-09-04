@@ -56,7 +56,7 @@ export const AuthProvider = ({ children, openAuthOnMount = false, onAuthMountHan
         const emailDashboardFormat = `${cleanPhone}@alsaeedah.store`;
         const emailLegacyFormat = `phone_${cleanPhone}@alsaeedah.store`;
         
-        console.log('[Auth] Login started...');
+        console.log('[AUTH] LOGIN_START - Login started...');
         let userCredential;
 
         try {
@@ -75,7 +75,7 @@ export const AuthProvider = ({ children, openAuthOnMount = false, onAuthMountHan
             }
         }
 
-        console.log('[Auth] Firebase authentication succeeded.');
+        console.log('[AUTH] LOGIN_SUCCESS - Firebase authentication succeeded.');
         const firebaseUser = userCredential.user;
 
         // 3. Immediate State Update
@@ -91,10 +91,8 @@ export const AuthProvider = ({ children, openAuthOnMount = false, onAuthMountHan
         };
 
         setCurrentUser(baseSession);
-        console.log('[Auth] AuthContext updated immediately.');
         
         localStorage.setItem('time-tick-user', JSON.stringify(baseSession));
-        console.log('[Auth] Session/cache updated.');
 
         // 4. Background Validation is now owned exclusively by StartupProvider's
         //    auth.onAuthStateChanged listener. No need to dispatch it here.
@@ -181,6 +179,28 @@ export const AuthProvider = ({ children, openAuthOnMount = false, onAuthMountHan
     const closeProfileModal = () => setIsProfileModalOpen(false);
     const openProfilePage = () => navigate('/profile');
 
+    const handleSessionResolved = useCallback((session) => {
+        console.log('[STARTUP] SESSION_RESOLVED');
+        setCurrentUser(session);
+        if (session) {
+            localStorage.setItem('time-tick-user', JSON.stringify(session));
+            setIsAuthModalOpen(false);
+        }
+        setLoading(false);
+    }, []);
+
+    const handleSessionUpdated = useCallback((session) => {
+        setCurrentUser(session);
+        if (session) {
+            localStorage.setItem('time-tick-user', JSON.stringify(session));
+        }
+    }, []);
+
+    const handleForceLogout = useCallback(() => {
+        setCurrentUser(null);
+        localStorage.removeItem('time-tick-user');
+    }, []);
+
     return (
         <AuthContext.Provider value={{
             currentUser,
@@ -208,24 +228,9 @@ export const AuthProvider = ({ children, openAuthOnMount = false, onAuthMountHan
                 auth={auth}
                 db={db}
                 appName="store"
-                onSessionResolved={(session) => {
-                    setCurrentUser(session);
-                    if (session) {
-                        localStorage.setItem('time-tick-user', JSON.stringify(session));
-                        setIsAuthModalOpen(false);
-                    }
-                    setLoading(false);
-                }}
-                onSessionUpdated={(session) => {
-                    setCurrentUser(session);
-                    if (session) {
-                        localStorage.setItem('time-tick-user', JSON.stringify(session));
-                    }
-                }}
-                onForceLogout={() => {
-                    setCurrentUser(null);
-                    localStorage.removeItem('time-tick-user');
-                }}
+                onSessionResolved={handleSessionResolved}
+                onSessionUpdated={handleSessionUpdated}
+                onForceLogout={handleForceLogout}
             >
                 {!loading && children}
             </StartupProvider>

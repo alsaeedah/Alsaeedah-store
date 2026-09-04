@@ -93,7 +93,12 @@ export class SyncCoordinator {
      * @param {object} db - Firestore DB instance.
      */
     initialize(db) {
-        console.log('[SyncCoordinator] Registering adapters (pre-auth).');
+        if (this._isInitialized) {
+            console.log('[SyncCoordinator] Already initialized. Skipping duplicate initialization.');
+            return;
+        }
+        this._isInitialized = true;
+        console.log('[SYNC] INITIALIZED - Registering adapters (pre-auth).');
         this.registerAdapter(new ProductSyncAdapter(db));
         this.registerAdapter(new TaxonomySyncAdapter(db));
         this.registerAdapter(new OrderSyncAdapter(db));

@@ -102,12 +102,14 @@ export const StartupProvider = ({
     console.log('[Startup] Registering auth state listener.');
 
     const unsubscribeAuth = auth.onAuthStateChanged(async (firebaseUser) => {
+      console.log('[AUTH] STATE_CHANGED');
       if (!firebaseUser) {
         // User has logged out or is not authenticated.
         console.log('[Startup] Auth state: no user. Marking sync coordinator as not ready.');
         syncCoordinator.markNotReady();
         if (onForceLogout) onForceLogout();
         setStartupState(AppStartupState.Ready);
+        console.log('[STARTUP] READY');
         return;
       }
 
@@ -121,7 +123,7 @@ export const StartupProvider = ({
         appName,
         // onUpdate — Background Validation succeeded
         async (enrichedSession) => {
-          console.log('[Startup] Background validation completed. Session enriched.');
+          console.log('[STARTUP] VALIDATION_COMPLETE');
           if (onSessionUpdated) onSessionUpdated(enrichedSession);
 
           // Mark coordinator as ready (authenticated session confirmed).
@@ -136,6 +138,7 @@ export const StartupProvider = ({
           }
 
           setStartupState(AppStartupState.Ready);
+          console.log('[STARTUP] READY');
         },
         // onLogout — Validation determined user should be logged out.
         () => {
@@ -143,6 +146,7 @@ export const StartupProvider = ({
           syncCoordinator.markNotReady();
           if (onForceLogout) onForceLogout();
           setStartupState(AppStartupState.Ready);
+          console.log('[STARTUP] READY');
         }
       );
     });

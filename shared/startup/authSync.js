@@ -147,11 +147,11 @@ const _doValidation = async (firebaseUser, db, appName, onUpdate, onLogout) => {
  */
 export const startBackgroundValidation = (firebaseUser, db, appName, onUpdate, onLogout) => {
   if (validationPromise) {
-    console.log('[Background Validation] Already running — reusing existing promise.');
+    console.log('[AUTH] VALIDATION_REUSED - Already running, sharing single-flight promise.');
     return validationPromise;
   }
 
-  console.log('[Background Validation] Starting...');
+  console.log('[AUTH] VALIDATION_START - Starting single-flight background validation.');
   validationPromise = _doValidation(firebaseUser, db, appName, onUpdate, onLogout)
     .finally(() => {
       validationPromise = null;

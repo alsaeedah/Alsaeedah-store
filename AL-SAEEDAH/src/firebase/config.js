@@ -1,8 +1,9 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAuth, initializeAuth, indexedDBLocalPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { Capacitor } from '@capacitor/core';
 
-console.log('[Startup] Evaluating Firebase configuration...');
+console.log('[AUTH] INIT - Evaluating Firebase configuration...');
 
 const firebaseConfig = {
   apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
@@ -20,11 +21,24 @@ try {
     throw new Error('Firebase configuration is missing. Check environment variables.');
   }
 
-  app = initializeApp(firebaseConfig);
-  auth = getAuth(app);
+  if (!getApps().length) {
+    app = initializeApp(firebaseConfig);
+  } else {
+    app = getApp();
+  }
+
+  // Explicit Auth Initialization for Capacitor Android
+  if (Capacitor.isNativePlatform()) {
+    auth = initializeAuth(app, {
+      persistence: indexedDBLocalPersistence
+    });
+  } else {
+    auth = getAuth(app);
+  }
+
   db = getFirestore(app);
   
-  console.log('[Startup] Firebase initialized successfully.');
+  console.log('[STARTUP] BOOT_START - Firebase initialized successfully.');
 } catch (error) {
   console.error('[Startup] FATAL: Firebase initialization failed:', error);
   // We don't throw here to allow main.jsx to catch the error via global handler,

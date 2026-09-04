@@ -1,10 +1,4 @@
 import { syncCoordinator } from './SyncCoordinator.js';
-import { ProductSyncAdapter } from './adapters/ProductSyncAdapter.js';
-import { TaxonomySyncStrategy } from './strategies/TaxonomySyncStrategy.js';
-import { ProfileSyncStrategy } from './strategies/ProfileSyncStrategy.js';
-import { OrderSyncStrategy } from './strategies/OrderSyncStrategy.js';
-import { SettingsSyncStrategy } from './strategies/SettingsSyncStrategy.js';
-import { InventorySyncStrategy } from './strategies/InventorySyncStrategy.js';
 
 /**
  * Single-flight state for bootstrap synchronization.
@@ -22,19 +16,9 @@ let bootstrapPromise = null;
 let bootstrapped = false;
 
 const _doBootstrap = async (db, auth) => {
-    console.log('[Sync] Bootstrap starting. Registering adapters.');
+    console.log('[Sync] Bootstrap starting.');
 
-    // Register adapters via the idempotent SyncCoordinator Map.
-    // Duplicate registrations for the same domain are silently rejected.
-    syncCoordinator.registerAdapter(new ProductSyncAdapter(db));
-    syncCoordinator.registerAdapter(new TaxonomySyncStrategy(db));
-    syncCoordinator.registerAdapter(new ProfileSyncStrategy(db, auth));
-    syncCoordinator.registerAdapter(new OrderSyncStrategy(db, auth));
-    syncCoordinator.registerAdapter(new SettingsSyncStrategy(db));
-    syncCoordinator.registerAdapter(new InventorySyncStrategy(db));
-
-    console.log(`[Sync] ${syncCoordinator.getRegisteredAdapterCount()} adapters registered. Triggering initial sync.`);
-
+    // Adapters are already registered idempotently via SyncCoordinator.initialize() in main.jsx.
     // Trigger initial synchronization across all registered adapters.
     // Errors are isolated per adapter inside syncAll() — this call will not throw.
     await syncCoordinator.syncAll();
