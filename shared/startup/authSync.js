@@ -86,14 +86,21 @@ const _doValidation = async (firebaseUser, db, appName, onUpdate, onLogout) => {
       const docRef = doc(db, collectionName, firebaseUser.uid);
       const docSnap = await getDoc(docRef);
 
-      if (!docSnap.exists() || docSnap.data().is_active === false) {
-        console.warn('[Background Validation] Account missing or disabled in Firestore. Logging out.');
+      if (docSnap.exists() && docSnap.data().is_active === false) {
+        console.warn('[Background Validation] Account disabled in Firestore. Logging out.');
         await clearCachedSession();
         if (onLogout) onLogout();
         return;
       }
 
-      const data = docSnap.data();
+      const data = docSnap.exists() ? docSnap.data() : {};
+      
+      if (!docSnap.exists() && appName === 'dashboard') {
+          console.warn('[Background Validation] Dashboard manager document missing. Logging out.');
+          await clearCachedSession();
+          if (onLogout) onLogout();
+          return;
+      }
 
       // 5. Construct unified session object
       const tokenPermissions = Array.isArray(claims.permissions) ? claims.permissions : [];

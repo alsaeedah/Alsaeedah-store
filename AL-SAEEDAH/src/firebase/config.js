@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, initializeAuth, indexedDBLocalPersistence } from 'firebase/auth';
+import { getAuth, initializeAuth, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
 
@@ -26,7 +26,7 @@ try {
     // Explicit Auth Initialization for Capacitor Android
     if (Capacitor.isNativePlatform()) {
       auth = initializeAuth(app, {
-        persistence: indexedDBLocalPersistence
+        persistence: browserLocalPersistence
       });
     } else {
       auth = getAuth(app);

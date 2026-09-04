@@ -397,28 +397,27 @@ function App() {
           <ThemeProvider>
             <LoaderProvider>
               <AuthProvider>
+                  <NotificationSetup />
+                  <DeepLinkHandler />
+                  <BackButtonHandler />
                   <AuthGate>
                     <FavoritesProvider>
                       <VideoProvider>
                           <CartProvider>
-                            <NotificationSetup />
-                            <DeepLinkHandler />
-                            <BackButtonHandler />
-
-                          <SEOHelper />
-                          <div className="app-container">
-                            <SystemBarsSync />
-                            <ConditionalStoreNavigation />
-                            <AuthModal />
-                            <LogoutConfirmModal />
-                            <ProfileModal />
-                            <PullToRefreshGate>
-                              <AnimatedRoutes />
-                            </PullToRefreshGate>
-                            <ConditionalFooter />
-                            <ConditionalAppBanner />
-                          </div>
-                        </CartProvider>
+                            <SEOHelper />
+                            <div className="app-container">
+                              <SystemBarsSync />
+                              <ConditionalStoreNavigation />
+                              <AuthModal />
+                              <LogoutConfirmModal />
+                              <ProfileModal />
+                              <PullToRefreshGate>
+                                <AnimatedRoutes />
+                              </PullToRefreshGate>
+                              <ConditionalFooter />
+                              <ConditionalAppBanner />
+                            </div>
+                          </CartProvider>
                       </VideoProvider>
                     </FavoritesProvider>
                   </AuthGate>
