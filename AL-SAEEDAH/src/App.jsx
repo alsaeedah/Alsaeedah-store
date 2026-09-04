@@ -398,12 +398,12 @@ function App() {
             <LoaderProvider>
               <AuthProvider>
                   <NotificationSetup />
-                  <DeepLinkHandler />
-                  <BackButtonHandler />
                   <AuthGate>
                     <FavoritesProvider>
                       <VideoProvider>
                           <CartProvider>
+                            <DeepLinkHandler />
+                            <BackButtonHandler />
                             <SEOHelper />
                             <div className="app-container">
                               <SystemBarsSync />
