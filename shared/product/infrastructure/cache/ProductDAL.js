@@ -165,7 +165,7 @@ export class ProductDAL {
         return result;
     }
 
-    _subscribeToCache(key, fetcher, type, callback) {
+    _subscribeToCache(key, fetcher, type, callback, options = {}) {
         if (!this.cacheSubscribers.has(key)) {
             this.cacheSubscribers.set(key, { subs: new Set(), fetcher, type });
         }
@@ -174,20 +174,24 @@ export class ProductDAL {
         cacheEntry.subs.add(subObj);
         
         // Immediately fetch data and pass to callback
-        this._fetchWithCache(key, fetcher, { type }).then(data => {
+        const fetchPromise = this._fetchWithCache(key, fetcher, { type, ...options }).then(data => {
             if (cacheEntry.subs.has(subObj)) {
                 callback(data);
             }
+            return data;
         }).catch(err => {
             console.warn(`[ProductDAL] Initial SWR fetch failed for ${key}`, err);
+            throw err;
         });
 
-        return () => {
+        const unsubscribe = () => {
             cacheEntry.subs.delete(subObj);
             if (cacheEntry.subs.size === 0) {
                 this.cacheSubscribers.delete(key);
             }
         };
+        unsubscribe.fetchPromise = fetchPromise;
+        return unsubscribe;
     }
 
     async _dedup(key, fetchPromiseFactory) {
@@ -230,7 +234,7 @@ export class ProductDAL {
     }
 
     async _fetchWithCache(key, fetcher, options = {}) {
-        const { type = 'lists', customTTL = CACHE_TTL_MS } = options;
+        const { type = 'lists', customTTL = CACHE_TTL_MS, forceRevalidate = false } = options;
 
         let cachedRaw;
         try {
@@ -251,6 +255,25 @@ export class ProductDAL {
 
         if (isValid) {
             this._registerCache(type, key);
+            
+            if (forceRevalidate) {
+                return this._dedup(key, async () => {
+                    try {
+                        const freshData = await fetcher();
+                        await this._setCacheSafe(key, freshData, type);
+                        this._registerCache(type, key);
+                        return this._applyOptimisticState(freshData, type.substring(0, type.length - 1));
+                    } catch (err) {
+                        console.warn(`[ProductDAL] Force revalidation failed for ${key}, falling back to cache:`, err);
+                        const staleData = this._applyOptimisticState(cached.data, type.substring(0, type.length - 1));
+                        if (staleData && typeof staleData === 'object') {
+                            staleData._isStaleCache = true;
+                        }
+                        return staleData;
+                    }
+                });
+            }
+
             const now = Date.now();
             const isStale = (now - cached.timestamp > customTTL);
 
@@ -267,9 +290,8 @@ export class ProductDAL {
 
         return this._dedup(key, async () => {
             const freshData = await fetcher();
-            this._setCacheSafe(key, freshData, type).then(() => {
-                this._registerCache(type, key);
-            });
+            await this._setCacheSafe(key, freshData, type);
+            this._registerCache(type, key);
             return this._applyOptimisticState(freshData, type.substring(0, type.length - 1));
         });
     }
@@ -789,10 +811,10 @@ export class ProductDAL {
         return this._subscribeToCache(key, () => this.repository.getStats(), 'stats', callback);
     }
 
-    subscribeToPaginatedSWR(filters, page, limit, cursor, callback) {
+    subscribeToPaginatedSWR(filters, page, limit, cursor, callback, options = {}) {
         const serialized = deterministicStringify({ filters, page, limit });
         const key = `product_cache_list_${CACHE_VERSION}_${hashString(serialized)}`;
-        return this._subscribeToCache(key, () => this.repository.getPaginated(filters, limit, cursor), 'lists', callback);
+        return this._subscribeToCache(key, () => this.repository.getPaginated(filters, limit, cursor), 'lists', callback, options);
     }
 
     subscribeToDetailSWR(id, callback) {

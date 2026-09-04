@@ -148,7 +148,7 @@ export default function ProductList({
         return cleanupSubs;
     }, [cleanupSubs]);
 
-    const loadProducts = useCallback((pageNum, isInitial = false, currentSeed = randomSeed) => {
+    const loadProducts = useCallback((pageNum, isInitial = false, currentSeed = randomSeed, options = {}) => {
         const thisRequestId = isInitial ? ++requestIdRef.current : requestIdRef.current;
         
         if (isInitial) {
@@ -206,9 +206,10 @@ export default function ProductList({
             
             if (isInitial) setLoading(false);
             else setLoadingMore(false);
-        });
+        }, options);
 
         subsRef.current[pageNum] = unsub;
+        return unsub.fetchPromise;
     }, [filterCategoryIds, filterBrandIds, sortPrice, minPrice, maxPrice, searchQuery, randomSeed, page]);
 
     useEffect(() => {
@@ -256,12 +257,19 @@ export default function ProductList({
 
     // Listen for manual pull-to-refresh
     useEffect(() => {
-        const handleRefresh = () => {
+        const handleRefresh = (e) => {
+            if (e.detail) {
+                e.detail.handled = true;
+            }
             const newSeed = Math.random().toString(36).substring(7);
             setRandomSeed(newSeed);
             setPage(0);
             nextCursorRef.current = null;
-            loadProducts(0, true, newSeed);
+            const promise = loadProducts(0, true, newSeed, { forceRevalidate: true });
+            
+            if (e.detail && e.detail.resolve) {
+                promise.then(e.detail.resolve).catch(e.detail.reject);
+            }
         };
         window.addEventListener('app-pull-to-refresh', handleRefresh);
         return () => window.removeEventListener('app-pull-to-refresh', handleRefresh);

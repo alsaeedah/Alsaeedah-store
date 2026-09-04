@@ -234,7 +234,13 @@ function PullToRefreshGate({ children }) {
       disabled={disabled}
       onRefresh={async () => {
         await refreshTaxonomies();
-        window.dispatchEvent(new CustomEvent('app-pull-to-refresh'));
+        await new Promise((resolve, reject) => {
+            const detail = { resolve, reject, handled: false };
+            window.dispatchEvent(new CustomEvent('app-pull-to-refresh', { detail }));
+            if (!detail.handled) {
+                reject(new Error("No pull-to-refresh handler registered for this view."));
+            }
+        });
       }}
     >
       {children}

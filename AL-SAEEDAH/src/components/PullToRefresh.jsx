@@ -336,25 +336,36 @@ export default function PullToRefresh({ onRefresh, children, disabled = false })
             gestureStateRef.current = VS.REFRESHING;
             setVisualState(VS.REFRESHING);
 
-            // 2. Fire onRefresh as fire-and-forget
-            try {
-                const refreshResult = onRefresh?.();
-                if (refreshResult && typeof refreshResult.catch === 'function') {
-                    refreshResult.catch(() => { /* swallow */ });
+            // 2. Await actual refresh promise
+            const executeRefresh = async () => {
+                let success = false;
+                try {
+                    const result = onRefresh?.();
+                    if (result && typeof result.then === 'function') {
+                        await result;
+                    }
+                    success = true;
+                } catch (error) {
+                    success = false;
                 }
-            } catch (_) { /* swallow */ }
+                
+                if (success) {
+                    // Show success tick
+                    gestureStateRef.current = VS.SUCCESS;
+                    setVisualState(VS.SUCCESS);
 
-            // 3. Fixed timer for success → reset
-            const t1 = setTimeout(() => {
-                gestureStateRef.current = VS.SUCCESS;
-                setVisualState(VS.SUCCESS);
-
-                const t2 = setTimeout(() => {
+                    const t2 = setTimeout(() => {
+                        resetPullAnimation();
+                    }, SUCCESS_SHOW);
+                    timerRefs.current.push(t2);
+                } else {
+                    // Reset gracefully on failure
+                    gestureStateRef.current = VS.IDLE;
                     resetPullAnimation();
-                }, SUCCESS_SHOW);
-                timerRefs.current.push(t2);
-            }, REFRESH_SHOW);
-            timerRefs.current.push(t1);
+                }
+            };
+
+            executeRefresh();
 
         } else {
             // ── Case B: Threshold NOT reached — just retract ───────────────
