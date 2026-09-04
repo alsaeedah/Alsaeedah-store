@@ -344,14 +344,17 @@ function NotificationSetup() {
           const { LocalNotifications } = await import('@capacitor/local-notifications');
           const status = await LocalNotifications.checkPermissions();
           if (status.display === 'granted') {
-            PushNotificationService.initialize(currentUser.uid).catch(console.error);
+            // [TEMPORARILY DISABLED]: PushNotifications.register() causes a native Android crash 
+            // if google-services.json is missing or invalid in the build environment.
+            // PushNotificationService.initialize(currentUser.uid).catch(console.error);
+            console.warn("Push Notifications initialization is temporarily disabled to prevent native crash.");
           }
         } catch (e) {
           console.error("Push init error:", e);
         }
       } else if (currentUser?.uid) {
          // Optionally fallback for non-native platforms
-         PushNotificationService.initialize(currentUser.uid).catch(console.error);
+         // PushNotificationService.initialize(currentUser.uid).catch(console.error);
       }
     };
     initPush();
