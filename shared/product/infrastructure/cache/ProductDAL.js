@@ -357,7 +357,10 @@ export class ProductDAL {
         try {
             const evictedKeys = await this.registry.access(type, key);
             if (evictedKeys && evictedKeys.length > 0) {
-                await Promise.all(evictedKeys.map(k => QueryIndexStore.remove('product_query', k).catch(() => {})));
+                for (let i = 0; i < evictedKeys.length; i++) {
+                    await QueryIndexStore.remove('product_query', evictedKeys[i]).catch(() => {});
+                    if (i > 0 && i % 10 === 0) await new Promise(r => setTimeout(r, 0));
+                }
             }
         } catch (e) {}
     }
@@ -367,7 +370,10 @@ export class ProductDAL {
             try {
                 const keys = await this.registry.getAllKeys(type);
                 if (keys.length > 0) {
-                    await Promise.all(keys.map(k => this.storage.remove(k).catch(() => {})));
+                    for (let i = 0; i < keys.length; i++) {
+                        await this.storage.remove(keys[i]).catch(() => {});
+                        if (i > 0 && i % 10 === 0) await new Promise(r => setTimeout(r, 0));
+                    }
                     await this.registry.clearType(type);
                 }
             } catch (e) {}

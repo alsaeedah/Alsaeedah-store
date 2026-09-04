@@ -31,9 +31,18 @@ export class EntityStore {
      */
     static async getMany(entityType, ids) {
         if (!Array.isArray(ids)) return [];
-        const promises = ids.map(id => this.get(entityType, id));
-        const results = await Promise.all(promises);
-        return results.filter(entity => entity !== null && entity !== undefined);
+        const results = [];
+        for (let i = 0; i < ids.length; i++) {
+            const result = await this.get(entityType, ids[i]);
+            if (result !== null && result !== undefined) {
+                results.push(result);
+            }
+            // Yield every 20 items to keep UI responsive
+            if (i > 0 && i % 20 === 0) {
+                await new Promise(r => setTimeout(r, 0));
+            }
+        }
+        return results;
     }
 
     /**
@@ -56,8 +65,13 @@ export class EntityStore {
      */
     static async setMany(entityType, entities) {
         if (!Array.isArray(entities)) return;
-        const promises = entities.map(entity => this.set(entityType, entity));
-        await Promise.all(promises);
+        for (let i = 0; i < entities.length; i++) {
+            await this.set(entityType, entities[i]);
+            // Yield every 10 items to keep Android UI responsive
+            if (i > 0 && i % 10 === 0) {
+                await new Promise(r => setTimeout(r, 0));
+            }
+        }
     }
 
     /**
