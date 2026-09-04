@@ -6,7 +6,6 @@ import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { useLoader } from './LoaderContext';
 import { StartupProvider } from '@shared/startup/StartupProvider';
 import { clearCachedSession } from '@shared/startup/cache';
-import { startBackgroundValidation } from '@shared/startup/authSync';
 import { PushNotificationService } from '../notifications';
 
 const AuthContext = createContext();
@@ -97,23 +96,9 @@ export const AuthProvider = ({ children, openAuthOnMount = false, onAuthMountHan
         localStorage.setItem('time-tick-user', JSON.stringify(baseSession));
         console.log('[Auth] Session/cache updated.');
 
-        // 4. Dispatch Background Validation
-        console.log('[Auth] Background validation started...');
-        startBackgroundValidation(
-            auth, 
-            db, 
-            'store', 
-            (enrichedSession) => {
-                setCurrentUser(enrichedSession);
-                localStorage.setItem('time-tick-user', JSON.stringify(enrichedSession));
-                console.log('[Auth] Background validation completed, session enriched.');
-            },
-            () => {
-                setCurrentUser(null);
-                localStorage.removeItem('time-tick-user');
-                console.log('[Auth] Background validation failed, user logged out.');
-            }
-        );
+        // 4. Background Validation is now owned exclusively by StartupProvider's
+        //    auth.onAuthStateChanged listener. No need to dispatch it here.
+        //    StartupProvider will react to the auth state change and run validation once.
 
         return true;
     };

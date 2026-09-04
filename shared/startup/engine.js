@@ -1,5 +1,4 @@
-import { getCachedSession, clearCachedSession } from './cache';
-import { startBackgroundValidation } from './authSync';
+import { getCachedSession } from './cache';
 
 export const AppStartupState = {
   Initializing: 'Initializing',
@@ -10,31 +9,27 @@ export const AppStartupState = {
 };
 
 /**
- * Boots the application using local cache first.
- * Does not block on Firebase.
+ * bootApplication — Cache-read-only startup step.
+ * 
+ * Reads the local session cache and returns it immediately.
+ * Does NOT trigger any Firebase validation or synchronization.
+ * Background Validation is owned exclusively by StartupProvider's auth listener.
  */
 export const bootApplication = async () => {
   try {
     const cached = await getCachedSession();
-    
+
     if (cached && cached.data) {
+      console.log('[Startup Engine] Local session found. Rendering from cache.');
       return {
         session: cached.data,
-        isExpired: cached.isExpired // indicates we MUST run background sync immediately
+        isExpired: cached.isExpired
       };
     }
   } catch (error) {
     console.error('[Startup Engine] Boot error:', error);
   }
-  
-  return { session: null, isExpired: false };
-};
 
-/**
- * Triggers background Firebase validation
- */
-export const runBackgroundValidation = (auth, db, appName, onUpdate, onLogout) => {
-  // Fire and forget
-  console.log('[Startup Engine] Starting silent background validation...');
-  startBackgroundValidation(auth, db, appName, onUpdate, onLogout).catch(console.error);
+  console.log('[Startup Engine] No local session found. Rendering login.');
+  return { session: null, isExpired: false };
 };

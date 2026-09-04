@@ -591,6 +591,122 @@ export class ProductDAL {
         } catch(e) {}
     }
 
+    /**
+     * _addIdsToLists — Batch version of _addIdToLists for use during initial sync.
+     * 
+     * Reads each cached list ONCE, applies all IDs in the chunk as a Set-merge,
+     * then writes back ONCE per list — replacing O(N × lists) with O(chunks × lists).
+     * 
+     * Processes ids in bounded chunks and yields to the event loop between chunks
+     * to prevent blocking the Android WebView during large initial product syncs.
+     * 
+     * @param {string[]} ids - Array of product IDs to add to all cached lists.
+     */
+    async _addIdsToLists(ids) {
+        if (!ids || ids.length === 0) return;
+
+        const LIST_CHUNK_SIZE = 100;
+        const types = ['lists', 'latest', 'bestsellers', 'related'];
+
+        try {
+            for (let i = 0; i < ids.length; i += LIST_CHUNK_SIZE) {
+                const chunk = ids.slice(i, i + LIST_CHUNK_SIZE);
+                const chunkSet = new Set(chunk);
+
+                for (const type of types) {
+                    const keys = await this.registry.getAllKeys(type);
+                    for (const key of keys) {
+                        const cached = await QueryIndexStore.get('product_query', key);
+                        if (cached && cached.data) {
+                            let changed = false;
+
+                            if (cached.data._isEntityList) {
+                                const existingSet = new Set(cached.data.ids);
+                                const newIds = chunk.filter(id => !existingSet.has(id));
+                                if (newIds.length > 0) {
+                                    cached.data.ids = [...newIds, ...cached.data.ids];
+                                    changed = true;
+                                }
+                            } else if (cached.data._isEntityListWrapper) {
+                                const existingSet = new Set(cached.data.products);
+                                const newIds = chunk.filter(id => !existingSet.has(id));
+                                if (newIds.length > 0) {
+                                    cached.data.products = [...newIds, ...cached.data.products];
+                                    changed = true;
+                                }
+                            }
+
+                            if (changed) {
+                                await QueryIndexStore.set('product_query', key, cached);
+                            }
+                        }
+                    }
+                }
+
+                // Yield to event loop between chunks to keep WebView responsive.
+                if (i + LIST_CHUNK_SIZE < ids.length) {
+                    await new Promise(r => setTimeout(r, 0));
+                }
+            }
+        } catch (e) {
+            console.warn('[ProductDAL] _addIdsToLists failed (non-fatal):', e);
+        }
+    }
+
+    /**
+     * _removeIdsFromLists — Batch version of _removeIdFromLists for use during initial sync.
+     * 
+     * Reads each cached list ONCE, removes all IDs in the chunk in a single filter pass,
+     * then writes back ONCE per list.
+     * 
+     * @param {string[]} ids - Array of product IDs to remove from all cached lists.
+     */
+    async _removeIdsFromLists(ids) {
+        if (!ids || ids.length === 0) return;
+
+        const LIST_CHUNK_SIZE = 100;
+        const types = ['lists', 'latest', 'bestsellers', 'related'];
+
+        try {
+            for (let i = 0; i < ids.length; i += LIST_CHUNK_SIZE) {
+                const chunk = ids.slice(i, i + LIST_CHUNK_SIZE);
+                const chunkSet = new Set(chunk);
+
+                for (const type of types) {
+                    const keys = await this.registry.getAllKeys(type);
+                    for (const key of keys) {
+                        const cached = await QueryIndexStore.get('product_query', key);
+                        if (cached && cached.data) {
+                            let changed = false;
+
+                            if (cached.data._isEntityList) {
+                                const before = cached.data.ids.length;
+                                cached.data.ids = cached.data.ids.filter(id => !chunkSet.has(id));
+                                changed = cached.data.ids.length !== before;
+                            } else if (cached.data._isEntityListWrapper) {
+                                const before = cached.data.products.length;
+                                cached.data.products = cached.data.products.filter(id => !chunkSet.has(id));
+                                changed = cached.data.products.length !== before;
+                            }
+
+                            if (changed) {
+                                await QueryIndexStore.set('product_query', key, cached);
+                            }
+                        }
+                    }
+                }
+
+                // Yield to event loop between chunks.
+                if (i + LIST_CHUNK_SIZE < ids.length) {
+                    await new Promise(r => setTimeout(r, 0));
+                }
+            }
+        } catch (e) {
+            console.warn('[ProductDAL] _removeIdsFromLists failed (non-fatal):', e);
+        }
+    }
+
+
     async _staleGroups(types) {
         for (const type of types) {
             try {
