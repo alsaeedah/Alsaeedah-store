@@ -11,18 +11,37 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      return isAuthenticated() && request.auth.token.role == 'super_admin';
+      return isAuthenticated() && 
+             'role' in request.auth.token && 
+             request.auth.token.role == 'super_admin';
     }
 
     function isManager() {
-      return isAuthenticated() && (request.auth.token.role == 'manager' || isSuperAdmin());
+      return isAuthenticated() && (
+        isSuperAdmin() || (
+          exists(/databases/$(database)/documents/managers/$(request.auth.uid)) &&
+          'is_active' in get(/databases/$(database)/documents/managers/$(request.auth.uid)).data &&
+          get(/databases/$(database)/documents/managers/$(request.auth.uid)).data.is_active == true &&
+          'role' in get(/databases/$(database)/documents/managers/$(request.auth.uid)).data &&
+          get(/databases/$(database)/documents/managers/$(request.auth.uid)).data.role == 'manager'
+        )
+      );
     }
 
     function hasPermission(permissionName) {
-      return isSuperAdmin() || (
-        isManager() && 
-        request.auth.token.permissions != null && 
-        (permissionName in request.auth.token.permissions || 'all' in request.auth.token.permissions)
+      return isAuthenticated() && (
+        isSuperAdmin() || (
+          exists(/databases/$(database)/documents/managers/$(request.auth.uid)) &&
+          'is_active' in get(/databases/$(database)/documents/managers/$(request.auth.uid)).data &&
+          get(/databases/$(database)/documents/managers/$(request.auth.uid)).data.is_active == true &&
+          'role' in get(/databases/$(database)/documents/managers/$(request.auth.uid)).data &&
+          get(/databases/$(database)/documents/managers/$(request.auth.uid)).data.role == 'manager' &&
+          'permissions' in get(/databases/$(database)/documents/managers/$(request.auth.uid)).data &&
+          (
+            permissionName in get(/databases/$(database)/documents/managers/$(request.auth.uid)).data.permissions ||
+            'all' in get(/databases/$(database)/documents/managers/$(request.auth.uid)).data.permissions
+          )
+        )
       );
     }
 

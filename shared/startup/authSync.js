@@ -49,16 +49,7 @@ const _doValidation = async (firebaseUser, db, appName, onUpdate, onLogout) => {
     // 1. Get Token Claims (force refresh if needed)
     const claims = await getValidClaims(firebaseUser);
 
-    // 2. Authorize Dashboard Users immediately (Claims-First)
-    if (appName === 'dashboard') {
-      if (!claims.role || (claims.role !== 'super_admin' && claims.role !== 'manager')) {
-        console.warn('[Background Validation] Dashboard unauthorized (Missing or invalid claims). Forcing logout.');
-        await clearCachedSession();
-        if (firebaseUser.auth?.currentUser) await firebaseUser.auth.signOut();
-        if (onLogout) onLogout();
-        return;
-      }
-    }
+    // 2. Dashboard claims check removed (relies on Firestore profile in step 4)
 
     // 3. Check local session
     const { getCachedSession } = await import('./cache');
@@ -105,14 +96,23 @@ const _doValidation = async (firebaseUser, db, appName, onUpdate, onLogout) => {
       // 5. Construct unified session object
       const tokenPermissions = Array.isArray(claims.permissions) ? claims.permissions : [];
       const dataPermissions = Array.isArray(data.permissions) ? data.permissions : [];
+      const isSuperAdminClaim = claims && claims.role === 'super_admin';
+
+      const finalRole = appName === 'dashboard' 
+          ? (isSuperAdminClaim ? 'super_admin' : (data.role || 'manager')) 
+          : (claims.role || data.role || 'user');
+          
+      const finalPermissions = appName === 'dashboard' 
+          ? dataPermissions 
+          : (tokenPermissions.length > 0 ? tokenPermissions : dataPermissions);
 
       sessionData = {
         uid: firebaseUser.uid,
         email: firebaseUser.email || data.email,
         name: data.name || firebaseUser.displayName || 'مستخدم',
         image: data.profile_image_url || firebaseUser.photoURL || '',
-        role: claims.role || data.role || (appName === 'dashboard' ? 'manager' : 'user'),
-        permissions: tokenPermissions.length > 0 ? tokenPermissions : dataPermissions,
+        role: finalRole,
+        permissions: finalPermissions,
         // Store-specific extra fields
         phone: data.phone || '',
         whatsapp: data.whatsapp || '',

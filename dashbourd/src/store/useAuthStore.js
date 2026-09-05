@@ -42,24 +42,8 @@ const useAuthStore = create(
 
                 // 2. Get ID Token and Claims (Stage 2)
                 let tokenResult = await firebaseUser.getIdTokenResult();
-                
-                // If role claim is missing, maybe it's stale? Force refresh once.
-                if (!tokenResult.claims.role) {
-                    tokenResult = await firebaseUser.getIdTokenResult(true);
-                }
-
-                const claims = tokenResult.claims;
-
-                if (!claims || !claims.role) {
-                    await signOut(auth);
-                    throw new AuthError('CLAIMS_MISSING', 'This account does not have administrative permissions.');
-                }
-
-                // 3. Authorize (Stage 3)
-                if (claims.role !== 'super_admin' && claims.role !== 'manager') {
-                    await signOut(auth);
-                    throw new AuthError('NOT_AUTHORIZED', 'You do not have permission to access the Dashboard.');
-                }
+                const claims = tokenResult.claims || {};
+                const isSuperAdminClaim = claims.role === 'super_admin';
 
                 const uid = firebaseUser.uid;
 
@@ -89,15 +73,16 @@ const useAuthStore = create(
                 }
 
                 // 5. Build Session and Initialize
-                const permissions = Array.isArray(claims.permissions) ? claims.permissions : [];
+                const finalRole = isSuperAdminClaim ? 'super_admin' : (managerData.role || 'manager');
+                const finalPermissions = Array.isArray(managerData.permissions) ? managerData.permissions : [];
                 
                 const sessionData = {
                     uid,
                     email: firebaseUser.email || managerData.email,
                     name: managerData.name || firebaseUser.displayName || 'مستخدم',
                     image: managerData.profile_image_url || firebaseUser.photoURL || '',
-                    role: claims.role,
-                    permissions: permissions
+                    role: finalRole,
+                    permissions: finalPermissions
                 };
 
                 await cacheSession(sessionData);
@@ -127,26 +112,7 @@ const useAuthStore = create(
             set({ user: null, isAuthenticated: false, isAuthorized: false, error: null });
         },
 
-        refreshClaims: async () => {
-            const currentUser = auth.currentUser;
-            if (currentUser) {
-                const tokenResult = await currentUser.getIdTokenResult(true);
-                const role = tokenResult.claims.role || 'manager';
-                const permissions = Array.isArray(tokenResult.claims.permissions) ? tokenResult.claims.permissions : [];
-                
-                set((state) => {
-                    if (!state.user) return state;
-                    return {
-                        user: {
-                            ...state.user,
-                            role,
-                            permissions
-                        }
-                    };
-                });
-            }
-        },
-        
+
         refreshPermissions: async () => {
             const uid = get().user?.uid;
             if (!uid) return;
@@ -166,7 +132,7 @@ const useAuthStore = create(
                             ...state.user,
                             email: data.email,
                             name: data.name,
-                            role: data.role || 'manager',
+                            role: state.user.role === 'super_admin' ? 'super_admin' : (data.role || 'manager'),
                             permissions: Array.isArray(data.permissions) ? data.permissions : [],
                         }
                     };

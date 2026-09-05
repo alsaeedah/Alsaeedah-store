@@ -35,7 +35,13 @@ function App() {
         db={db}
         appName="dashboard"
         onSessionResolved={(session) => {
-            useAuthStore.getState().setSession(session);
+            if (!session) {
+                useAuthStore.getState().setSession(null);
+            }
+            // For Dashboard, we do not call setSession(session) here if it exists.
+            // This prevents a stale cached session from granting permissions before 
+            // the background validation (authSync) confirms them against Firestore.
+            // ProtectedRoute will remain in the "loading" state until onSessionUpdated is called.
         }}
         onSessionUpdated={(session) => {
             useAuthStore.getState().setSession(session);
