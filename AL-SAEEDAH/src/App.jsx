@@ -276,9 +276,26 @@ function AuthGate({ children }) {
   const location = useLocation();
   
   useEffect(() => {
+    let appStateListener = null;
+
     if (currentUser && Capacitor.isNativePlatform()) {
+      // 1. Reset on initial load / login (Cold Start)
       ReminderManager.resetReminderSchedule();
+
+      // 2. Listen to app state changes to reset reminders when returning from background
+      appStateListener = CapApp.addListener('appStateChange', ({ isActive }) => {
+        if (isActive) {
+          ReminderManager.resetReminderSchedule();
+        }
+      });
     }
+
+    // Cleanup listener safely when component unmounts or user logs out
+    return () => {
+      if (appStateListener) {
+        appStateListener.then?.(listener => listener?.remove?.());
+      }
+    };
   }, [currentUser]);
 
   const publicPaths = ['/download', '/reset-password'];
