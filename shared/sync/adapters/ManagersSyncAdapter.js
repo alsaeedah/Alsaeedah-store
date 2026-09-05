@@ -13,13 +13,6 @@ export class ManagersSyncAdapter extends BaseSyncAdapter {
             await updateDoc(docRef, m.payload);
         } else if (m.operation === MutationOperation.DELETE) {
             await deleteDoc(docRef);
-            // Tombstone write for deleted managers to allow delta queries
-            const tombstoneRef = doc(this.db, 'manager_changes', m.documentId);
-            await setDoc(tombstoneRef, {
-                managerId: m.documentId,
-                type: 'DELETED',
-                updated_at: new Date().toISOString()
-            });
         } else {
             throw new Error(`Unsupported operation: ${m.operation}`);
         }
@@ -69,16 +62,6 @@ export class ManagersSyncAdapter extends BaseSyncAdapter {
                 else cache.push(data);
                 changed = true;
             });
-
-            if (lastSyncAt) {
-                const deletesQ = query(collection(this.db, 'manager_changes'), where('updated_at', '>', lastSyncAt), where('updated_at', '<=', syncBoundary), where('type', '==', 'DELETED'));
-                const deletesSnap = await getDocs(deletesQ);
-                deletesSnap.forEach(docSnap => {
-                    const data = docSnap.data();
-                    cache = cache.filter(m => String(m.id) !== String(data.managerId));
-                    changed = true;
-                });
-            }
 
             if (changed) {
                 await this.dal.reconcileCache(cache);

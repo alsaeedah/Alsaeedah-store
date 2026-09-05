@@ -219,14 +219,14 @@ export default function ProductList({
             setRandomSeed(newSeed);
             setPage(0);
             nextCursorRef.current = null;
-            loadProducts(0, true, newSeed);
+            loadProducts(0, true, newSeed, { forceRevalidate: true });
         }, 400); 
         return () => clearTimeout(timer);
     }, [JSON.stringify(filterCategoryIds), JSON.stringify(filterBrandIds), sortPrice, minPrice, maxPrice, searchQuery]);
 
     useEffect(() => {
         if (page > 0) {
-            loadProducts(page, false, randomSeed);
+            loadProducts(page, false, randomSeed, { forceRevalidate: true });
         }
     }, [page]);
 

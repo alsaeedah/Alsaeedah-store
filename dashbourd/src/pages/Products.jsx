@@ -61,6 +61,7 @@ const Products = () => {
 
     const nextCursorRef = useRef(null);
     const LIMIT = 20;
+    const queryGeneration = useRef(0);
 
     const buildFilters = () => ({
         genderId: genderId !== 'all' ? genderId : null,
@@ -101,8 +102,10 @@ const Products = () => {
 
     const fetchProducts = (pageNum, isInitial = false) => {
         if (isInitial) {
+            queryGeneration.current += 1;
             startLoading();
-            if (products.length === 0) setLoading(true);
+            setProducts([]);
+            setLoading(true);
             setError(null);
             nextCursorRef.current = null;
             cleanupSubs();
@@ -110,12 +113,15 @@ const Products = () => {
             setLoadingMore(true);
         }
 
+        const currentGen = queryGeneration.current;
         const resolvedFilters = buildFilters();
         const currentCursor = isInitial ? null : nextCursorRef.current;
 
         const unsub = productRepository.subscribeToPaginatedSWR(
             resolvedFilters, pageNum, LIMIT, currentCursor,
             (response) => {
+                if (currentGen !== queryGeneration.current) return;
+
                 if (response && response._isStaleCache) {
                     console.log("[Products] Using LKG data, background revalidation started.");
                 }
@@ -163,6 +169,17 @@ const Products = () => {
                     stopLoading();
                 } else {
                     setLoadingMore(false);
+                }
+            },
+            {
+                forceRevalidate: true,
+                onError: (err) => {
+                    if (currentGen !== queryGeneration.current) return;
+                    console.error("[Products] fetch error", err);
+                    setError(err);
+                    setLoading(false);
+                    setLoadingMore(false);
+                    stopLoading();
                 }
             }
         );

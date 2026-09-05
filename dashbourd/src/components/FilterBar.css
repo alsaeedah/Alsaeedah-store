@@ -1,0 +1,656 @@
+/* ==========================================================================
+   AL-SAEEDAH STORE — Premium Product Filters UI Styles
+   Scoped with .sf- prefix to prevent interference with dashboard components
+   ========================================================================== */
+
+.sf-panel {
+  position: relative;
+  background: linear-gradient(180deg, rgba(22, 22, 26, 0.82) 0%, rgba(14, 14, 17, 0.94) 100%);
+  border: 1px solid var(--border-color);
+  border-radius: 22px;
+  padding: 22px 24px;
+  margin-bottom: 32px;
+  box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  direction: rtl;
+}
+
+.sf-panel:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.sf-panel.sf-has-active-filters {
+  border-color: rgba(212, 175, 55, 0.25);
+  box-shadow: 0 16px 45px -12px rgba(0, 0, 0, 0.5), 0 0 20px -8px rgba(212, 175, 55, 0.08);
+}
+
+/* --------------------------------------------------------------------------
+   Header Section
+   -------------------------------------------------------------------------- */
+.sf-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 16px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.sf-header-start {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sf-icon-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: rgba(212, 175, 55, 0.08);
+  border: 1px solid rgba(212, 175, 55, 0.22);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.25s ease, background-color 0.25s ease;
+}
+
+.sf-panel:hover .sf-icon-badge {
+  background: rgba(212, 175, 55, 0.14);
+  transform: translateY(-1px);
+}
+
+.sf-header-text {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sf-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: -0.2px;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.sf-active-count-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: rgba(212, 175, 55, 0.12);
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  color: var(--primary);
+  letter-spacing: 0.2px;
+}
+
+.sf-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sf-btn-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.825rem;
+  font-weight: 700;
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  padding: 7px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+  outline: none;
+}
+
+.sf-btn-reset:hover {
+  background: rgba(239, 68, 68, 0.16);
+  border-color: rgba(239, 68, 68, 0.4);
+  transform: translateY(-1px);
+  color: #ef4444;
+}
+
+.sf-btn-reset:active {
+  transform: translateY(0);
+}
+
+/* --------------------------------------------------------------------------
+   Search Bar
+   -------------------------------------------------------------------------- */
+.sf-search-row {
+  position: relative;
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.sf-search-icon {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--primary);
+  opacity: 0.75;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.sf-search-row:focus-within .sf-search-icon {
+  opacity: 1;
+  transform: translateY(-50%) scale(1.05);
+}
+
+.sf-search-input {
+  width: 100%;
+  height: 48px;
+  padding: 0 48px 0 44px;
+  background: rgba(8, 8, 10, 0.45);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  color: var(--text-main);
+  font-size: 0.925rem;
+  font-weight: 500;
+  outline: none;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+}
+
+.sf-search-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.65;
+  font-size: 0.875rem;
+}
+
+.sf-search-input:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(8, 8, 10, 0.6);
+}
+
+.sf-search-input:focus {
+  border-color: var(--primary);
+  background: rgba(10, 10, 12, 0.8);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.12), 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.sf-search-clear {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.sf-search-clear:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  transform: translateY(-50%) scale(1.08);
+}
+
+/* --------------------------------------------------------------------------
+   Controls Grid (Responsive: desktop, tablet, mobile)
+   -------------------------------------------------------------------------- */
+.sf-controls-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1.1fr 1.1fr 1.2fr 0.9fr;
+  gap: 14px;
+  align-items: end;
+}
+
+.sf-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.sf-field-label {
+  font-size: 0.775rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+  padding-right: 2px;
+}
+
+.sf-field-label svg {
+  color: var(--primary);
+  opacity: 0.75;
+}
+
+/* Segmented Pill Selector (Gender/Audience) */
+.sf-segmented-pills {
+  display: flex;
+  background: rgba(8, 8, 10, 0.45);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 4px;
+  gap: 3px;
+  height: 46px;
+  align-items: center;
+  transition: border-color 0.2s ease;
+}
+
+.sf-segmented-pills:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.sf-segmented-pill {
+  flex: 1;
+  height: 100%;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.825rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  padding: 0 8px;
+  font-family: inherit;
+}
+
+.sf-segmented-pill:hover:not(.sf-active) {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sf-segmented-pill.sf-active {
+  background: linear-gradient(135deg, #d4af37 0%, #b8932b 100%);
+  color: #0c0c0e;
+  font-weight: 800;
+  box-shadow: 0 2px 10px rgba(212, 175, 55, 0.25);
+}
+
+/* Custom Select Container */
+.sf-select-container {
+  position: relative;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.sf-select-icon {
+  position: absolute;
+  right: 14px;
+  color: var(--primary);
+  opacity: 0.75;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.sf-select-chevron {
+  position: absolute;
+  left: 14px;
+  color: var(--text-muted);
+  pointer-events: none;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.sf-select {
+  width: 100%;
+  height: 100%;
+  padding: 0 40px 0 36px;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background: rgba(8, 8, 10, 0.45);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  color: var(--text-main);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sf-select:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(8, 8, 10, 0.6);
+}
+
+.sf-select:focus {
+  border-color: var(--primary);
+  background: rgba(10, 10, 12, 0.8);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.12);
+}
+
+.sf-select:focus ~ .sf-select-chevron {
+  color: var(--primary);
+  transform: rotate(180deg);
+}
+
+.sf-select.sf-selected {
+  border-color: rgba(212, 175, 55, 0.35);
+  background: rgba(212, 175, 55, 0.04);
+}
+
+.sf-select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: rgba(8, 8, 10, 0.2);
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+.sf-select option {
+  background: #141416;
+  color: #ffffff;
+  padding: 12px;
+  font-size: 0.9rem;
+}
+
+/* Dual Price Range Box */
+.sf-price-container {
+  display: flex;
+  align-items: center;
+  height: 46px;
+  background: rgba(8, 8, 10, 0.45);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 0 12px;
+  gap: 8px;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sf-price-container:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.sf-price-container:focus-within {
+  border-color: var(--primary);
+  background: rgba(10, 10, 12, 0.8);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.12);
+}
+
+.sf-price-container.sf-active {
+  border-color: rgba(212, 175, 55, 0.35);
+  background: rgba(212, 175, 55, 0.03);
+}
+
+.sf-price-icon {
+  color: var(--primary);
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+
+.sf-price-input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-align: center;
+  outline: none;
+  font-family: inherit;
+}
+
+.sf-price-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.55;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+/* Chrome, Safari, Edge, Opera price number spinners removal */
+.sf-price-input::-webkit-outer-spin-button,
+.sf-price-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.sf-price-input[type=number] {
+  -moz-appearance: textfield;
+}
+
+.sf-price-divider {
+  color: rgba(255, 255, 255, 0.15);
+  font-size: 0.8rem;
+  font-weight: 400;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+/* Sort Toggle Button */
+.sf-sort-btn {
+  height: 46px;
+  width: 100%;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: rgba(8, 8, 10, 0.45);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.sf-sort-btn:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sf-sort-btn.sf-active {
+  background: rgba(212, 175, 55, 0.12);
+  border-color: rgba(212, 175, 55, 0.4);
+  color: var(--primary);
+  font-weight: 700;
+  box-shadow: 0 2px 10px rgba(212, 175, 55, 0.1);
+}
+
+.sf-sort-btn svg {
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Active Chips Bar
+   -------------------------------------------------------------------------- */
+.sf-active-chips-row {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sf-chips-label {
+  font-size: 0.775rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-left: 4px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  user-select: none;
+}
+
+.sf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px 5px 8px;
+  border-radius: 12px;
+  background: rgba(212, 175, 55, 0.07);
+  border: 1px solid rgba(212, 175, 55, 0.22);
+  color: var(--text-main);
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.sf-chip:hover {
+  border-color: rgba(212, 175, 55, 0.35);
+  background: rgba(212, 175, 55, 0.12);
+}
+
+.sf-chip-tag {
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+
+.sf-chip-val {
+  color: #ffffff;
+}
+
+.sf-chip-close {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+
+.sf-chip-close:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: #f87171;
+  transform: scale(1.1);
+}
+
+/* --------------------------------------------------------------------------
+   Responsive Breakpoints
+   -------------------------------------------------------------------------- */
+@media (max-width: 1280px) {
+  .sf-controls-grid {
+    grid-template-columns: 1.3fr 1fr 1fr 1.1fr 0.9fr;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .sf-controls-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  
+  .sf-field-group:first-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 768px) {
+  .sf-panel {
+    padding: 16px 14px;
+    border-radius: 18px;
+    margin-bottom: 24px;
+  }
+
+  .sf-header {
+    padding-bottom: 12px;
+    margin-bottom: 14px;
+  }
+
+  .sf-title {
+    font-size: 0.95rem;
+  }
+
+  .sf-icon-badge {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+  }
+
+  .sf-btn-reset {
+    font-size: 0.775rem;
+    padding: 6px 12px;
+  }
+
+  .sf-search-row {
+    margin-bottom: 14px;
+  }
+
+  .sf-search-input {
+    height: 44px;
+    font-size: 0.875rem;
+    padding: 0 44px 0 40px;
+  }
+
+  .sf-controls-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .sf-field-group:first-child {
+    grid-column: auto;
+  }
+
+  .sf-segmented-pills {
+    height: 44px;
+  }
+
+  .sf-segmented-pill {
+    font-size: 0.775rem;
+    padding: 0 6px;
+  }
+
+  .sf-select-container,
+  .sf-price-container,
+  .sf-sort-btn {
+    height: 44px;
+  }
+
+  .sf-active-chips-row {
+    margin-top: 14px;
+    padding-top: 12px;
+    gap: 6px;
+  }
+
+  .sf-chip {
+    font-size: 0.75rem;
+    padding: 4px 10px 4px 6px;
+  }
+}

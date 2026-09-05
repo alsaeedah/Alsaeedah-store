@@ -1,9 +1,24 @@
 import React, { useEffect, useState } from 'react';
-import { Search, ArrowUpDown, DollarSign, RotateCcw } from 'lucide-react';
-import { motion } from 'framer-motion';
+import {
+    Search,
+    ArrowUpDown,
+    ArrowUp,
+    ArrowDown,
+    DollarSign,
+    RotateCcw,
+    SlidersHorizontal,
+    Layers,
+    Tag,
+    X,
+    ChevronDown,
+    Sparkles,
+    Filter
+} from 'lucide-react';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { useStore } from 'zustand';
 import { taxonomyStore, GENDERS } from 'shared/taxonomy';
 import { getAvailableBrandIds } from '../services/productService';
+import './FilterBar.css';
 
 const FilterBar = ({
     searchQuery, setSearchQuery,
@@ -14,7 +29,6 @@ const FilterBar = ({
     maxPrice, setMaxPrice,
     sortPrice, setSortPrice
 }) => {
-    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
     const [availableBrandIds, setAvailableBrandIds] = useState(null);
     const [loadingBrands, setLoadingBrands] = useState(false);
 
@@ -29,12 +43,7 @@ const FilterBar = ({
         }
     }, [initialized, storeStatus]);
 
-    useEffect(() => {
-        const handleResize = () => setIsMobile(window.innerWidth < 768);
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
-
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         if (categoryId === 'all') {
             setAvailableBrandIds(null);
@@ -55,260 +64,418 @@ const FilterBar = ({
                 });
         }
     }, [categoryId, setBrandId]);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     const activeCategories = categories.filter(c => c.active);
     const displayedBrands = availableBrandIds 
         ? brands.filter(b => b.active && availableBrandIds.includes(b.id)) 
         : [];
 
+    // Filter Active Indicators
+    const isSearchActive = Boolean(searchQuery && searchQuery.trim());
+    const isGenderActive = genderId !== 'all';
+    const isCategoryActive = categoryId !== 'all';
+    const isBrandActive = brandId !== 'all';
+    const isPriceActive = Boolean(minPrice !== '' || maxPrice !== '');
+    const isSortActive = sortPrice !== 'none';
+
+    const activeCount = (isSearchActive ? 1 : 0) +
+        (isGenderActive ? 1 : 0) +
+        (isCategoryActive ? 1 : 0) +
+        (isBrandActive ? 1 : 0) +
+        (isPriceActive ? 1 : 0) +
+        (isSortActive ? 1 : 0);
+
+    const hasActiveFilters = activeCount > 0;
+
+    const handleResetAll = () => {
+        setSearchQuery('');
+        setGenderId('all');
+        setCategoryId('all');
+        setBrandId('all');
+        setMinPrice('');
+        setMaxPrice('');
+        setSortPrice('none');
+    };
+
+    const handleSortCycle = () => {
+        setSortPrice(prev => (prev === 'asc' ? 'desc' : prev === 'desc' ? 'none' : 'asc'));
+    };
+
+    // Label resolvers for active chips
+    const selectedGender = GENDERS.find(g => g.id === genderId);
+    const selectedCategory = categories.find(c => c.id === categoryId);
+    const selectedBrand = brands.find(b => b.id === brandId);
+
     return (
-        <div
-            className="glass-card"
-            style={{
-                padding: isMobile ? '16px' : '24px',
-                marginBottom: isMobile ? '24px' : '40px',
-                display: 'flex',
-                flexDirection: isMobile ? 'column' : 'row',
-                justifyContent: 'space-between',
-                gap: isMobile ? '16px' : '24px',
-                alignItems: isMobile ? 'stretch' : 'center',
-                background: 'rgba(255,255,255,0.03)',
-                borderRadius: '24px',
-                backdropFilter: 'blur(10px)',
-                border: '1px solid var(--border-color)'
-            }}
-        >
-            {/* Search Section */}
-            <div style={{ position: 'relative', minWidth: isMobile ? '100%' : '320px', flex: isMobile ? 'none' : 1.5 }}>
-                <Search size={18} style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--primary)', opacity: 0.7 }} />
+        <div className={`sf-panel ${hasActiveFilters ? 'sf-has-active-filters' : ''}`}>
+            {/* Header */}
+            <div className="sf-header">
+                <div className="sf-header-start">
+                    <div className="sf-icon-badge">
+                        <SlidersHorizontal size={18} />
+                    </div>
+                    <div className="sf-header-text">
+                        <h3 className="sf-title">تصفية المنتجات</h3>
+                        {hasActiveFilters && (
+                            <span className="sf-active-count-badge">
+                                {activeCount} {activeCount === 1 ? 'فلتر نشط' : 'فلاتر نشطة'}
+                            </span>
+                        )}
+                    </div>
+                </div>
+
+                <div className="sf-header-actions">
+                    <AnimatePresence>
+                        {hasActiveFilters && (
+                            <Motion.button
+                                initial={{ opacity: 0, scale: 0.9, y: -4 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9, y: -4 }}
+                                transition={{ duration: 0.18 }}
+                                type="button"
+                                className="sf-btn-reset"
+                                onClick={handleResetAll}
+                                title="إعادة تعيين جميع الفلاتر"
+                            >
+                                <RotateCcw size={14} />
+                                <span>تهيئة الفلاتر</span>
+                            </Motion.button>
+                        )}
+                    </AnimatePresence>
+                </div>
+            </div>
+
+            {/* Search Input Bar */}
+            <div className="sf-search-row">
+                <Search size={18} className="sf-search-icon" />
                 <input
                     type="text"
-                    placeholder="بحث في المخزون..."
+                    className="sf-search-input"
+                    placeholder="بحث في المخزون بالاسم، الماركة، أو المواصفات..."
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
-                    style={{
-                        width: '100%',
-                        padding: '12px 48px 12px 16px',
-                        background: 'rgba(0,0,0,0.3)',
-                        border: '1px solid var(--border-color)',
-                        borderRadius: '14px',
-                        color: '#fff',
-                        fontSize: '0.95rem',
-                        outline: 'none',
-                        transition: '0.3s',
-                        fontFamily: 'inherit'
-                    }}
-                    onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-                    onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
+                    aria-label="بحث في المخزون"
                 />
-            </div>
-
-            {/* Filters Section */}
-            <div style={{ 
-                display: 'flex', 
-                gap: isMobile ? '10px' : '15px', 
-                alignItems: 'center', 
-                flexWrap: 'wrap',
-                flexDirection: isMobile ? 'column' : 'row'
-            }}>
-                <div style={{ 
-                    display: 'flex', 
-                    gap: '4px', 
-                    background: 'rgba(255,255,255,0.03)', 
-                    padding: '4px', 
-                    borderRadius: '16px', 
-                    border: '1px solid var(--border-color)',
-                    width: isMobile ? '100%' : 'auto',
-                    overflowX: 'auto'
-                }}>
+                {searchQuery && (
                     <button
-                        onClick={() => setGenderId('all')}
-                        style={{
-                            flex: isMobile ? 1 : 'none',
-                            padding: isMobile ? '8px 12px' : '10px 22px',
-                            borderRadius: '12px',
-                            border: 'none',
-                            background: genderId === 'all' ? 'var(--primary)' : 'transparent',
-                            color: genderId === 'all' ? '#000' : 'var(--text-muted)',
-                            cursor: 'pointer',
-                            transition: 'all 0.3s',
-                            fontSize: isMobile ? '0.8rem' : '0.9rem',
-                            fontWeight: '700',
-                            whiteSpace: 'nowrap'
-                        }}
+                        type="button"
+                        className="sf-search-clear"
+                        onClick={() => setSearchQuery('')}
+                        title="مسح البحث"
+                        aria-label="مسح البحث"
                     >
-                        الكل
+                        <X size={14} />
                     </button>
-                    {GENDERS.map(gender => (
-                        <button
-                            key={gender.id}
-                            onClick={() => setGenderId(gender.id)}
-                            style={{
-                                flex: isMobile ? 1 : 'none',
-                                padding: isMobile ? '8px 12px' : '10px 22px',
-                                borderRadius: '12px',
-                                border: 'none',
-                                background: genderId === gender.id ? 'var(--primary)' : 'transparent',
-                                color: genderId === gender.id ? '#000' : 'var(--text-muted)',
-                                cursor: 'pointer',
-                                transition: 'all 0.3s',
-                                fontSize: isMobile ? '0.8rem' : '0.9rem',
-                                fontWeight: '700',
-                                whiteSpace: 'nowrap'
-                            }}
-                        >
-                            {gender.name}
-                        </button>
-                    ))}
-                </div>
-
-                <div style={{ 
-                    display: 'flex', 
-                    gap: '10px', 
-                    width: isMobile ? '100%' : 'auto',
-                    flexDirection: isMobile ? 'row' : 'row'
-                }}>
-                    {/* Category Dropdown */}
-                    <select
-                        value={categoryId}
-                        onChange={(e) => setCategoryId(e.target.value)}
-                        style={{
-                            flex: isMobile ? 1 : 'none',
-                            padding: '12px 15px',
-                            borderRadius: '14px',
-                            background: 'rgba(255,255,255,0.03)',
-                            border: '1px solid var(--border-color)',
-                            color: '#fff',
-                            cursor: 'pointer',
-                            outline: 'none',
-                            fontSize: '0.9rem',
-                            fontWeight: '600',
-                            minWidth: '130px'
-                        }}
-                    >
-                        <option value="all" style={{ background: '#141414' }}>كل الفئات</option>
-                        {activeCategories.map(cat => (
-                            <option key={cat.id} value={cat.id} style={{ background: '#141414' }}>
-                                {cat.name}
-                            </option>
-                        ))}
-                    </select>
-
-                    {/* Brand Dropdown */}
-                    <select
-                        value={brandId}
-                        onChange={(e) => setBrandId(e.target.value)}
-                        disabled={categoryId === 'all' || loadingBrands}
-                        style={{
-                            flex: isMobile ? 1 : 'none',
-                            padding: '12px 15px',
-                            borderRadius: '14px',
-                            background: 'rgba(255,255,255,0.03)',
-                            border: '1px solid var(--border-color)',
-                            color: categoryId === 'all' ? 'var(--text-muted)' : '#fff',
-                            cursor: categoryId === 'all' || loadingBrands ? 'not-allowed' : 'pointer',
-                            outline: 'none',
-                            fontSize: '0.9rem',
-                            fontWeight: '600',
-                            minWidth: '130px',
-                            opacity: categoryId === 'all' ? 0.5 : 1
-                        }}
-                    >
-                        {categoryId === 'all' ? (
-                            <option value="all" style={{ background: '#141414' }}>الرجاء اختيار القسم أولاً</option>
-                        ) : loadingBrands ? (
-                            <option value="all" style={{ background: '#141414' }}>جاري تحميل الماركات...</option>
-                        ) : (
-                            <>
-                                <option value="all" style={{ background: '#141414' }}>كل الماركات المتاحة</option>
-                                {displayedBrands.map(brand => (
-                                    <option key={brand.id} value={brand.id} style={{ background: '#141414' }}>
-                                        {brand.name}
-                                    </option>
-                                ))}
-                            </>
-                        )}
-                    </select>
-
-                    <button
-                        onClick={() => setSortPrice(prev => prev === 'asc' ? 'desc' : prev === 'desc' ? 'none' : 'asc')}
-                        style={{ 
-                            width: '48px', height: '48px', borderRadius: '14px', 
-                            background: sortPrice !== 'none' ? 'var(--primary)' : 'rgba(255,255,255,0.03)', 
-                            border: '1px solid var(--border-color)', 
-                            color: sortPrice !== 'none' ? '#000' : 'var(--text-muted)', 
-                            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            transition: '0.3s',
-                            flexShrink: 0
-                        }}
-                    >
-                        <ArrowUpDown size={18} />
-                    </button>
-                </div>
-
-                <div style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '8px', 
-                    padding: '10px 16px', 
-                    background: 'rgba(255,255,255,0.03)', 
-                    borderRadius: '14px', 
-                    border: '1px solid var(--border-color)',
-                    width: isMobile ? '100%' : 'auto',
-                    justifyContent: 'center'
-                }}>
-                    <DollarSign size={16} color="var(--primary)" />
-                    <input
-                        type="number"
-                        placeholder="الأدنى"
-                        value={minPrice}
-                        onChange={(e) => setMinPrice(e.target.value)}
-                        style={{ width: '100%', background: 'transparent', border: 'none', color: '#fff', textAlign: 'center', outline: 'none', fontSize: '0.9rem' }}
-                    />
-                    <span style={{ color: 'var(--border-color)' }}>|</span>
-                    <input
-                        type="number"
-                        placeholder="الأقصى"
-                        value={maxPrice}
-                        onChange={(e) => setMaxPrice(e.target.value)}
-                        style={{ width: '100%', background: 'transparent', border: 'none', color: '#fff', textAlign: 'center', outline: 'none', fontSize: '0.9rem' }}
-                    />
-                </div>
-
-                {/* Reset Action */}
-                {(searchQuery || genderId !== 'all' || categoryId !== 'all' || brandId !== 'all' || minPrice || maxPrice || sortPrice !== 'none') && (
-                    <motion.button
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        onClick={() => {
-                            setSearchQuery('');
-                            setGenderId('all');
-                            setCategoryId('all');
-                            setBrandId('all');
-                            setMinPrice('');
-                            setMaxPrice('');
-                            setSortPrice('none');
-                        }}
-                        style={{
-                            width: isMobile ? '100%' : 'auto',
-                            padding: '12px 20px',
-                            background: 'rgba(239, 68, 68, 0.1)',
-                            border: '1px solid rgba(239, 68, 68, 0.2)',
-                            borderRadius: '14px',
-                            color: '#ef4444',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '8px',
-                            fontSize: '0.9rem',
-                            fontWeight: '700'
-                        }}
-                    >
-                        <RotateCcw size={16} /> تهيئة الفلاتر
-                    </motion.button>
                 )}
             </div>
+
+            {/* Controls Grid */}
+            <div className="sf-controls-grid">
+                {/* 1. Target Audience (Gender) Segmented Capsule */}
+                <div className="sf-field-group">
+                    <span className="sf-field-label">
+                        <Sparkles size={13} />
+                        الفئة المستهدفة
+                    </span>
+                    <div className="sf-segmented-pills" role="radiogroup" aria-label="الفئة المستهدفة">
+                        <button
+                            type="button"
+                            className={`sf-segmented-pill ${genderId === 'all' ? 'sf-active' : ''}`}
+                            onClick={() => setGenderId('all')}
+                            aria-checked={genderId === 'all'}
+                            role="radio"
+                        >
+                            الكل
+                        </button>
+                        {GENDERS.map(gender => (
+                            <button
+                                key={gender.id}
+                                type="button"
+                                className={`sf-segmented-pill ${genderId === gender.id ? 'sf-active' : ''}`}
+                                onClick={() => setGenderId(gender.id)}
+                                aria-checked={genderId === gender.id}
+                                role="radio"
+                            >
+                                {gender.name}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* 2. Category Dropdown */}
+                <div className="sf-field-group">
+                    <label htmlFor="sf-category-select" className="sf-field-label">
+                        <Layers size={13} />
+                        القسم / الفئة
+                    </label>
+                    <div className="sf-select-container">
+                        <Layers size={16} className="sf-select-icon" />
+                        <select
+                            id="sf-category-select"
+                            className={`sf-select ${isCategoryActive ? 'sf-selected' : ''}`}
+                            value={categoryId}
+                            onChange={(e) => setCategoryId(e.target.value)}
+                            aria-label="اختر الفئة"
+                        >
+                            <option value="all">كل الفئات</option>
+                            {activeCategories.map(cat => (
+                                <option key={cat.id} value={cat.id}>
+                                    {cat.name}
+                                </option>
+                            ))}
+                        </select>
+                        <ChevronDown size={15} className="sf-select-chevron" />
+                    </div>
+                </div>
+
+                {/* 3. Brand Dropdown */}
+                <div className="sf-field-group">
+                    <label htmlFor="sf-brand-select" className="sf-field-label">
+                        <Tag size={13} />
+                        الماركة
+                    </label>
+                    <div className="sf-select-container">
+                        <Tag size={16} className="sf-select-icon" />
+                        <select
+                            id="sf-brand-select"
+                            className={`sf-select ${isBrandActive ? 'sf-selected' : ''}`}
+                            value={brandId}
+                            onChange={(e) => setBrandId(e.target.value)}
+                            disabled={categoryId === 'all' || loadingBrands}
+                            aria-label="اختر الماركة"
+                        >
+                            {categoryId === 'all' ? (
+                                <option value="all">اختر القسم أولاً</option>
+                            ) : loadingBrands ? (
+                                <option value="all">جاري تحميل الماركات...</option>
+                            ) : (
+                                <>
+                                    <option value="all">كل الماركات المتاحة</option>
+                                    {displayedBrands.map(brand => (
+                                        <option key={brand.id} value={brand.id}>
+                                            {brand.name}
+                                        </option>
+                                    ))}
+                                </>
+                            )}
+                        </select>
+                        <ChevronDown size={15} className="sf-select-chevron" />
+                    </div>
+                </div>
+
+                {/* 4. Price Range Dual Inputs */}
+                <div className="sf-field-group">
+                    <span className="sf-field-label">
+                        <DollarSign size={13} />
+                        نطاق السعر
+                    </span>
+                    <div className={`sf-price-container ${isPriceActive ? 'sf-active' : ''}`}>
+                        <DollarSign size={15} className="sf-price-icon" />
+                        <input
+                            type="number"
+                            className="sf-price-input"
+                            placeholder="الأدنى"
+                            value={minPrice}
+                            onChange={(e) => setMinPrice(e.target.value)}
+                            aria-label="الحد الأدنى للسعر"
+                        />
+                        <span className="sf-price-divider">—</span>
+                        <input
+                            type="number"
+                            className="sf-price-input"
+                            placeholder="الأقصى"
+                            value={maxPrice}
+                            onChange={(e) => setMaxPrice(e.target.value)}
+                            aria-label="الحد الأقصى للسعر"
+                        />
+                    </div>
+                </div>
+
+                {/* 5. Sort by Price Toggle */}
+                <div className="sf-field-group">
+                    <span className="sf-field-label">
+                        <ArrowUpDown size={13} />
+                        ترتيب السعر
+                    </span>
+                    <button
+                        type="button"
+                        className={`sf-sort-btn ${isSortActive ? 'sf-active' : ''}`}
+                        onClick={handleSortCycle}
+                        title="تغيير اتجاه ترتيب السعر"
+                        aria-label="تغيير اتجاه ترتيب السعر"
+                    >
+                        {sortPrice === 'asc' ? (
+                            <>
+                                <ArrowUp size={15} />
+                                <span>الأقل أولاً</span>
+                            </>
+                        ) : sortPrice === 'desc' ? (
+                            <>
+                                <ArrowDown size={15} />
+                                <span>الأعلى أولاً</span>
+                            </>
+                        ) : (
+                            <>
+                                <ArrowUpDown size={15} />
+                                <span>الافتراضي</span>
+                            </>
+                        )}
+                    </button>
+                </div>
+            </div>
+
+            {/* Active Filters Chips Bar */}
+            <AnimatePresence>
+                {hasActiveFilters && (
+                    <Motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="sf-active-chips-row"
+                    >
+                        <span className="sf-chips-label">
+                            <Filter size={12} />
+                            الفلاتر النشطة:
+                        </span>
+
+                        {isSearchActive && (
+                            <Motion.div
+                                initial={{ opacity: 0, scale: 0.85 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.85 }}
+                                className="sf-chip"
+                            >
+                                <span className="sf-chip-tag">البحث:</span>
+                                <span className="sf-chip-val">"{searchQuery}"</span>
+                                <button
+                                    type="button"
+                                    className="sf-chip-close"
+                                    onClick={() => setSearchQuery('')}
+                                    title="إزالة فلتر البحث"
+                                    aria-label="إزالة فلتر البحث"
+                                >
+                                    <X size={11} />
+                                </button>
+                            </Motion.div>
+                        )}
+
+                        {isGenderActive && (
+                            <Motion.div
+                                initial={{ opacity: 0, scale: 0.85 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.85 }}
+                                className="sf-chip"
+                            >
+                                <span className="sf-chip-tag">الفئة:</span>
+                                <span className="sf-chip-val">{selectedGender?.name || genderId}</span>
+                                <button
+                                    type="button"
+                                    className="sf-chip-close"
+                                    onClick={() => setGenderId('all')}
+                                    title="إزالة فلتر الفئة"
+                                    aria-label="إزالة فلتر الفئة"
+                                >
+                                    <X size={11} />
+                                </button>
+                            </Motion.div>
+                        )}
+
+                        {isCategoryActive && (
+                            <Motion.div
+                                initial={{ opacity: 0, scale: 0.85 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.85 }}
+                                className="sf-chip"
+                            >
+                                <span className="sf-chip-tag">القسم:</span>
+                                <span className="sf-chip-val">{selectedCategory?.name || categoryId}</span>
+                                <button
+                                    type="button"
+                                    className="sf-chip-close"
+                                    onClick={() => setCategoryId('all')}
+                                    title="إزالة فلتر القسم"
+                                    aria-label="إزالة فلتر القسم"
+                                >
+                                    <X size={11} />
+                                </button>
+                            </Motion.div>
+                        )}
+
+                        {isBrandActive && (
+                            <Motion.div
+                                initial={{ opacity: 0, scale: 0.85 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.85 }}
+                                className="sf-chip"
+                            >
+                                <span className="sf-chip-tag">الماركة:</span>
+                                <span className="sf-chip-val">{selectedBrand?.name || brandId}</span>
+                                <button
+                                    type="button"
+                                    className="sf-chip-close"
+                                    onClick={() => setBrandId('all')}
+                                    title="إزالة فلتر الماركة"
+                                    aria-label="إزالة فلتر الماركة"
+                                >
+                                    <X size={11} />
+                                </button>
+                            </Motion.div>
+                        )}
+
+                        {isPriceActive && (
+                            <Motion.div
+                                initial={{ opacity: 0, scale: 0.85 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.85 }}
+                                className="sf-chip"
+                            >
+                                <span className="sf-chip-tag">السعر:</span>
+                                <span className="sf-chip-val">
+                                    {minPrice && maxPrice
+                                        ? `${minPrice} - ${maxPrice}`
+                                        : minPrice
+                                        ? `من ${minPrice}`
+                                        : `إلى ${maxPrice}`}
+                                </span>
+                                <button
+                                    type="button"
+                                    className="sf-chip-close"
+                                    onClick={() => { setMinPrice(''); setMaxPrice(''); }}
+                                    title="إزالة فلتر السعر"
+                                    aria-label="إزالة فلتر السعر"
+                                >
+                                    <X size={11} />
+                                </button>
+                            </Motion.div>
+                        )}
+
+                        {isSortActive && (
+                            <Motion.div
+                                initial={{ opacity: 0, scale: 0.85 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.85 }}
+                                className="sf-chip"
+                            >
+                                <span className="sf-chip-tag">الترتيب:</span>
+                                <span className="sf-chip-val">
+                                    {sortPrice === 'asc' ? 'الأقل أولاً' : 'الأعلى أولاً'}
+                                </span>
+                                <button
+                                    type="button"
+                                    className="sf-chip-close"
+                                    onClick={() => setSortPrice('none')}
+                                    title="إلغاء ترتيب السعر"
+                                    aria-label="إلغاء ترتيب السعر"
+                                >
+                                    <X size={11} />
+                                </button>
+                            </Motion.div>
+                        )}
+                    </Motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

@@ -600,7 +600,7 @@ const EditManagerModal = ({ manager, onClose, onSuccess }) => {
 };
 
 // ── Manager Card Component ──────────────────────────────────────────────────
-const ManagerCard = ({ manager, index, isMobile, onEdit, onDelete, onToggleActive }) => {
+const ManagerCard = ({ manager, index, isMobile, onEdit, onDelete, onToggleActive, isToggling }) => {
     const isSuper = manager.role === 'super_admin';
 
     // Build perm list
@@ -736,18 +736,21 @@ const ManagerCard = ({ manager, index, isMobile, onEdit, onDelete, onToggleActiv
                     </motion.button>
 
                     <motion.button
-                        whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                        whileHover={{ scale: isToggling ? 1 : 1.02 }} whileTap={{ scale: isToggling ? 1 : 0.97 }}
                         onClick={onToggleActive}
+                        disabled={isToggling}
                         title={manager.is_active !== false ? 'تعطيل الحساب' : 'تنشيط الحساب'}
                         style={{
                             width: '38px', height: '38px', borderRadius: '8px',
                             border: manager.is_active !== false ? '1px solid rgba(239,68,68,0.2)' : '1px solid rgba(16,185,129,0.2)',
                             background: manager.is_active !== false ? 'rgba(239,68,68,0.05)' : 'rgba(16,185,129,0.05)',
                             color: manager.is_active !== false ? '#ef4444' : '#10b981',
-                            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            cursor: isToggling ? 'not-allowed' : 'pointer', 
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            opacity: isToggling ? 0.6 : 1
                         }}
                     >
-                        <Power size={15} />
+                        {isToggling ? <Loader2 size={15} className="spin" /> : <Power size={15} />}
                     </motion.button>
 
                     <motion.button
@@ -777,6 +780,7 @@ const Managers = () => {
     const [showAddModal, setShowAddModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [selectedManager, setSelectedManager] = useState(null);
+    const [togglingManagers, setTogglingManagers] = useState({});
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
     useEffect(() => {
@@ -827,17 +831,14 @@ const Managers = () => {
         if (result.isConfirmed) {
             startLoading();
             try {
-                if (!window.__managersDAL) {
-                    const { ManagersDAL } = await import('../../../shared/managers/infrastructure/cache/ManagersDAL.js');
-                    window.__managersDAL = new ManagersDAL();
-                    await window.__managersDAL.initialize();
-                }
-                await window.__managersDAL.deleteManager(managerId);
+                // Direct Firestore Hard Delete
+                await deleteDoc(doc(db, 'managers', managerId));
                 
+                // Immediately update local state
                 setManagersList(prev => prev.filter(m => m.id !== managerId));
-                fetchManagers(false);
+                fetchManagers(false); // background refresh just to be safe
                 
-                Swal.fire({ icon: 'success', title: 'تم الحذف', text: 'تم حذف حساب المدير بنجاح. سيتم تطبيق التغييرات في الخلفية.', background: '#141414', color: '#fff' });
+                Swal.fire({ icon: 'success', title: 'تم الحذف', text: 'تم حذف حساب المدير بنجاح.', background: '#141414', color: '#fff' });
             } catch (err) {
                 console.error('Delete Manager Error:', err);
                 Swal.fire({ icon: 'error', title: 'خطأ', text: 'فشل حذف حساب المدير.', background: '#141414', color: '#fff' });
@@ -848,23 +849,25 @@ const Managers = () => {
     };
 
     const handleToggleManagerActive = async (mng) => {
+        if (togglingManagers[mng.id]) return; // Prevent duplicate clicks
+        
         const nextStatus = mng.is_active === false;
-        startLoading();
+        
+        // Local Loading State
+        setTogglingManagers(prev => ({ ...prev, [mng.id]: true }));
+
         try {
-            if (!window.__managersDAL) {
-                const { ManagersDAL } = await import('../../../shared/managers/infrastructure/cache/ManagersDAL.js');
-                window.__managersDAL = new ManagersDAL();
-                await window.__managersDAL.initialize();
-            }
-            await window.__managersDAL.updateManager(mng.id, {
+            // Direct Firestore Update
+            await updateDoc(doc(db, 'managers', mng.id), {
                 is_active: nextStatus,
                 updated_at: new Date().toISOString()
             });
 
+            // Update UI after success
             setManagersList(prev => 
                 prev.map(m => m.id === mng.id ? { ...m, is_active: nextStatus } : m)
             );
-            fetchManagers(false);
+            fetchManagers(false); // background refresh
 
             Swal.fire({
                 icon: 'success',
@@ -877,7 +880,11 @@ const Managers = () => {
             console.error('Toggle Active Error:', err);
             Swal.fire({ icon: 'error', title: 'خطأ', text: 'فشل تغيير حالة تنشيط المدير.', background: '#141414', color: '#fff' });
         } finally {
-            stopLoading();
+            setTogglingManagers(prev => {
+                const updated = { ...prev };
+                delete updated[mng.id];
+                return updated;
+            });
         }
     };
 
@@ -1010,6 +1017,7 @@ const Managers = () => {
                                 manager={manager}
                                 index={idx}
                                 isMobile={isMobile}
+                                isToggling={togglingManagers[manager.id]}
                                 onEdit={() => { setSelectedManager(manager); setShowEditModal(true); }}
                                 onDelete={() => handleDeleteManager(manager.id, manager.name)}
                                 onToggleActive={() => handleToggleManagerActive(manager)}

@@ -181,6 +181,9 @@ export class ProductDAL {
             return data;
         }).catch(err => {
             console.warn(`[ProductDAL] Initial SWR fetch failed for ${key}`, err);
+            if (options.onError && cacheEntry.subs.has(subObj)) {
+                options.onError(err);
+            }
             throw err;
         });
 
@@ -264,12 +267,20 @@ export class ProductDAL {
                         this._registerCache(type, key);
                         return this._applyOptimisticState(freshData, type.substring(0, type.length - 1));
                     } catch (err) {
-                        console.warn(`[ProductDAL] Force revalidation failed for ${key}, falling back to cache:`, err);
-                        const staleData = this._applyOptimisticState(cached.data, type.substring(0, type.length - 1));
-                        if (staleData && typeof staleData === 'object') {
-                            staleData._isStaleCache = true;
+                        const { ConnectivityService } = await import('../../../connectivity/ConnectivityService.js');
+                        const isOnline = await ConnectivityService.getInstance().isOnline();
+
+                        if (isOnline) {
+                            console.error(`[ProductDAL] Force revalidation failed while online for ${key}. Throwing error:`, err);
+                            throw err;
+                        } else {
+                            console.warn(`[ProductDAL] Force revalidation failed offline for ${key}, falling back to cache:`, err);
+                            const staleData = this._applyOptimisticState(cached.data, type.substring(0, type.length - 1));
+                            if (staleData && typeof staleData === 'object') {
+                                staleData._isStaleCache = true;
+                            }
+                            return staleData;
                         }
-                        return staleData;
                     }
                 });
             }
@@ -419,7 +430,7 @@ export class ProductDAL {
     }
 
     async getPaginated(filters, page, limit, cursor = null) {
-        const serialized = deterministicStringify({ filters, page, limit });
+        const serialized = deterministicStringify({ filters, page, limit, cursor });
         const key = `product_cache_list_${CACHE_VERSION}_${hashString(serialized)}`;
         return this._fetchWithCache(key, () => this.repository.getPaginated(filters, limit, cursor), { type: 'lists' });
     }
@@ -812,7 +823,7 @@ export class ProductDAL {
     }
 
     subscribeToPaginatedSWR(filters, page, limit, cursor, callback, options = {}) {
-        const serialized = deterministicStringify({ filters, page, limit });
+        const serialized = deterministicStringify({ filters, page, limit, cursor });
         const key = `product_cache_list_${CACHE_VERSION}_${hashString(serialized)}`;
         return this._subscribeToCache(key, () => this.repository.getPaginated(filters, limit, cursor), 'lists', callback, options);
     }
