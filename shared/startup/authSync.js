@@ -75,7 +75,22 @@ const _doValidation = async (firebaseUser, db, appName, onUpdate, onLogout) => {
       const collectionName = appName === 'dashboard' ? 'managers' : 'users';
 
       const docRef = doc(db, collectionName, firebaseUser.uid);
-      const docSnap = await getDoc(docRef);
+      
+      let docSnap;
+      try {
+          docSnap = await getDoc(docRef);
+      } catch (firestoreError) {
+          console.error('[DIAGNOSTIC] Firestore read failed during authSync:', {
+              operation: 'getDoc',
+              collection: collectionName,
+              documentPath: `${collectionName}/${firebaseUser.uid}`,
+              firebaseUid: firebaseUser.uid,
+              errorCode: firestoreError.code,
+              errorMessage: firestoreError.message,
+              fullError: firestoreError
+          });
+          throw firestoreError;
+      }
 
       if (docSnap.exists() && docSnap.data().is_active === false) {
         console.warn('[Background Validation] Account disabled in Firestore. Logging out.');

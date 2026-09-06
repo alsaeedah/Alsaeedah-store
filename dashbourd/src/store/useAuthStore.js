@@ -47,6 +47,9 @@ const useAuthStore = create(
 
                 const uid = firebaseUser.uid;
 
+                // 3. Force-refresh token to guarantee Firestore client has auth state
+                await firebaseUser.getIdToken(true);
+
                 // 4. Load Manager Profile (Stage 4) - Safe to read Firestore now
                 let managerData;
                 try {
@@ -64,7 +67,16 @@ const useAuthStore = create(
                     if (firestoreError instanceof AuthError) throw firestoreError;
                     
                     // Case G: Firestore Permission Failure
-                    console.error('[AuthStore] Firestore read failed:', firestoreError);
+                    console.error('[DIAGNOSTIC] Firestore read failed during login:', {
+                        operation: 'getDoc',
+                        collection: 'managers',
+                        documentPath: `managers/${uid}`,
+                        firebaseUid: uid,
+                        errorCode: firestoreError.code,
+                        errorMessage: firestoreError.message,
+                        fullError: firestoreError
+                    });
+                    
                     if (firestoreError.code === 'permission-denied') {
                         await signOut(auth);
                         throw new AuthError('FIRESTORE_DENIED', 'Access to requested data was denied.');
