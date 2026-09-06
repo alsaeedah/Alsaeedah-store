@@ -29,8 +29,14 @@ const FilterBar = ({
     maxPrice, setMaxPrice,
     sortPrice, setSortPrice
 }) => {
+    const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
     const [availableBrandIds, setAvailableBrandIds] = useState(null);
     const [loadingBrands, setLoadingBrands] = useState(false);
+
+    useEffect(() => {
+        setLocalSearchQuery(searchQuery);
+    }, [searchQuery]);
+
 
     const categories = useStore(taxonomyStore, state => state.categories);
     const brands = useStore(taxonomyStore, state => state.brands);
@@ -148,20 +154,51 @@ const FilterBar = ({
 
             {/* Search Input Bar */}
             <div className="sf-search-row">
-                <Search size={18} className="sf-search-icon" />
+                <button
+                    type="button"
+                    className="sf-search-submit"
+                    onClick={() => setSearchQuery(localSearchQuery)}
+                    title="بحث"
+                    aria-label="بحث"
+                    style={{
+                        position: 'absolute',
+                        right: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--primary)',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        zIndex: 2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    }}
+                >
+                    <Search size={18} />
+                </button>
                 <input
                     type="text"
                     className="sf-search-input"
                     placeholder="بحث في المخزون بالاسم، الماركة، أو المواصفات..."
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
+                    value={localSearchQuery}
+                    onChange={e => setLocalSearchQuery(e.target.value)}
+                    onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                            setSearchQuery(localSearchQuery);
+                        }
+                    }}
                     aria-label="بحث في المخزون"
                 />
-                {searchQuery && (
+                {localSearchQuery && (
                     <button
                         type="button"
                         className="sf-search-clear"
-                        onClick={() => setSearchQuery('')}
+                        onClick={() => {
+                            setLocalSearchQuery('');
+                            setSearchQuery('');
+                        }}
                         title="مسح البحث"
                         aria-label="مسح البحث"
                     >

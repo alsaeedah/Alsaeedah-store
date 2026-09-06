@@ -518,18 +518,22 @@ const Users = () => {
         if (result.isConfirmed) {
             startLoading();
             try {
-                if (!window.__usersDAL) {
-                    const { UsersDAL } = await import('../../../shared/users/infrastructure/cache/UsersDAL.js');
-                    window.__usersDAL = new UsersDAL();
-                    await window.__usersDAL.initialize();
-                }
-                await window.__usersDAL.deleteUser(userId);
+                // Direct Firestore Hard Delete to match manager deletion flow
+                await deleteDoc(doc(db, 'users', userId));
                 
                 setUsers(prev => prev.filter(u => u.id !== userId));
                 setTotalCount(prev => prev - 1);
                 
                 // Revalidate current page in background to sync cache
                 executeSWR(page === 0);
+                
+                // Clear the base cache to prevent stale resurrection when navigating back or clearing search
+                import('../../../shared/storage/StorageEngine.js').then(({ StorageEngine }) => {
+                    StorageEngine.remove('dashboard_users_list_q_p0');
+                    if (searchQuery) {
+                        StorageEngine.remove(`dashboard_users_list_q${searchQuery.trim().toLowerCase()}_p0`);
+                    }
+                });
                 
                 Swal.fire({ icon: 'success', title: 'تم الحذف', text: 'تم حذف المستخدم بنجاح. سيتم تطبيق التغييرات في الخلفية.', background: '#141414', color: '#fff' });
             } catch (error) {

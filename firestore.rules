@@ -85,7 +85,7 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isOwner(userId) || hasPermission('users');
       allow create, update: if isOwner(userId) || hasPermission('users');
-      allow delete: if isSuperAdmin();
+      allow delete: if isOwner(userId) || hasPermission('users');
     }
 
     // 4. Managers Directory

@@ -13,13 +13,6 @@ export class UsersSyncAdapter extends BaseSyncAdapter {
             await updateDoc(docRef, m.payload);
         } else if (m.operation === MutationOperation.DELETE) {
             await deleteDoc(docRef);
-            // Tombstone write for deleted users to allow delta queries
-            const tombstoneRef = doc(this.db, 'user_changes', m.documentId);
-            await setDoc(tombstoneRef, {
-                userId: m.documentId,
-                type: 'DELETED',
-                updated_at: new Date().toISOString()
-            });
         } else {
             throw new Error(`Unsupported operation: ${m.operation}`);
         }
@@ -69,16 +62,6 @@ export class UsersSyncAdapter extends BaseSyncAdapter {
                 else cache.push(data);
                 changed = true;
             });
-
-            if (lastSyncAt) {
-                const deletesQ = query(collection(this.db, 'user_changes'), where('updated_at', '>', lastSyncAt), where('updated_at', '<=', syncBoundary), where('type', '==', 'DELETED'));
-                const deletesSnap = await getDocs(deletesQ);
-                deletesSnap.forEach(docSnap => {
-                    const data = docSnap.data();
-                    cache = cache.filter(u => String(u.id) !== String(data.userId));
-                    changed = true;
-                });
-            }
 
             if (changed) {
                 await this.dal.reconcileCache(cache);
