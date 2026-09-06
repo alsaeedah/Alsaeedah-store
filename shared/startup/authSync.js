@@ -1,5 +1,4 @@
 import { cacheSession, clearCachedSession } from './cache';
-import { resolvePermissions } from './permissions';
 
 /**
  * Module-level single-flight Promise for Background Validation.
@@ -62,11 +61,11 @@ const _doValidation = async (firebaseUser, db, appName, onUpdate, onLogout) => {
     // ProfileSyncStrategy will handle background profile updates.
     if (appName !== 'dashboard' && localSession && localSession.data && localSession.data.uid === firebaseUser.uid) {
       console.log('[Background Validation] Using local session data to save Firestore read.');
-      const finalRole = claims.role || localSession.data.role;
+      const finalRole = claims.role || localSession.data.role || 'manager';
       sessionData = {
         ...localSession.data,
         role: finalRole,
-        permissions: resolvePermissions(localSession.data.permissions, finalRole)
+        permissions: localSession.data.permissions || {}
       };
     } else {
       // 4. Fetch Profile from Firestore
@@ -114,7 +113,14 @@ const _doValidation = async (firebaseUser, db, appName, onUpdate, onLogout) => {
           ? (isSuperAdminClaim ? 'super_admin' : (data.role || 'manager'))
           : (claims.role || data.role || 'user');
 
-      const finalPermissions = resolvePermissions(data.permissions, finalRole);
+      const tokenPermissions = Array.isArray(claims.permissions) ? claims.permissions : [];
+      const dataPermissions = appName === 'dashboard'
+          ? (data.permissions || {})
+          : (Array.isArray(data.permissions) ? data.permissions : []);
+
+      const finalPermissions = appName === 'dashboard'
+          ? dataPermissions
+          : (tokenPermissions.length > 0 ? tokenPermissions : dataPermissions);
 
       sessionData = {
         uid: firebaseUser.uid,

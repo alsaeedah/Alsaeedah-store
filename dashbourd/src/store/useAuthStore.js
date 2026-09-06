@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { auth, db } from '../firebase/config';
 import { cacheSession, clearCachedSession } from '@shared/startup/cache';
-import { resolvePermissions } from '@shared/startup/permissions';
+
 import { 
     signInWithEmailAndPassword, 
     signOut
@@ -60,7 +60,7 @@ const useAuthStore = create(
                         throw new AuthError('PROFILE_MISSING', 'The authenticated administrator profile could not be found.');
                     }
                     managerData = docSnap.data();
-                    if (!managerData.is_active) {
+                    if (managerData.is_active === false) {
                         await signOut(auth);
                         throw new AuthError('ACCOUNT_DISABLED', 'Account is disabled.');
                     }
@@ -87,7 +87,7 @@ const useAuthStore = create(
 
                 // 5. Build Session and Initialize
                 const finalRole = isSuperAdminClaim ? 'super_admin' : (managerData.role || 'manager');
-                const finalPermissions = resolvePermissions(managerData.permissions, finalRole);
+                const finalPermissions = managerData.permissions || {};
                 
                 const sessionData = {
                     uid,
@@ -147,7 +147,7 @@ const useAuthStore = create(
                             email: data.email,
                             name: data.name,
                             role: refreshedRole,
-                            permissions: resolvePermissions(data.permissions, refreshedRole),
+                            permissions: data.permissions || {},
                         }
                     };
                 });
@@ -159,12 +159,14 @@ const useAuthStore = create(
         hasPermission: (permission) => {
             const user = get().user;
             if (!user) return false;
-            // After resolvePermissions, user.permissions is always a plain boolean-map.
-            // Super Admin: { products: true, orders: true, ..., managers: true }
-            // Manager:     { products: true, orders: false, ... }
-            const perms = user.permissions;
-            if (!perms || typeof perms !== 'object') return false;
-            return perms[permission] === true;
+            if (user.role === 'super_admin') return true;
+            
+            // Log for debugging if the user opens the console
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                // console.log(`[Auth] Checking permission '${permission}':`, user.permissions);
+            }
+            
+            return user.permissions && user.permissions[permission] === true;
         },
 
         setSession: (session) => {
