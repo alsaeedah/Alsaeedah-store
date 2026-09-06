@@ -1,4 +1,5 @@
 import { cacheSession, clearCachedSession } from './cache';
+import { resolvePermissions } from './permissions';
 
 /**
  * Module-level single-flight Promise for Background Validation.
@@ -59,15 +60,13 @@ const _doValidation = async (firebaseUser, db, appName, onUpdate, onLogout) => {
 
     // For Store app, if we have a matching local session skip the Firestore read.
     // ProfileSyncStrategy will handle background profile updates.
-    if (appName !== 'dashboard' && localSession && localSession.uid === firebaseUser.uid) {
+    if (appName !== 'dashboard' && localSession && localSession.data && localSession.data.uid === firebaseUser.uid) {
       console.log('[Background Validation] Using local session data to save Firestore read.');
-      const cachedPermissions = Array.isArray(localSession.permissions) ? localSession.permissions : [];
-      const tokenPermissions = Array.isArray(claims.permissions) ? claims.permissions : [];
-
+      const finalRole = claims.role || localSession.data.role;
       sessionData = {
-        ...localSession,
-        role: claims.role || localSession.role,
-        permissions: tokenPermissions.length > 0 ? tokenPermissions : cachedPermissions
+        ...localSession.data,
+        role: finalRole,
+        permissions: resolvePermissions(localSession.data.permissions, finalRole)
       };
     } else {
       // 4. Fetch Profile from Firestore
@@ -109,17 +108,13 @@ const _doValidation = async (firebaseUser, db, appName, onUpdate, onLogout) => {
       }
 
       // 5. Construct unified session object
-      const tokenPermissions = Array.isArray(claims.permissions) ? claims.permissions : [];
-      const dataPermissions = Array.isArray(data.permissions) ? data.permissions : [];
       const isSuperAdminClaim = claims && claims.role === 'super_admin';
 
-      const finalRole = appName === 'dashboard' 
-          ? (isSuperAdminClaim ? 'super_admin' : (data.role || 'manager')) 
+      const finalRole = appName === 'dashboard'
+          ? (isSuperAdminClaim ? 'super_admin' : (data.role || 'manager'))
           : (claims.role || data.role || 'user');
-          
-      const finalPermissions = appName === 'dashboard' 
-          ? dataPermissions 
-          : (tokenPermissions.length > 0 ? tokenPermissions : dataPermissions);
+
+      const finalPermissions = resolvePermissions(data.permissions, finalRole);
 
       sessionData = {
         uid: firebaseUser.uid,

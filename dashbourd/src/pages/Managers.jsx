@@ -89,6 +89,7 @@ const AddManagerModal = ({ onClose, onSuccess }) => {
             await setDoc(doc(db, 'managers', userCredential.user.uid), {
                 name: formData.name.trim(),
                 email: formData.email.trim(),
+                role: 'manager',
                 permissions: formData.permissions,
                 created_by: user.email,
                 is_active: true,
@@ -352,6 +353,7 @@ const EditManagerModal = ({ manager, onClose, onSuccess }) => {
             await updateDoc(doc(db, 'managers', manager.id), {
                 name: formData.name.trim(),
                 email: formData.email.trim(),
+                role: 'manager',
                 permissions: formData.permissions,
                 is_active: formData.is_active
             });

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { auth, db } from '../firebase/config';
 import { cacheSession, clearCachedSession } from '@shared/startup/cache';
+import { resolvePermissions } from '@shared/startup/permissions';
 import { 
     signInWithEmailAndPassword, 
     signOut
@@ -86,7 +87,7 @@ const useAuthStore = create(
 
                 // 5. Build Session and Initialize
                 const finalRole = isSuperAdminClaim ? 'super_admin' : (managerData.role || 'manager');
-                const finalPermissions = Array.isArray(managerData.permissions) ? managerData.permissions : [];
+                const finalPermissions = resolvePermissions(managerData.permissions, finalRole);
                 
                 const sessionData = {
                     uid,
@@ -139,13 +140,14 @@ const useAuthStore = create(
                 const data = docSnap.data();
                 set((state) => {
                     if (!state.user) return state;
+                    const refreshedRole = state.user.role === 'super_admin' ? 'super_admin' : (data.role || 'manager');
                     return {
                         user: {
                             ...state.user,
                             email: data.email,
                             name: data.name,
-                            role: state.user.role === 'super_admin' ? 'super_admin' : (data.role || 'manager'),
-                            permissions: Array.isArray(data.permissions) ? data.permissions : [],
+                            role: refreshedRole,
+                            permissions: resolvePermissions(data.permissions, refreshedRole),
                         }
                     };
                 });
@@ -157,12 +159,12 @@ const useAuthStore = create(
         hasPermission: (permission) => {
             const user = get().user;
             if (!user) return false;
-            if (user.role === 'super_admin') return true;
-            
-            if (Array.isArray(user.permissions)) {
-                return user.permissions.includes('all') || user.permissions.includes(permission);
-            }
-            return false;
+            // After resolvePermissions, user.permissions is always a plain boolean-map.
+            // Super Admin: { products: true, orders: true, ..., managers: true }
+            // Manager:     { products: true, orders: false, ... }
+            const perms = user.permissions;
+            if (!perms || typeof perms !== 'object') return false;
+            return perms[permission] === true;
         },
 
         setSession: (session) => {

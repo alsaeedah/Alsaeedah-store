@@ -20,6 +20,7 @@ import { useDashboardSWR } from '../hooks/useDashboardSWR';
 const Home = () => {
     const { startLoading, stopLoading } = useLoading();
     const user = useAuthStore(state => state.user);
+    const hasPermission = useAuthStore(state => state.hasPermission);
     const navigate = useNavigate();
     const [stats, setStats] = useState({
         products: 0,
@@ -32,17 +33,17 @@ const Home = () => {
 
     useEffect(() => {
         if (user && user.role !== 'super_admin') {
-            if (user.permissions?.products) {
+            if (hasPermission('products')) {
                 navigate('/products', { replace: true });
-            } else if (user.permissions?.orders) {
+            } else if (hasPermission('orders')) {
                 navigate('/orders', { replace: true });
-            } else if (user.permissions?.users) {
+            } else if (hasPermission('users')) {
                 navigate('/users', { replace: true });
             } else {
                 navigate('/unauthorized', { replace: true });
             }
         }
-    }, [user, navigate]);
+    }, [user, navigate, hasPermission]);
 
     const { data, loading } = useDashboardSWR({
         cacheKey: 'dashboard_home_stats',
