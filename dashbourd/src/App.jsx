@@ -42,7 +42,11 @@ function App() {
   }, []);
 
   const handleAuthSyncStart = useCallback(() => {
-    useAuthStore.getState().setAuthState('RESOLVING_AUTHORIZATION');
+    const currentState = useAuthStore.getState().authState;
+    // Only show the loading screen if we aren't already fully loaded
+    if (currentState !== 'READY') {
+      useAuthStore.getState().setAuthState('RESOLVING_AUTHORIZATION');
+    }
   }, []);
 
   const handleSessionUpdated = useCallback((session) => {
@@ -50,7 +54,12 @@ function App() {
   }, []);
 
   const handleAuthSyncError = useCallback((error) => {
-    useAuthStore.getState().setAuthError(error);
+    const currentState = useAuthStore.getState().authState;
+    if (currentState !== 'READY') {
+      useAuthStore.getState().setAuthError(error);
+    } else {
+      console.warn('[App] Background validation error (ignoring to keep current session):', error);
+    }
   }, []);
 
   const handleForceLogout = useCallback(() => {

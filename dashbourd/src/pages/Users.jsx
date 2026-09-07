@@ -11,7 +11,7 @@ import {
     Calendar, Trash2, Loader2, UserCheck, Shield,
     Store, Clock, Plus, X, Eye, EyeOff, User, Lock, RotateCcw
 } from 'lucide-react';
-
+import useAuthStore from '../store/useAuthStore';
 // ── Add User Modal ────────────────────────────────────────────────────────────
 const AddUserModal = ({ onClose, onSuccess }) => {
     const [formData, setFormData] = useState({
@@ -537,7 +537,15 @@ const Users = () => {
                 
                 Swal.fire({ icon: 'success', title: 'تم الحذف', text: 'تم حذف المستخدم بنجاح. سيتم تطبيق التغييرات في الخلفية.', background: '#141414', color: '#fff' });
             } catch (error) {
-                console.error('Delete Error:', error);
+                console.error('Delete Error details:', {
+                    operation: 'deleteUser',
+                    userId,
+                    currentAuthUid: useAuthStore.getState().user?.uid,
+                    currentRole: useAuthStore.getState().user?.role,
+                    currentPermissions: useAuthStore.getState().user?.permissions,
+                    errorCode: error.code,
+                    errorMessage: error.message
+                });
                 Swal.fire({ icon: 'error', title: 'خطأ', text: 'فشل حذف المستخدم.', background: '#141414', color: '#fff' });
             } finally {
                 stopLoading();
