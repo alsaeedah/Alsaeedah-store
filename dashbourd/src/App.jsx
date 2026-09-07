@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import DashboardLayout from './components/DashboardLayout';
@@ -29,27 +29,35 @@ function App() {
     initTaxonomyStore().catch(err => console.error('[App] taxonomy init failed:', err));
   }, []);
 
+  // Memoize callbacks so StartupProvider's auth listener never re-subscribes
+  // unnecessarily due to inline function identity changes on re-renders.
+  const handleSessionResolved = useCallback((session) => {
+    if (!session) {
+      useAuthStore.getState().setSession(null);
+    }
+    // For Dashboard, we do not call setSession(session) here if it exists.
+    // This prevents a stale cached session from granting permissions before
+    // the background validation (authSync) confirms them against Firestore.
+    // ProtectedRoute will remain in the "loading" state until onSessionUpdated is called.
+  }, []);
+
+  const handleSessionUpdated = useCallback((session) => {
+    useAuthStore.getState().setSession(session);
+  }, []);
+
+  const handleForceLogout = useCallback(() => {
+    useAuthStore.getState().setSession(null);
+    clearCachedSession();
+  }, []);
+
   return (
     <StartupProvider
         auth={auth}
         db={db}
         appName="dashboard"
-        onSessionResolved={(session) => {
-            if (!session) {
-                useAuthStore.getState().setSession(null);
-            }
-            // For Dashboard, we do not call setSession(session) here if it exists.
-            // This prevents a stale cached session from granting permissions before 
-            // the background validation (authSync) confirms them against Firestore.
-            // ProtectedRoute will remain in the "loading" state until onSessionUpdated is called.
-        }}
-        onSessionUpdated={(session) => {
-            useAuthStore.getState().setSession(session);
-        }}
-        onForceLogout={() => {
-            useAuthStore.getState().setSession(null);
-            clearCachedSession();
-        }}
+        onSessionResolved={handleSessionResolved}
+        onSessionUpdated={handleSessionUpdated}
+        onForceLogout={handleForceLogout}
     >
       <LoadingProvider>
         <TopProgressBar />

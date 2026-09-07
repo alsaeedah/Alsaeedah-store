@@ -33,15 +33,24 @@ const Home = () => {
 
     useEffect(() => {
         if (user && user.role !== 'super_admin') {
+            // Guard: if permissions map is empty ({}), it may still be loading from
+            // background validation. Only redirect to /unauthorized once we know
+            // for certain that permissions have been fetched (i.e. the permissions
+            // object has at least one key defined, even if all are false).
+            const permissionsLoaded = user.permissions && Object.keys(user.permissions).length > 0;
+
             if (hasPermission('products')) {
                 navigate('/products', { replace: true });
             } else if (hasPermission('orders')) {
                 navigate('/orders', { replace: true });
             } else if (hasPermission('users')) {
                 navigate('/users', { replace: true });
-            } else {
+            } else if (permissionsLoaded) {
+                // Only redirect to /unauthorized when we have confirmed
+                // that the permissions object is populated but grants no access.
                 navigate('/unauthorized', { replace: true });
             }
+            // else: permissions not yet loaded — wait for next render cycle
         }
     }, [user, navigate, hasPermission]);
 

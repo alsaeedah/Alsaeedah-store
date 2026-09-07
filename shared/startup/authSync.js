@@ -118,8 +118,16 @@ const _doValidation = async (firebaseUser, db, appName, onUpdate, onLogout) => {
           ? (data.permissions || {})
           : (Array.isArray(data.permissions) ? data.permissions : []);
 
+      // For the dashboard, if Firestore returns empty permissions (e.g., offline cache
+      // returning a stale snapshot), fall back to the locally-cached permissions so we
+      // do not overwrite a valid session with an empty permissions set.
+      const cachedPermissions = localSession?.data?.permissions;
+      const dashboardPermissions = (appName === 'dashboard' && Object.keys(dataPermissions).length === 0 && cachedPermissions && Object.keys(cachedPermissions).length > 0)
+          ? cachedPermissions
+          : dataPermissions;
+
       const finalPermissions = appName === 'dashboard'
-          ? dataPermissions
+          ? dashboardPermissions
           : (tokenPermissions.length > 0 ? tokenPermissions : dataPermissions);
 
       sessionData = {

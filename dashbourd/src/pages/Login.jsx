@@ -4,6 +4,24 @@ import useAuthStore from '../store/useAuthStore';
 import Swal from 'sweetalert2';
 import { Lock, Mail, ArrowLeft } from 'lucide-react';
 
+/**
+ * Determines the correct landing page for a user after login.
+ * - super_admin  → '/'  (full dashboard / stats home)
+ * - manager      → first section they have permission for
+ *                  priority: products → orders → users
+ *                  none granted → '/unauthorized'
+ */
+const getLandingPath = (user) => {
+    if (!user) return '/login';
+    if (user.role === 'super_admin') return '/';
+
+    const p = user.permissions || {};
+    if (p.products) return '/products';
+    if (p.orders)   return '/orders';
+    if (p.users)    return '/users';
+    return '/unauthorized';
+};
+
 const logo = '/logo.png';
 
 const getLoginErrorMessage = (error) => {
@@ -54,6 +72,11 @@ const Login = () => {
         try {
             await login(email, password);
 
+            // login() has already populated the store — read the user now
+            // so we can navigate directly to the correct landing page.
+            const user = useAuthStore.getState().user;
+            const destination = getLandingPath(user);
+
             Swal.fire({
                 icon: 'success',
                 title: 'مرحباً بعودتك!',
@@ -63,7 +86,7 @@ const Login = () => {
                 showConfirmButton: false,
                 timer: 1500
             });
-            setTimeout(() => navigate('/'), 1500);
+            setTimeout(() => navigate(destination), 1500);
         } catch (error) {
             const friendlyMessage = getLoginErrorMessage(error);
             const isPermissionError = ['NOT_AUTHORIZED', 'CLAIMS_MISSING', 'FIRESTORE_DENIED'].includes(error.code);
