@@ -41,8 +41,16 @@ function App() {
     // ProtectedRoute will remain in the "loading" state until onSessionUpdated is called.
   }, []);
 
+  const handleAuthSyncStart = useCallback(() => {
+    useAuthStore.getState().setAuthState('RESOLVING_AUTHORIZATION');
+  }, []);
+
   const handleSessionUpdated = useCallback((session) => {
     useAuthStore.getState().setSession(session);
+  }, []);
+
+  const handleAuthSyncError = useCallback((error) => {
+    useAuthStore.getState().setAuthError(error);
   }, []);
 
   const handleForceLogout = useCallback(() => {
@@ -58,6 +66,8 @@ function App() {
         onSessionResolved={handleSessionResolved}
         onSessionUpdated={handleSessionUpdated}
         onForceLogout={handleForceLogout}
+        onAuthSyncStart={handleAuthSyncStart}
+        onAuthSyncError={handleAuthSyncError}
     >
       <LoadingProvider>
         <TopProgressBar />

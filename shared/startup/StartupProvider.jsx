@@ -45,7 +45,9 @@ export const StartupProvider = ({
   appName,
   onSessionResolved,
   onSessionUpdated,
-  onForceLogout
+  onForceLogout,
+  onAuthSyncStart,
+  onAuthSyncError
 }) => {
   const [startupState, setStartupState] = useState(AppStartupState.Initializing);
   const hasColdBooted = useRef(false);
@@ -115,6 +117,7 @@ export const StartupProvider = ({
 
       // A valid Firebase user exists — run the post-auth pipeline.
       console.log('[Startup] Auth state: user present. Starting background validation.');
+      if (onAuthSyncStart) onAuthSyncStart();
       setStartupState(AppStartupState.Synchronizing);
 
       startBackgroundValidation(
@@ -147,6 +150,12 @@ export const StartupProvider = ({
           if (onForceLogout) onForceLogout();
           setStartupState(AppStartupState.Ready);
           console.log('[STARTUP] READY');
+        },
+        // onError - Validation failed due to network or permission error
+        (error) => {
+          console.log('[Startup] Background validation error.', error);
+          if (onAuthSyncError) onAuthSyncError(error);
+          setStartupState(AppStartupState.Ready); 
         }
       );
     });
@@ -157,7 +166,7 @@ export const StartupProvider = ({
       console.log('[Startup] Unsubscribing auth state listener.');
       unsubscribeAuth();
     };
-  }, [auth, db, appName, onSessionUpdated, onForceLogout]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [auth, db, appName, onSessionUpdated, onForceLogout, onAuthSyncStart, onAuthSyncError]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─────────────────────────────────────────────────────────────────────────
   // Responsibility 3: Lifecycle/Resume Revalidation
@@ -176,6 +185,7 @@ export const StartupProvider = ({
         if (!firebaseUser) return; // Not authenticated — skip revalidation.
 
         console.log(`[Startup] Lifecycle event '${reason}' — triggering background revalidation.`);
+        if (onAuthSyncStart) onAuthSyncStart();
 
         startBackgroundValidation(
           firebaseUser,
@@ -188,6 +198,9 @@ export const StartupProvider = ({
             // Lifecycle-triggered validation forced a logout.
             syncCoordinator.markNotReady();
             if (onForceLogout) onForceLogout();
+          },
+          (error) => {
+            if (onAuthSyncError) onAuthSyncError(error);
           }
         );
       });
@@ -198,7 +211,7 @@ export const StartupProvider = ({
     return () => {
       if (unsubscribeLifecycle) unsubscribeLifecycle();
     };
-  }, [auth, db, appName, onSessionUpdated, onForceLogout]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [auth, db, appName, onSessionUpdated, onForceLogout, onAuthSyncStart, onAuthSyncError]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <StartupContext.Provider value={{ startupState }}>

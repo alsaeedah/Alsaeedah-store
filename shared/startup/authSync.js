@@ -1,18 +1,19 @@
 import { cacheSession, clearCachedSession } from './cache';
 
 /**
+ * Global authentication generation counter.
+ * Guarantees that stale asynchronous operations (like slow Firestore reads from
+ * a previous login) are aborted and cannot overwrite a newer session.
+ */
+let currentAuthGeneration = 0;
+
+/**
  * Module-level single-flight Promise for Background Validation.
- * 
- * Guarantees that concurrent callers (e.g., post-login + lifecycle resume)
- * share a single in-flight validation rather than starting independent ones.
- * Cleared in a `finally` block so future validations (next resume, next login)
- * can execute a fresh check after the previous one completes or fails.
  */
 let validationPromise = null;
 
 /**
  * Helper: Force-refresh the ID token if claims are missing.
- * Replaces the old aggressive retry loop with a single refresh check.
  */
 const getValidClaims = async (firebaseUser) => {
   let tokenResult = await firebaseUser.getIdTokenResult();
@@ -26,39 +27,29 @@ const getValidClaims = async (firebaseUser) => {
 };
 
 /**
- * Core validation logic — runs once per single-flight window.
- * 
- * Accepts the already-resolved firebaseUser directly to avoid spawning
- * a nested onAuthStateChanged listener inside the validation function.
- * 
- * @param {object} firebaseUser - The Firebase Auth user object (already resolved by caller).
- * @param {object} db - Firestore DB instance.
- * @param {string} appName - 'store' or 'dashboard'.
- * @param {Function} onUpdate - Called with enriched session on success.
- * @param {Function} onLogout - Called when the user should be logged out.
+ * Core validation logic.
  */
-const _doValidation = async (firebaseUser, db, appName, onUpdate, onLogout) => {
+const _doValidation = async (firebaseUser, db, appName, onUpdate, onLogout, generation, onError) => {
   if (!firebaseUser) {
     console.warn('[Background Validation] No firebase user provided. Forcing logout.');
-    await clearCachedSession();
-    if (onLogout) onLogout();
+    if (generation === currentAuthGeneration) {
+        await clearCachedSession();
+        if (onLogout) onLogout();
+    }
     return;
   }
 
   try {
-    // 1. Get Token Claims (force refresh if needed)
+    // 1. Get Token Claims
     const claims = await getValidClaims(firebaseUser);
 
-    // 2. Dashboard claims check removed (relies on Firestore profile in step 4)
-
-    // 3. Check local session
+    // 2. Check local session
     const { getCachedSession } = await import('./cache');
     const localSession = await getCachedSession();
 
     let sessionData;
 
     // For Store app, if we have a matching local session skip the Firestore read.
-    // ProfileSyncStrategy will handle background profile updates.
     if (appName !== 'dashboard' && localSession && localSession.data && localSession.data.uid === firebaseUser.uid) {
       console.log('[Background Validation] Using local session data to save Firestore read.');
       const finalRole = claims.role || localSession.data.role || 'manager';
@@ -68,7 +59,7 @@ const _doValidation = async (firebaseUser, db, appName, onUpdate, onLogout) => {
         permissions: localSession.data.permissions || {}
       };
     } else {
-      // 4. Fetch Profile from Firestore
+      // 3. Fetch Profile from Firestore
       const { doc, getDoc } = await import('firebase/firestore');
       const collectionName = appName === 'dashboard' ? 'managers' : 'users';
 
@@ -81,19 +72,17 @@ const _doValidation = async (firebaseUser, db, appName, onUpdate, onLogout) => {
           console.error('[DIAGNOSTIC] Firestore read failed during authSync:', {
               operation: 'getDoc',
               collection: collectionName,
-              documentPath: `${collectionName}/${firebaseUser.uid}`,
-              firebaseUid: firebaseUser.uid,
-              errorCode: firestoreError.code,
-              errorMessage: firestoreError.message,
-              fullError: firestoreError
+              errorCode: firestoreError.code
           });
           throw firestoreError;
       }
 
       if (docSnap.exists() && docSnap.data().is_active === false) {
         console.warn('[Background Validation] Account disabled in Firestore. Logging out.');
-        await clearCachedSession();
-        if (onLogout) onLogout();
+        if (generation === currentAuthGeneration) {
+            await clearCachedSession();
+            if (onLogout) onLogout();
+        }
         return;
       }
 
@@ -101,12 +90,14 @@ const _doValidation = async (firebaseUser, db, appName, onUpdate, onLogout) => {
       
       if (!docSnap.exists() && appName === 'dashboard') {
           console.warn('[Background Validation] Dashboard manager document missing. Logging out.');
-          await clearCachedSession();
-          if (onLogout) onLogout();
+          if (generation === currentAuthGeneration) {
+              await clearCachedSession();
+              if (onLogout) onLogout();
+          }
           return;
       }
 
-      // 5. Construct unified session object
+      // 4. Construct unified session object
       const isSuperAdminClaim = claims && claims.role === 'super_admin';
 
       const finalRole = appName === 'dashboard'
@@ -118,16 +109,10 @@ const _doValidation = async (firebaseUser, db, appName, onUpdate, onLogout) => {
           ? (data.permissions || {})
           : (Array.isArray(data.permissions) ? data.permissions : []);
 
-      // For the dashboard, if Firestore returns empty permissions (e.g., offline cache
-      // returning a stale snapshot), fall back to the locally-cached permissions so we
-      // do not overwrite a valid session with an empty permissions set.
-      const cachedPermissions = localSession?.data?.permissions;
-      const dashboardPermissions = (appName === 'dashboard' && Object.keys(dataPermissions).length === 0 && cachedPermissions && Object.keys(cachedPermissions).length > 0)
-          ? cachedPermissions
-          : dataPermissions;
-
+      // CRITICAL SECURITY FIX: Do not merge cached permissions for dashboard.
+      // Dashboard must resolve solely from authoritative Firestore/Claims data.
       const finalPermissions = appName === 'dashboard'
-          ? dashboardPermissions
+          ? dataPermissions
           : (tokenPermissions.length > 0 ? tokenPermissions : dataPermissions);
 
       sessionData = {
@@ -146,6 +131,12 @@ const _doValidation = async (firebaseUser, db, appName, onUpdate, onLogout) => {
       };
     }
 
+    // 5. Verification: Check generation before committing state
+    if (generation !== currentAuthGeneration) {
+        console.warn(`[Background Validation] Generation mismatch (${generation} !== ${currentAuthGeneration}). Aborting state commit.`);
+        return;
+    }
+
     // 6. Update cache
     await cacheSession(sessionData);
 
@@ -155,37 +146,36 @@ const _doValidation = async (firebaseUser, db, appName, onUpdate, onLogout) => {
     console.log('[Background Validation] Success. Cache & UI updated.');
   } catch (error) {
     console.error('[Background Validation] Failed:', error.message, error.stack);
-    // Do not logout on transient errors (network issues, etc.)
-    // The existing session remains valid until explicitly invalidated.
+    if (generation === currentAuthGeneration) {
+        if (onError) onError(error);
+    }
   }
 };
 
 /**
- * startBackgroundValidation — Single-flight Background Validation.
- * 
- * If a validation is already in progress, returns the same Promise so
- * concurrent callers (e.g., login + lifecycle resume) share one execution.
- * 
- * The Promise is cleared in a `finally` block (success or failure) so
- * future calls (next resume, next login cycle) start a fresh validation.
- * 
- * @param {object} firebaseUser - The resolved Firebase Auth user object from the caller's onAuthStateChanged.
- * @param {object} db - Firestore DB instance.
- * @param {string} appName - 'store' or 'dashboard'.
- * @param {Function} onUpdate - Called with enriched session on success.
- * @param {Function} onLogout - Called when the user must be logged out.
- * @returns {Promise<void>}
+ * startBackgroundValidation — Single-flight Background Validation with Generation Tracking.
  */
-export const startBackgroundValidation = (firebaseUser, db, appName, onUpdate, onLogout) => {
+export const startBackgroundValidation = async (firebaseUser, db, appName, onUpdate, onLogout, onError) => {
+  currentAuthGeneration++;
+  const generation = currentAuthGeneration;
+
   if (validationPromise) {
-    console.log('[AUTH] VALIDATION_REUSED - Already running, sharing single-flight promise.');
-    return validationPromise;
+    console.log('[AUTH] Waiting for previous validation to clear...');
+    try { await validationPromise; } catch (e) {}
   }
 
-  console.log('[AUTH] VALIDATION_START - Starting single-flight background validation.');
-  validationPromise = _doValidation(firebaseUser, db, appName, onUpdate, onLogout)
+  if (generation !== currentAuthGeneration) {
+      console.log(`[AUTH] Generation changed while waiting (${generation} !== ${currentAuthGeneration}), aborting.`);
+      return;
+  }
+
+  console.log(`[AUTH] VALIDATION_START - Generation ${generation}`);
+  
+  validationPromise = _doValidation(firebaseUser, db, appName, onUpdate, onLogout, generation, onError)
     .finally(() => {
-      validationPromise = null;
+      if (currentAuthGeneration === generation) {
+          validationPromise = null;
+      }
     });
 
   return validationPromise;
