@@ -282,21 +282,24 @@
 
 /* Sticky Control Bar */
 .filters-control-bar {
+    width:fit-content;
     position: -webkit-sticky;
     position: sticky;
-    top: 90px;
+    top: calc(80px + var(--safe-area-top, 0px));
     z-index: 40;
-    background: var(--bg-main);
-    padding: 16px 0;
+    background: transparent;
+    padding: 16px 0 0 0;
     margin-bottom: 24px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
     gap: 16px;
+    /* Add a subtle shadow to separate from content below when stuck */
+    box-shadow: 0 10px 10px -10px var(--bg-main);
 }
 @media (max-width: 1023px) {
     .filters-control-bar {
-        top: calc(75px + env(safe-area-inset-top, 0px));
+        top: calc(75px + var(--safe-area-top, 0px));
     }
 }

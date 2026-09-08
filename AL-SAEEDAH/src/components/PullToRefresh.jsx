@@ -437,9 +437,9 @@ export default function PullToRefresh({ onRefresh, children, disabled = false })
             style={{
                 position:  'relative',
                 minHeight: '100vh',
-                overflowX: 'hidden',
                 width:     '100%',
                 maxWidth:  '100%',
+                overflowX: 'clip',
             }}
         >
             {/* ── Indicator Layer ── */}
