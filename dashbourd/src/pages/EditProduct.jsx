@@ -7,6 +7,7 @@ import Swal from 'sweetalert2';
 import ProductForm from '../components/ProductForm';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
+import { normalizeProductPrice, isValidPrice } from 'shared/product';
 
 const EditProduct = () => {
     const { id } = useParams();
@@ -91,11 +92,46 @@ const EditProduct = () => {
             }
             // ─────────────────────────────────────────────────────────────────────
 
+            // ── Price normalization (UI-layer defense) ────────────────────────────
+            const normalizedPrice = normalizeProductPrice(formData.price);
+            if (!isValidPrice(normalizedPrice)) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'سعر غير صالح',
+                    text: 'يرجى إدخال سعر صحيح (رقم موجب).',
+                    background: '#141414',
+                    color: '#fff',
+                    confirmButtonColor: 'var(--primary)'
+                });
+                return;
+            }
+
+            const normalizedOldPrice = formData.old_price ? normalizeProductPrice(formData.old_price) : null;
+            if (formData.old_price && !isValidPrice(normalizedOldPrice)) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'السعر السابق غير صالح',
+                    text: 'يرجى إدخال سعر سابق صحيح أو اتركه فارغاً.',
+                    background: '#141414',
+                    color: '#fff',
+                    confirmButtonColor: 'var(--primary)'
+                });
+                return;
+            }
+
+            const normalizedVariants = (formData.variants || []).map(v => ({
+                ...v,
+                price: v.price !== undefined && v.price !== null && v.price !== ''
+                    ? normalizeProductPrice(v.price)
+                    : v.price
+            }));
+            // ─────────────────────────────────────────────────────────────────────
+
             await productRepository.update(id, {
                 displayId: Number(formData.displayId),
                 name: formData.name,
-                price: formData.price,
-                old_price: formData.old_price || null,
+                price: normalizedPrice,
+                old_price: normalizedOldPrice,
                 categoryId: formData.categoryId || null,
                 brandId: formData.brandId || null,
                 collectionId: formData.collectionId || null,
@@ -108,7 +144,7 @@ const EditProduct = () => {
                 images: formData.images || [],
                 colors: formData.colors || [],
                 materials: formData.materials || [],
-                variants: formData.variants || [],
+                variants: normalizedVariants,
                 updated_at: new Date().toISOString()
             });
 

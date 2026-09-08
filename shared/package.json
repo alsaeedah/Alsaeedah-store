@@ -4,12 +4,17 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "test:price": "node --experimental-vm-modules node_modules/.bin/jest product/__tests__/price"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
+  "jest": {
+    "testEnvironment": "node",
+    "transform": {}
+  },
   "dependencies": {
     "@capacitor/app": "^8.1.1",
     "@capacitor/core": "^8.5.0",
@@ -21,5 +26,8 @@
   },
   "peerDependencies": {
     "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
   }
 }

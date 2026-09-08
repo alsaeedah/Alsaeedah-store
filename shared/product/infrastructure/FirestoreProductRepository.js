@@ -1,5 +1,6 @@
 import { collection, doc, query, where, getDocs, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, orderBy, getCountFromServer, limit, documentId, startAfter, writeBatch } from 'firebase/firestore';
 import { ProductRepository } from '../repository.js';
+import { normalizeProductPrice, isValidPrice, normalizePriceOrAbsent, PRICE_ABSENT, comparePrice } from '../price.js';
 
 export function normalizeGender(value) {
     if (value === 'men') return 'men';
@@ -12,6 +13,62 @@ export class FirestoreProductRepository extends ProductRepository {
     constructor(db) {
         super();
         this.db = db;
+    }
+
+    /**
+     * Persistence boundary: normalize and validate all price-related fields.
+     *
+     * Invariants enforced before every Firestore write:
+     *   price        → Number (required, finite, ≥ 0)
+     *   old_price    → Number (finite, ≥ 0) | null | absent
+     *   variant.price → Number (finite, ≥ 0) per variant where price is present
+     *
+     * Throws an Error if the required `price` is invalid, or if any present
+     * optional price field contains a malformed value.
+     * Never writes NaN, Infinity, -Infinity, or string prices to Firestore.
+     *
+     * @param {Object} data - Raw product data payload
+     * @returns {Object} Data with all price fields normalized
+     * @throws {Error} If price is invalid or any present price field is malformed
+     */
+    _normalizePriceFields(data) {
+        const result = { ...data };
+
+        // ── Required: price ───────────────────────────────────────────────────
+        const price = normalizeProductPrice(result.price);
+        if (!isValidPrice(price)) {
+            throw new Error(
+                `[ProductRepository] Invalid required price value: ${JSON.stringify(result.price)}. ` +
+                `Expected a finite non-negative number. ` +
+                `This write has been rejected to protect data integrity.`
+            );
+        }
+        result.price = price;
+
+        // ── Optional: old_price ───────────────────────────────────────────────
+        if ('old_price' in result) {
+            const op = normalizePriceOrAbsent(result.old_price, 'old_price');
+            if (op === PRICE_ABSENT) {
+                result.old_price = null; // Explicitly null per existing schema
+            } else {
+                result.old_price = op;
+            }
+        }
+
+        // ── Optional: variants[].price ────────────────────────────────────────
+        if (Array.isArray(result.variants)) {
+            result.variants = result.variants.map((v, i) => {
+                if (v === null || v === undefined) return v;
+                const variant = { ...v };
+                if ('price' in variant && variant.price !== undefined && variant.price !== null && variant.price !== '') {
+                    const vPrice = normalizePriceOrAbsent(variant.price, `variants[${i}].price`);
+                    variant.price = vPrice === PRICE_ABSENT ? undefined : vPrice;
+                }
+                return variant;
+            });
+        }
+
+        return result;
     }
 
     _isValidFilterValue(value) {
@@ -246,11 +303,25 @@ export class FirestoreProductRepository extends ProductRepository {
             matchedProducts = [...matchedProducts, ...batchProducts];
 
             matchedProducts.sort((a, b) => {
+                // Price sorting: use numeric comparison with invalid-price policy
+                if (sortField === 'price') {
+                    const primary = comparePrice(a.price, b.price, sortDirection);
+                    if (primary !== 0) return primary;
+                    // Secondary: stable sort by document ID
+                    return sortDirection === 'asc'
+                        ? a.id.localeCompare(b.id)
+                        : b.id.localeCompare(a.id);
+                }
+                // Non-price fields: original generic comparison
                 const aVal = a[sortField] ?? '';
                 const bVal = b[sortField] ?? '';
-                const primary = sortDirection === 'asc' ? (aVal < bVal ? -1 : aVal > bVal ? 1 : 0) : (aVal > bVal ? -1 : aVal < bVal ? 1 : 0);
+                const primary = sortDirection === 'asc'
+                    ? (aVal < bVal ? -1 : aVal > bVal ? 1 : 0)
+                    : (aVal > bVal ? -1 : aVal < bVal ? 1 : 0);
                 if (primary !== 0) return primary;
-                return sortDirection === 'asc' ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id);
+                return sortDirection === 'asc'
+                    ? a.id.localeCompare(b.id)
+                    : b.id.localeCompare(a.id);
             });
 
             let anyQueryHasMore = results.some(res => res.docs.length >= BATCH_SIZE);
@@ -438,7 +509,8 @@ export class FirestoreProductRepository extends ProductRepository {
     async create(productData) {
         const timestamp = new Date().toISOString();
         const gender = normalizeGender(productData.genderId || productData.gender);
-        const data = { ...productData, gender, genderId: gender, created_at: productData.created_at || timestamp, updated_at: timestamp };
+        const normalized = this._normalizePriceFields(productData);
+        const data = { ...normalized, gender, genderId: gender, created_at: normalized.created_at || timestamp, updated_at: timestamp };
         const docRef = await addDoc(collection(this.db, 'products'), data);
         return docRef.id;
     }
@@ -446,7 +518,8 @@ export class FirestoreProductRepository extends ProductRepository {
     async createWithId(id, productData) {
         const timestamp = new Date().toISOString();
         const gender = normalizeGender(productData.genderId || productData.gender);
-        const data = { ...productData, gender, genderId: gender, created_at: productData.created_at || timestamp, updated_at: timestamp };
+        const normalized = this._normalizePriceFields(productData);
+        const data = { ...normalized, gender, genderId: gender, created_at: normalized.created_at || timestamp, updated_at: timestamp };
         const docRef = doc(this.db, 'products', String(id));
         await setDoc(docRef, data);
         return id;
@@ -454,7 +527,8 @@ export class FirestoreProductRepository extends ProductRepository {
 
     async update(id, productData) {
         const gender = normalizeGender(productData.genderId || productData.gender);
-        const data = { ...productData, gender, genderId: gender, updated_at: new Date().toISOString() };
+        const normalized = this._normalizePriceFields(productData);
+        const data = { ...normalized, gender, genderId: gender, updated_at: new Date().toISOString() };
         const docRef = doc(this.db, 'products', String(id));
         await updateDoc(docRef, data);
     }

@@ -11,3 +11,4 @@ export * from './validators.js';
 export * from './migrationContracts.js';
 export * from './legacyMapping.js';
 export * from './resolvers.js';
+export * from './price.js';

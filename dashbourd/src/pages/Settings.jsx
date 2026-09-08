@@ -92,7 +92,7 @@ const SortableSlide = ({ slide, index, isExpanded, onToggle, onRemove, onImageUp
                     )}
                     <div>
                         <h4 style={{ color: '#fff', fontSize: isMobile ? '0.9rem' : '1.1rem', fontWeight: '800', marginBottom: '2px' }}>{slide.title || 'بدون عنوان'}</h4>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{slide.subtitle || '---'}</p>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{slide.description || '---'}</p>
                     </div>
                 </div>
 
@@ -159,17 +159,6 @@ const SortableSlide = ({ slide, index, isExpanded, onToggle, onRemove, onImageUp
                                             type="text" value={slide.title} 
                                             onChange={(e) => onFieldChange(slide.id, 'title', e.target.value)}
                                             placeholder="مثلاً: التشكيلة الملكية المحدودة"
-                                            style={{ width: '100%', padding: '14px 18px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', borderRadius: '14px', color: '#fff', outline: 'none', transition: '0.3s' }}
-                                            onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-                                            onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label style={{ fontSize: '0.9rem', color: 'var(--text-muted)', display: 'block', marginBottom: '8px', fontWeight: '700' }}>العنوان الفرعي (Tagline)</label>
-                                        <input 
-                                            type="text" value={slide.subtitle} 
-                                            onChange={(e) => onFieldChange(slide.id, 'subtitle', e.target.value)}
-                                            placeholder="مثلاً: لإطلالة تليق بمقامك"
                                             style={{ width: '100%', padding: '14px 18px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', borderRadius: '14px', color: '#fff', outline: 'none', transition: '0.3s' }}
                                             onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
                                             onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
@@ -378,7 +367,6 @@ const Settings = () => {
         const newSlide = {
             id: tempId,
             title: 'شريحة ملكية جديدة',
-            subtitle: 'اكتشف الفخامة',
             description: 'وصف قصير لهذه الشريحة الرائعة في واجهة متجر السعيدة.',
             image_url: 'https://images.unsplash.com/photo-1542496658-e33a6d0d50f6?q=80&w=2070',
             sort_order: nextSortOrder
@@ -433,7 +421,6 @@ const Settings = () => {
                 const slide = newSlides[idx];
                 await addDoc(collection(db, 'hero'), {
                     title: slide.title,
-                    subtitle: slide.subtitle,
                     description: slide.description,
                     image_url: slide.image_url || slide.image,
                     sort_order: slide.sort_order
@@ -446,7 +433,6 @@ const Settings = () => {
                 const slide = existingSlides[idx];
                 await updateDoc(doc(db, 'hero', slide.id), {
                     title: slide.title,
-                    subtitle: slide.subtitle,
                     description: slide.description,
                     image_url: slide.image_url || slide.image,
                     sort_order: slide.sort_order
@@ -499,7 +485,6 @@ const Settings = () => {
             if (!saved) return true;
             if (
                 draft.title !== saved.title ||
-                draft.subtitle !== saved.subtitle ||
                 (draft.description || '') !== (saved.description || '') ||
                 (draft.image_url || draft.image || '') !== (saved.image_url || saved.image || '') ||
                 draft.sort_order !== saved.sort_order
