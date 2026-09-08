@@ -148,7 +148,7 @@ export default function CheckoutPage() {
         <div style={{ minHeight: '100dvh', background: 'var(--bg-main)', display: 'flex', flexDirection: 'column' }}>
 
             {/* Isolated Header */}
-            <header style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-card)' }}>
+            <header style={{ padding: '20px 24px', paddingTop: 'calc(20px + var(--safe-area-top))', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-card)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <img src={logo} alt="متجر السعيدة" style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }} />
                     <div>

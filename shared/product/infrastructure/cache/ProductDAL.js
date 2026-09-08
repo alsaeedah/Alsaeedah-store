@@ -5,6 +5,7 @@ import { ProductCacheRegistry } from './ProductCacheRegistry.js';
 import { MutationQueue, MutationOperation } from '../../../sync/mutation/index.js';
 import { syncCoordinator } from '../../../sync/index.js';
 import { lifecycleCoordinator } from '../../../startup/LifecycleCoordinator.js';
+import { isRecoverableRuntimeError } from '../../../errors/errorClassifier.js';
 
 const CACHE_VERSION = 'v1';
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -180,7 +181,25 @@ export class ProductDAL {
             }
             return data;
         }).catch(err => {
-            console.warn(`[ProductDAL] Initial SWR fetch failed for ${key}`, err);
+            if (isRecoverableRuntimeError(err)) {
+                // Recoverable runtime failure (offline, network, cache miss, etc.):
+                //   - Log diagnostically so the condition is visible in devtools.
+                //   - Notify the caller via onError if provided.
+                //   - Do NOT emit any replacement data (callback is not called).
+                //   - Do NOT re-throw — this gives the Promise a clean owner and
+                //     prevents the failure from reaching window.unhandledrejection.
+                //   - Existing cached/stale state in the UI is preserved as-is.
+                console.warn(`[ProductDAL] Recoverable SWR fetch failure for ${key}:`, err);
+                if (options.onError && cacheEntry.subs.has(subObj)) {
+                    options.onError(err);
+                }
+                // Return undefined — no data emitted, no rejection propagated.
+                return;
+            }
+
+            // Unexpected / programming error: log and re-throw so it remains
+            // observable by ErrorBoundary and the global fatal handler.
+            console.error(`[ProductDAL] Unexpected SWR fetch error for ${key}:`, err);
             if (options.onError && cacheEntry.subs.has(subObj)) {
                 options.onError(err);
             }

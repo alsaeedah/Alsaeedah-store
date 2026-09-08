@@ -54,12 +54,6 @@ export default function MobileFilterDrawer({ isOpen, onClose, ...filterProps }) 
                         <div className="mobile-filter-content">
                             <FilterControls {...filterProps} />
                         </div>
-
-                        <div className="mobile-filter-footer">
-                            <button className="mobile-filter-btn apply" onClick={onClose}>
-                                تطبيق
-                            </button>
-                        </div>
                     </motion.div>
                 </>
             )}

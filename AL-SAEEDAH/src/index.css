@@ -91,7 +91,7 @@ html, #root {
   scroll-behavior: smooth;
   width: 100%;
   max-width: 100%;
-  overflow-x: clip;
+  /* overflow-x removed to fix sticky */
   overscroll-behavior-x: none;
 }
 
@@ -106,7 +106,7 @@ body {
   user-select: none;
   width: 100%;
   max-width: 100%;
-  overflow-x: clip;
+  /* overflow-x removed to fix sticky */
   overscroll-behavior-x: none;
 }
 
@@ -124,7 +124,7 @@ input, textarea, [contenteditable="true"] {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  overflow-x: clip;
+  /* overflow-x removed to fix sticky */
   padding-top: var(--safe-area-top);
   padding-bottom: env(safe-area-inset-bottom, 0px);
   background-color: var(--bg-main);
@@ -1199,7 +1199,8 @@ input, textarea, [contenteditable="true"] {
 
 @media (max-width: 768px) {
   .product-carousel-wrapper .carousel-nav-btn {
-    display: none; /* Native swipe is better on mobile */
+    /* Keep buttons visible on mobile per user request */
+    transform: translateY(-50%) scale(0.85); /* Slightly smaller on mobile */
   }
 }
 

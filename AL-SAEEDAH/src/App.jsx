@@ -386,6 +386,26 @@ function NotificationSetup() {
   return null;
 }
 
+const AppLayout = () => {
+  const location = useLocation();
+  const isCheckout = location.pathname === '/checkout';
+
+  return (
+    <div className="app-container" style={isCheckout ? { paddingTop: 0 } : {}}>
+      <SystemBarsSync />
+      <ConditionalStoreNavigation />
+      <AuthModal />
+      <LogoutConfirmModal />
+      <ProfileModal />
+      <PullToRefreshGate>
+        <AnimatedRoutes />
+      </PullToRefreshGate>
+      <ConditionalFooter />
+      <ConditionalAppBanner />
+    </div>
+  );
+};
+
 function App() {
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
@@ -431,18 +451,7 @@ function App() {
                             <DeepLinkHandler />
                             <BackButtonHandler />
                             <SEOHelper />
-                            <div className="app-container">
-                              <SystemBarsSync />
-                              <ConditionalStoreNavigation />
-                              <AuthModal />
-                              <LogoutConfirmModal />
-                              <ProfileModal />
-                              <PullToRefreshGate>
-                                <AnimatedRoutes />
-                              </PullToRefreshGate>
-                              <ConditionalFooter />
-                              <ConditionalAppBanner />
-                            </div>
+                            <AppLayout />
                           </CartProvider>
                       </VideoProvider>
                     </FavoritesProvider>

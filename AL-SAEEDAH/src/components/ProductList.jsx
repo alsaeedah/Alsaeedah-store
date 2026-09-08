@@ -5,7 +5,6 @@ import { Loader2, Sliders } from 'lucide-react';
 import { productRepository } from '../services/productService';
 import { fetchAvailableBrandIds } from '../services/productService';
 import { useTaxonomyStore } from '../services/taxonomyService';
-import DesktopFilterPanel from './filters/DesktopFilterPanel';
 import MobileFilterDrawer from './filters/MobileFilterDrawer';
 import SortDropdown from './filters/SortDropdown';
 
@@ -54,61 +53,7 @@ export default function ProductList({
     const [maxPrice, setMaxPrice] = useState('');
     const [searchQuery, setSearchQuery] = useState(initialSearch);
     const [randomSeed, setRandomSeed] = useState(() => Math.random().toString(36).substring(7));
-    const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
-    const [isDesktopFilterOpen, setIsDesktopFilterOpen] = useState(window.innerWidth >= 992);
-    
-    const [filterState, setFilterState] = useState('normal');
-    const layoutRef = useRef(null);
-    const fixedPanelRef = useRef(null);
-
-    useEffect(() => {
-        if (window.innerWidth < 992) return;
-
-        const layout = layoutRef.current;
-        if (!layout) return;
-
-        const checkBounds = () => {
-            if (!layoutRef.current || !fixedPanelRef.current) return;
-            const layoutRect = layoutRef.current.getBoundingClientRect();
-            const panelHeight = fixedPanelRef.current.offsetHeight;
-            
-            if (layoutRect.bottom <= (100 + panelHeight)) {
-                setFilterState('bottom');
-            } else if (layoutRect.top <= 100) {
-                setFilterState('fixed');
-            } else {
-                setFilterState('normal');
-            }
-        };
-
-        const observer = new IntersectionObserver((entries) => {
-            const entry = entries[0];
-            if (entry.isIntersecting) {
-                window.addEventListener('scroll', checkBounds, { passive: true });
-                window.addEventListener('resize', checkBounds, { passive: true });
-                checkBounds(); 
-            } else {
-                window.removeEventListener('scroll', checkBounds);
-                window.removeEventListener('resize', checkBounds);
-                
-                if (entry.boundingClientRect.top < 0) {
-                    setFilterState('bottom');
-                } else {
-                    setFilterState('normal');
-                }
-            }
-        }, {
-            rootMargin: '200px'
-        });
-
-        observer.observe(layout);
-
-        return () => {
-            observer.disconnect();
-            window.removeEventListener('scroll', checkBounds);
-            window.removeEventListener('resize', checkBounds);
-        };
-    }, []);
+    const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
 
     const [contextualBrandIds, setContextualBrandIds] = useState(null);
 
@@ -308,94 +253,36 @@ export default function ProductList({
                 </p>
             </motion.div>
 
-            {/* Mobile Filter Toggle & Sort */}
-            {window.innerWidth < 992 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
-                    <button 
-                        className="filter-toggle-btn"
-                        onClick={() => setIsMobileDrawerOpen(true)}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            padding: '10px 20px',
-                            background: 'var(--bg-card)',
-                            border: '1px solid var(--border-color)',
-                            borderRadius: '12px',
-                            color: 'var(--text-main)',
-                            fontFamily: 'var(--font-main)',
-                            fontWeight: '700',
-                            cursor: 'pointer'
-                        }}
-                    >
-                        <Sliders size={18} /> فلاتر
-                    </button>
+            {/* Unified Sticky Filter Toggle & Sort Control Bar */}
+            <div className="filters-control-bar">
+                <button 
+                    className="filter-toggle-btn"
+                    onClick={() => setIsFilterDrawerOpen(true)}
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '10px 20px',
+                        background: 'var(--bg-card)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '12px',
+                        color: 'var(--text-main)',
+                        fontFamily: 'var(--font-main)',
+                        fontWeight: '700',
+                        cursor: 'pointer'
+                    }}
+                >
+                    <Sliders size={18} /> فلاتر
+                </button>
 
-                    <div style={{ marginRight: 'auto' }}>
-                        <SortDropdown sortPrice={sortPrice} setSortPrice={setSortPrice} />
-                    </div>
+                <div style={{ marginRight: 'auto' }}>
+                    <SortDropdown sortPrice={sortPrice} setSortPrice={setSortPrice} />
                 </div>
-            )}
+            </div>
 
-            <div className={`product-page-layout ${isDesktopFilterOpen ? 'filter-open' : 'filter-closed'}`} style={{ position: 'relative' }} ref={layoutRef}>
-                {/* Desktop Reserved Space & Fixed Container */}
-                <div className="filter-sidebar-reserved" style={{ 
-                    width: isDesktopFilterOpen ? 280 : 0, 
-                    flexShrink: 0, 
-                    transition: 'width 0.3s ease-in-out',
-                    display: window.innerWidth >= 992 ? 'block' : 'none'
-                }}>
-                    <div 
-                        ref={fixedPanelRef}
-                        className={`filter-sidebar-fixed state-${filterState}`}
-                    >
-                        {/* Product Controls Row: Shared vertical alignment for Toggle and Sort */}
-                        <div className="product-controls-row" style={{ display: 'flex', gap: '12px', marginBottom: '16px', alignItems: 'center' }}>
-                            <button 
-                                className="filter-toggle-btn"
-                                onClick={() => setIsDesktopFilterOpen(!isDesktopFilterOpen)}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                    padding: '10px 16px',
-                                    background: 'var(--bg-card)',
-                                    border: '1px solid var(--border-color)',
-                                    borderRadius: '12px',
-                                    color: 'var(--text-main)',
-                                    fontFamily: 'var(--font-main)',
-                                    fontWeight: '700',
-                                    cursor: 'pointer',
-                                    width: 'fit-content',
-                                    whiteSpace: 'nowrap',
-                                    flexShrink: 0
-                                }}
-                            >
-                                <Sliders size={18} /> {isDesktopFilterOpen ? 'إخفاء' : 'إظهار'}
-                            </button>
-                            
-                            <div style={{ width: 'fit-content', flexShrink: 0 }}>
-                                <SortDropdown sortPrice={sortPrice} setSortPrice={setSortPrice} />
-                            </div>
-                        </div>
-
-                        <DesktopFilterPanel 
-                            isOpen={isDesktopFilterOpen}
-                            hideCategoryFilter={initialCategory !== 'all'}
-                            filterCategoryIds={filterCategoryIds} setFilterCategoryIds={setFilterCategoryIds}
-                            filterBrandIds={filterBrandIds} setFilterBrandIds={setFilterBrandIds}
-                            minPrice={minPrice} setMinPrice={setMinPrice}
-                            maxPrice={maxPrice} setMaxPrice={setMaxPrice}
-                            searchQuery={searchQuery} setSearchQuery={setSearchQuery}
-                            activeCategories={activeCategories} 
-                            activeBrands={contextualBrandIds ? activeBrands.filter(b => contextualBrandIds.includes(b.id)) : activeBrands}
-                            onClear={handleClearFilters}
-                        />
-                    </div>
-                </div>
-
+            <div className="product-page-layout filter-closed" style={{ position: 'relative' }}>
                 {/* Right Column: Products */}
-                <div className="products-column desktop-margin" style={{ minWidth: 0, flex: 1 }}>
+                <div className="products-column" style={{ minWidth: 0, flex: 1 }}>
                     {loading && showLoader ? (
                         <div style={{ textAlign: 'center', padding: '120px 20px', color: 'var(--text-main)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
                             <div className="loader" style={{ width: '48px', height: '48px', border: '3px solid var(--border-color)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
@@ -492,8 +379,8 @@ export default function ProductList({
 
             {/* Mobile Drawer */}
             <MobileFilterDrawer 
-                isOpen={isMobileDrawerOpen} 
-                onClose={() => setIsMobileDrawerOpen(false)}
+                isOpen={isFilterDrawerOpen} 
+                onClose={() => setIsFilterDrawerOpen(false)}
                 hideCategoryFilter={initialCategory !== 'all'}
                 filterCategoryIds={filterCategoryIds} setFilterCategoryIds={setFilterCategoryIds}
                 filterBrandIds={filterBrandIds} setFilterBrandIds={setFilterBrandIds}

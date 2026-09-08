@@ -46,13 +46,18 @@ const HorizontalProductCarousel = ({ children, className = '', ...props }) => {
 
     const scroll = (direction) => {
         if (!scrollRef.current) return;
-        const { clientWidth } = scrollRef.current;
-        const scrollAmount = clientWidth * 0.8;
+        const container = scrollRef.current;
+        const firstChild = container.children[0];
+        
+        // Scroll by exactly one card width + the gap between cards
+        const scrollAmount = firstChild 
+            ? firstChild.offsetWidth + parseInt(window.getComputedStyle(container).gap || '0') 
+            : container.clientWidth * 0.8;
         
         if (direction === 'right') {
-            scrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+            container.scrollBy({ left: scrollAmount, behavior: 'smooth' });
         } else {
-            scrollRef.current.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+            container.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
         }
     };
 
