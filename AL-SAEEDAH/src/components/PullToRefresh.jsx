@@ -23,6 +23,9 @@ const MAX_PULL       = 175;  // max px the circle travels
 const INDICATOR_TOP  = 40;   // top offset (under status bar)
 const REFRESH_SHOW   = 1200; // ms spinner is shown after release
 const SUCCESS_SHOW   = 700;  // ms success tick is shown
+// FIX: Dampen pull sensitivity — finger must travel farther for same indicator movement.
+// 0.45 means indicator moves at 45% of raw finger delta, eliminating the "jumpy" feel.
+const PULL_DAMPEN    = 0.45;
 
 // Visual states — only used for icon rendering (never gates gesture logic)
 const VS = {
@@ -222,14 +225,21 @@ export default function PullToRefresh({ onRefresh, children, disabled = false })
             return;
         }
 
-        // Check scroll position
-        let atTop = window.scrollY <= 0;
-        if (atTop) {
-            let node = e.target;
-            while (node && node !== wrapperRef.current && node !== document.body) {
-                if (node.scrollTop > 0) { atTop = false; break; }
-                node = node.parentNode;
+        // FIX: Check scroll position dynamically by traversing up from the event target.
+        // Do not rely solely on window.scrollY as Capacitor often uses internal scroll containers.
+        let atTop = true;
+        let node = e.target;
+        while (node && node !== wrapperRef.current && node !== document.body) {
+            if (node.scrollTop > 0) {
+                atTop = false;
+                break;
             }
+            node = node.parentNode;
+        }
+        
+        // Also check window scroll just in case the body itself is the scroll container
+        if (atTop && window.scrollY > 0) {
+            atTop = false;
         }
 
         startedAtTopRef.current   = atTop;
@@ -250,18 +260,24 @@ export default function PullToRefresh({ onRefresh, children, disabled = false })
         if (e.pointerId !== activePointerRef.current) return;
         if (gestureStateRef.current === VS.REFRESHING || gestureStateRef.current === VS.SUCCESS) return;
 
-        const diff = e.clientY - startYRef.current;
+        const rawDiff = e.clientY - startYRef.current;
 
-        // Detect downward scroll intention
-        if (diff < -10) hasScrolledDownRef.current = true;
+        // Detect downward scroll intention (user scrolling UP the page = negative diff)
+        if (rawDiff < -10) hasScrolledDownRef.current = true;
 
-        // Activate pull if: at top, moving down, not scrolling down
+        // FIX: Apply dampening — indicator distance = rawDiff * PULL_DAMPEN.
+        // This makes the indicator move proportionally but not excessively from small gestures.
+        const diff = rawDiff * PULL_DAMPEN;
+
+        // Activate pull if: started at top, moving down, not previously scrolling down.
+        // FIX: Removed the mid-gesture window.scrollY <= 0 re-check. In Capacitor the main
+        // scroll container is often a div, not window — so window.scrollY is always 0 even
+        // mid-scroll, causing false activations. startedAtTopRef captured at pointerdown is correct.
         if (
             !isPullingRef.current &&
             startedAtTopRef.current &&
             !hasScrolledDownRef.current &&
-            window.scrollY <= 0 &&
-            diff > 5
+            diff > 8  // raised from 5px to 8px to avoid accidental triggers on small jitter
         ) {
             isPullingRef.current = true;
         }
@@ -295,7 +311,7 @@ export default function PullToRefresh({ onRefresh, children, disabled = false })
 
         // Lock scroll while pulling
         e.preventDefault();
-    }, [applyVisuals]);
+    }, [applyVisuals, calculateElasticOffset]);
 
     /**
      * The critical fix: onPointerUp / onPointerCancel both call this.
@@ -421,8 +437,24 @@ export default function PullToRefresh({ onRefresh, children, disabled = false })
     // ─── Prevent native browser overscroll / pull-to-refresh ─────────────────
     useEffect(() => {
         const blockNative = (e) => {
+            // 1. If we are already actively pulling, block native scroll
             if (isPullingRef.current || pullYRef.current > 0) {
                 if (e.cancelable) e.preventDefault();
+                return;
+            }
+            
+            // 2. FIX: Prevent native browser scroll hijack on the *very first* touchmove
+            // if we are at the top and the user is starting to pull down.
+            // This prevents Chrome/Webview from interpreting it as a native scroll 
+            // and firing pointercancel before we hit our 8px trigger threshold.
+            if (activePointerRef.current !== null && startedAtTopRef.current && !hasScrolledDownRef.current) {
+                const touch = e.touches && e.touches[0];
+                if (touch) {
+                    const diffY = touch.clientY - startYRef.current;
+                    if (diffY > 0) {
+                        if (e.cancelable) e.preventDefault();
+                    }
+                }
             }
         };
         document.addEventListener('touchmove', blockNative, { passive: false });
