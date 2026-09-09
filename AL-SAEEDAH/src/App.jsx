@@ -233,13 +233,12 @@ function PullToRefreshGate({ children }) {
     <PullToRefresh
       disabled={disabled}
       onRefresh={async () => {
-        await refreshTaxonomies();
-        await new Promise((resolve, reject) => {
-            const detail = { resolve, reject, handled: false };
-            window.dispatchEvent(new CustomEvent('app-pull-to-refresh', { detail }));
-            if (!detail.handled) {
-                reject(new Error("No pull-to-refresh handler registered for this view."));
-            }
+        // Simulate a full browser reload across all parts of the store
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            window.location.reload();
+            resolve();
+          }, 300); // slight delay to show the spinner before the hard reload
         });
       }}
     >
