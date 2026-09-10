@@ -144,7 +144,7 @@ export default function ProfilePage({ initialTab = 'profile' }) {
             {/* Image Cropper Overlay */}
             <AnimatePresence>
                 {isCropping && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    <motion.div id="image-cropper-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                         style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 9999, display: 'flex', flexDirection: 'column' }}
                     >
                         <div style={{ flex: 1, position: 'relative' }}>

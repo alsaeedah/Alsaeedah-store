@@ -762,7 +762,6 @@ const ProductDetails = () => {
   const { product, loading } = useProductDetail(id);
   const { data: relatedProducts } = useRelatedProducts(id, 12);
   
-  const [showSkeleton, setShowSkeleton] = useState(false);
   const [mediaMode, setMediaMode] = useState('image');
   const [activeImage, setActiveImage] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -775,18 +774,15 @@ const ProductDetails = () => {
     if (!isVideoPlaying && mediaMode === 'video') setMediaMode('image');
   }, [activeVideoId, id, mediaMode, isVideoPlaying]);
 
+  /* ── Global Loader ── */
   useEffect(() => {
-    let isMounted = true;
-    const timer = setTimeout(() => {
-      if (isMounted && loading) setShowSkeleton(true);
-    }, 150);
-    
-    if (!loading && isMounted) {
-      setShowSkeleton(false);
+    if (loading) {
+      showLoader('جاري التحميل...');
+    } else {
+      hideLoader();
     }
-    
-    return () => { isMounted = false; clearTimeout(timer); };
-  }, [loading]);
+    return () => hideLoader();
+  }, [loading, showLoader, hideLoader]);
 
   /* ── Sync active image when product loads ── */
   useEffect(() => {
@@ -801,13 +797,7 @@ const ProductDetails = () => {
   const handleAddToCart = () => setShowModal(true);
 
   /* ── Empty / error state ── */
-  if (loading && showSkeleton) return (
-    <div className="pdp-container">
-      <SkeletonLoader />
-    </div>
-  );
-
-  if (loading && !showSkeleton) return (
+  if (loading) return (
     <div className="pdp-container" style={{ minHeight: '100vh' }}></div>
   );
 

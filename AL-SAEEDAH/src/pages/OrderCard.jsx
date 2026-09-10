@@ -1,16 +1,11 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Calendar, CreditCard, ChevronDown, ChevronUp, Copy, CheckCircle2, Clock, XCircle, RotateCcw } from 'lucide-react';
-import { useCart } from '../context/CartContext';
-import { useLoader } from '../context/LoaderContext';
+import { Package, Calendar, CreditCard, ChevronDown, ChevronUp, Copy, CheckCircle2, Clock, XCircle } from 'lucide-react';
 import ToastNotification from '../components/ToastNotification';
-import { fetchProductsByIds } from '../services/productService';
 
 export default function OrderCard({ order, isMobile }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
-  const { addToCart, openCart } = useCart();
-  const { showLoader, hideLoader } = useLoader();
 
   const getStatusConfig = (status) => {
     switch (status?.toLowerCase()) {
@@ -37,60 +32,6 @@ export default function OrderCard({ order, isMobile }) {
     e.stopPropagation();
     navigator.clipboard.writeText(`ORD${order.order_number}`);
     setToastMessage({ message: 'تم نسخ رقم الطلب', type: 'success' });
-  };
-
-  const handleReorder = async (e) => {
-    e.stopPropagation();
-    showLoader('جاري التحقق من توفر المنتجات...');
-    
-    try {
-      const availableItems = [];
-      const unavailableItems = [];
-
-      // Fetch products in bulk using the service layer
-      const itemIds = (order.items || []).map(item => String(item.id));
-      const products = await fetchProductsByIds(itemIds);
-      
-      const productMap = {};
-      products.forEach(p => { productMap[String(p.id)] = p; });
-
-      for (const item of order.items || []) {
-        const productData = productMap[String(item.id)];
-        if (productData) {
-          availableItems.push({ item, productData });
-        } else {
-          unavailableItems.push(item);
-        }
-      }
-
-      if (availableItems.length === 0) {
-        setToastMessage({ message: 'عذراً، جميع منتجات هذا الطلب غير متوفرة حالياً.', type: 'error' });
-      } else {
-        availableItems.forEach(({ item, productData }) => {
-          addToCart(productData, {
-            quantity: item.dp_qty,
-            selectedColor: item.selectedColor,
-            selectedMaterial: item.selectedMaterial,
-            variantImage: item.variantImage
-          });
-        });
-        
-        if (unavailableItems.length > 0) {
-          setToastMessage({ message: `تمت إضافة ${availableItems.length} منتج، و ${unavailableItems.length} منتجات غير متوفرة.`, type: 'success' });
-        } else {
-          setToastMessage({ message: 'تمت إضافة جميع المنتجات إلى السلة بنجاح!', type: 'success' });
-        }
-        
-        setTimeout(() => {
-          openCart();
-        }, 1500);
-      }
-    } catch (error) {
-      console.error('Error reordering:', error);
-      setToastMessage({ message: 'حدث خطأ أثناء إعادة الطلب', type: 'error' });
-    } finally {
-      hideLoader();
-    }
   };
 
   return (
@@ -256,8 +197,7 @@ export default function OrderCard({ order, isMobile }) {
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '12px',
-                  border: '1px solid var(--border-color)',
-                  marginBottom: '16px'
+                  border: '1px solid var(--border-color)'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>طريقة الدفع</span>
@@ -271,17 +211,6 @@ export default function OrderCard({ order, isMobile }) {
                       {order.customer_address?.governorate}، {order.customer_address?.district}، {order.customer_address?.neighborhood}
                     </span>
                   </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <button 
-                    onClick={handleReorder}
-                    className="btn-primary" 
-                    style={{ flex: 1, padding: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', fontSize: '0.9rem', borderRadius: '10px' }}
-                  >
-                    <RotateCcw size={16} />
-                    إعادة الطلب
-                  </button>
                 </div>
               </div>
             </motion.div>

@@ -223,7 +223,11 @@ function PullToRefreshGate({ children }) {
     location.pathname === '/wishlist' ||
     location.pathname === '/profile' ||
     location.pathname === '/orders' ||
-    location.pathname.startsWith('/product/');
+    location.pathname === '/search' ||
+    location.pathname.startsWith('/product/') ||
+    location.pathname.startsWith('/category/') ||
+    location.pathname.startsWith('/brand/') ||
+    location.pathname.includes('-watches');
 
   const isAnyOverlayOpen = isProfileModalOpen;
 

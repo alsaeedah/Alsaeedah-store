@@ -216,6 +216,9 @@ export default function PullToRefresh({ onRefresh, children, disabled = false })
         if (isResettingRef.current) return;
         if (gestureStateRef.current === VS.REFRESHING || gestureStateRef.current === VS.SUCCESS) return;
 
+        // Ignore if interacting with image cropper overlay
+        if (e.target.closest('#image-cropper-overlay')) return;
+
         // Support all pointer types including mouse for desktop parity
         // (FR-5 — Touch & Mouse Support)
 
